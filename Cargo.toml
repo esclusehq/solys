@@ -1,0 +1,104 @@
+[package]
+name    = "escluse-agent"
+version = "0.1.0"
+edition = "2021"
+authors = ["Escluse Team <team@escluse.com>"]
+license = "MIT"
+description = "Escluse Agent - Background service for managing game servers"
+repository = "https://github.com/escluse/escluse"
+
+[dependencies]
+# Agent core crates
+agent-proto      = { path = "../agent-core/crates/agent-proto" }
+agent-config     = { path = "../agent-core/crates/agent-config" }
+agent-security   = { path = "../agent-core/crates/agent-security" }
+agent-event      = { path = "../agent-core/crates/agent-event" }
+agent-health     = { path = "../agent-core/crates/agent-health" }
+agent-capability = { path = "../agent-core/crates/agent-capability" }
+agent-task       = { path = "../agent-core/crates/agent-task" }
+agent-metrics    = { path = "../agent-core/crates/agent-metrics" }
+agent-runtime    = { path = "../agent-core/crates/agent-runtime" }
+agent-backup     = { path = "../agent-core/crates/agent-backup" }
+agent-rcon       = { path = "../agent-core/crates/agent-rcon" }
+agent-ssh        = { path = "../agent-core/crates/agent-ssh" }
+
+# Async runtime
+tokio             = { version = "1", features = ["full"] }
+tokio-tungstenite = { version = "0.26", features = ["native-tls"] }
+tokio-stream      = { version = "0.1", features = ["sync"] }
+futures-util      = "0.3"
+
+# HTTP server (local API)
+axum              = "0.8"
+tower             = "0.5"
+hyper            = "1"
+
+# Logging
+tracing          = "0.1"
+tracing-subscriber = { version = "0.3", features = ["json", "env-filter"] }
+
+# Utilities
+serde            = { version = "1", features = ["derive"] }
+serde_json       = "1"
+uuid             = { version = "1", features = ["v4", "serde"] }
+chrono           = { version = "0.4", features = ["serde"] }
+thiserror        = "2"
+anyhow           = "1"
+lazy_static      = "1.4"
+
+# Docker client
+bollard         = "0.18"
+
+# S3 for backup storage
+rusoto_core    = "0.48"
+rusoto_s3      = "0.48"
+
+# Config file watcher
+notify        = "6"
+
+# TOML config support
+toml          = "0.8"
+
+# State persistence (D-02: XDG data directory)
+dirs          = "5"
+
+# File logging
+tracing-appender = "0.2"
+
+# System info
+sysinfo       = "0.32"
+
+# Use zlib-ng for cross-compile
+libz-sys = { version = "1", features = ["zlib-ng-no-cmake-experimental-community-maintained"] }
+
+[[bin]]
+name = "escluse-agent"
+path = "src/main.rs"
+
+[[bin]]
+name = "escluse-service"
+path = "src/service_main.rs"
+
+[features]
+default = []
+
+[target.'cfg(windows)'.dependencies]
+winapi = { version = "0.3", features = ["winuser", "shellapi", "winsvc", "winbase", "libloaderapi"] }
+windows-service = "0.7"
+tray-item = { version = "0.10" }
+winit = { version = "0.29" }
+softbuffer = { version = "0.4", default-features = false, features = ["x11", "wayland", "x11-dlopen", "wayland-dlopen"] }
+image = { version = "0.24", default-features = false, features = ["png"] }
+
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+strip = true
+# D-18: Removed panic="abort" - no panics in production, proper error handling instead
+overflow-checks = false
+
+# Static build target - requires musl-gcc cross-compiler installed
+# For fully static binary on systems without musl-gcc, use standard release
+# [target.x86_64-unknown-linux-musl]
+# linker = "musl-gcc"

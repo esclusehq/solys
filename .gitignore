@@ -1,0 +1,10 @@
+.env
+.env.*
+config.json
+*.log
+data/
+target/
+.DS_Store
+*.swp
+*.swo
+*~

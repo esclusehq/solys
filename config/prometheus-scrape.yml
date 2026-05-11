@@ -1,0 +1,27 @@
+# Prometheus scrape configuration for Escluse Web Agent
+# 
+# Add this to your Prometheus configuration scrape_configs
+# The web-agent exposes /metrics endpoint with Prometheus text format
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    cluster: 'escluse'
+    environment: 'production'
+
+scrape_configs:
+  - job_name: 'web-agent'
+    static_configs:
+      - targets: ['localhost:3000']
+        labels:
+          agent: 'web-agent'
+          role: 'node-agent'
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+    scrape_timeout: 5s
+    scheme: 'http'
+    # Optional: add basic auth if endpoint is protected
+    # basic_auth:
+    #   username: 'prometheus'
+    #   password_file: '/etc/secrets/prometheus_password'
