@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.1.0] - 2026-05-12
+## [v0.0.1] - 2026-05-12
 
 ### Added
 
@@ -19,18 +19,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 | Crate | Version | Purpose |
 |-------|---------|---------|
-| `agent-proto` | 0.1.0 | Task protocol, WebSocket messages |
-| `agent-config` | 0.1.0 | Configuration loading and validation |
-| `agent-security` | 0.1.0 | JWT validation, rate limiting |
-| `agent-event` | 0.1.0 | Event bus for task lifecycle |
-| `agent-health` | 0.1.0 | Circuit breaker, heartbeats |
-| `agent-capability` | 0.1.0 | Capability registry |
-| `agent-task` | 0.1.0 | Task queue and dispatcher |
-| `agent-metrics` | 0.1.0 | System metrics collection |
-| `agent-runtime` | 0.1.0 | Docker runtime detection |
-| `agent-ssh` | 0.1.0 | SSH client, connection pooling |
-| `agent-backup` | 0.1.0 | Compression, backup storage |
-| `agent-rcon` | 0.1.0 | RCON protocol client |
+| `agent-proto` | 0.0.1 | Task protocol, WebSocket messages |
+| `agent-config` | 0.0.1 | Configuration loading and validation |
+| `agent-security` | 0.0.1 | JWT validation, rate limiting |
+| `agent-event` | 0.0.1 | Event bus for task lifecycle |
+| `agent-health` | 0.0.1 | Circuit breaker, heartbeats |
+| `agent-capability` | 0.0.1 | Capability registry |
+| `agent-task` | 0.0.1 | Task queue and dispatcher |
+| `agent-metrics` | 0.0.1 | System metrics collection |
+| `agent-runtime` | 0.0.1 | Docker runtime detection |
+| `agent-ssh` | 0.0.1 | SSH client, connection pooling |
+| `agent-backup` | 0.0.1 | Compression, backup storage |
+| `agent-rcon` | 0.0.1 | RCON protocol client |
 
 #### Async & HTTP
 
@@ -123,11 +123,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 │  └────────────────────────────────────┘ │
 └────────────────────┬────────────────────┘
                      │
-          ┌──────────┼──────────┐
-          ▼          ▼          ▼
-     ┌────────┐  ┌────────┐  ┌────────┐
-     │ Docker │  │ Podman │  │  SSH   │
-     └────────┘  └────────┘  └────────┘
+           ┌──────────┼──────────┐
+           ▼          ▼          ▼
+      ┌────────┐  ┌────────┐  ┌────────┐
+      │ Docker │  │ Podman │  │  SSH   │
+      └────────┘  └────────┘  └────────┘
 ```
 
 ### Build
