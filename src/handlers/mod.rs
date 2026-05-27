@@ -8,6 +8,8 @@ pub mod rcon;
 pub mod metrics;
 pub mod ssh;
 pub mod sftp;
+pub mod dns;
+pub mod dns_watch;
 
 use std::time::Duration;
 
@@ -139,6 +141,13 @@ async fn execute_single(
             // SFTP
             "sftp.upload" => sftp::handle_upload(task.clone()).await,
             "sftp.download" => sftp::handle_download(task.clone()).await,
+
+            // DNS
+            "dns.configure" => dns::handle_configure(task.clone()).await,
+            "dns.create_record" => dns::handle_create_record(task.clone()).await,
+            "dns.update_record" => dns::handle_update_record(task.clone()).await,
+            "dns.delete_record" => dns::handle_delete_record(task.clone()).await,
+            "dns.status" => dns::handle_status(task.clone()).await,
 
             // Unknown
             _ => Err(anyhow::anyhow!("Unknown task type: {}", task_type)),

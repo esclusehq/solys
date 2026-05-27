@@ -215,7 +215,20 @@ async fn run_agent_core(config: agent_config::AgentConfig) -> Result<()> {
         }
     });
 
-    // 9. Run agent with shutdown handling
+    // 9. Start DNS watcher (DDNS-like auto-refresh)
+    let dns_watcher = Arc::new(handlers::dns_watch::DnsWatcher::new());
+    dns_watcher.start().await;
+
+    let watcher_for_shutdown = dns_watcher.clone();
+    let shutdown_clone2 = shutdown.clone();
+    tokio::spawn(async move {
+        while !shutdown_clone2.load(Ordering::Relaxed) {
+            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        }
+        watcher_for_shutdown.stop().await;
+    });
+
+    // 10. Run agent with shutdown handling
     let shutdown_for_agent = shutdown.clone();
     let agent_id = tokio::select! {
         result = agent_connection::run(config, runtime, capabilities, shutdown_for_agent) => {

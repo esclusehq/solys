@@ -15,6 +15,7 @@ use uuid::Uuid;
 
 use crate::handlers;
 use crate::handlers::metrics;
+use crate::handlers::dns::{self, CloudflareDnsConfig};
 use crate::agent::result_sender::ResultSender;
 use crate::task_state;
 use agent_config::AgentConfig;
@@ -113,6 +114,19 @@ enum BackendMessage {
     Error {
         code: String,
         message: String,
+    },
+    #[serde(rename = "dns_config")]
+    DnsConfig {
+        api_token: String,
+        zone_id: String,
+        zone_name: String,
+        wildcard_domain: String,
+        auto_refresh: bool,
+        refresh_interval_secs: u64,
+        #[serde(default)]
+        public_ip: Option<String>,
+        #[serde(default)]
+        subdomain: Option<String>,
     },
 }
 
@@ -511,6 +525,20 @@ pub async fn run(
                                                 if let Ok(msg) = serde_json::to_string(&response) {
                                                     let _ = ws_sender.send(Message::Text(msg.into())).await;
                                                 }
+                                            }
+                                            BackendMessage::DnsConfig { api_token, zone_id, zone_name, wildcard_domain, auto_refresh, refresh_interval_secs, public_ip, subdomain } => {
+                                                let config = CloudflareDnsConfig {
+                                                    api_token,
+                                                    zone_id,
+                                                    zone_name,
+                                                    wildcard_domain,
+                                                    auto_refresh,
+                                                    refresh_interval_secs,
+                                                    subdomain,
+                                                };
+                                                let mut guard = dns::DNS_CONFIG.write().await;
+                                                *guard = Some(config);
+                                                info!("DNS configuration updated from backend");
                                             }
                                             BackendMessage::Ping => {
                                                 let node_id_value = *node_id.lock().unwrap();
