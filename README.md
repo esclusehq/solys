@@ -22,21 +22,46 @@ The `escluse-agent` binary will be installed to `/usr/local/bin`.
 
 #### Tarball (Linux)
 
+x86_64:
+
 ```bash
 tar -xzf solys-linux-x86_64.tar.gz
 sudo install -m 755 escluse-agent /usr/local/bin/
 ```
 
+aarch64:
+
+```bash
+tar -xzf solys-linux-aarch64.tar.gz
+sudo install -m 755 escluse-agent /usr/local/bin/
+```
+
 #### DEB (Debian/Ubuntu)
+
+amd64:
 
 ```bash
 sudo dpkg -i escluse-agent_amd64.deb
 ```
 
+arm64:
+
+```bash
+sudo dpkg -i escluse-agent_arm64.deb
+```
+
 #### RPM (Fedora/RHEL)
+
+x86_64:
 
 ```bash
 sudo dnf install ./escluse-agent-0.1.0-1.x86_64.rpm
+```
+
+aarch64:
+
+```bash
+sudo dnf install ./escluse-agent-0.1.0-1.aarch64.rpm
 ```
 
 Atau:
@@ -59,11 +84,21 @@ curl.exe -fsSL https://get.esluce.com/latest/install.ps1 | powershell -c -
 
 Create the config file:
 
+**Linux:**
 ```bash
 mkdir -p ~/.config/escluse-agent && cat > ~/.config/escluse-agent/config.toml << 'EOF'
 api_key = "esk_your_api_key_here"
 backend_url = "wss://app.esluce.com/api/ws/node"
 EOF
+```
+
+**Windows (PowerShell):**
+```powershell
+New-Item -Type Directory -Force "$env:APPDATA\escluse-agent"
+@"
+api_key = "esk_your_api_key_here"
+backend_url = "wss://app.esluce.com/api/ws/node"
+"@ | Set-Content "$env:APPDATA\escluse-agent\config.toml"
 ```
 
 Get your API key from the [Escluse Dashboard](https://app.esluce.com) → **Nodes** → **Add Node**.
