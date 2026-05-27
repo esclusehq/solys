@@ -1,12 +1,12 @@
 # Solys — Escluse Agent
 
-## Instalasi
+## Installation
 
 ```bash
 curl -fsSL https://get.esluce.com/latest/install.sh | bash
 ```
 
-Binary `escluse-agent` akan terinstal ke `/usr/local/bin`.
+The `escluse-agent` binary will be installed to `/usr/local/bin`.
 
 ### Manual
 
@@ -26,11 +26,11 @@ Binary `escluse-agent` akan terinstal ke `/usr/local/bin`.
 curl.exe -fsSL https://get.esluce.com/latest/install.ps1 | powershell -c -
 ```
 
-Atau unduh `solys-windows-x86_64.zip`, ekstrak, lalu jalankan `escluse-agent.exe`.
+Or download `solys-windows-x86_64.zip`, extract, and run `escluse-agent.exe`.
 
-### Checksum Bertanda Tangan
+### Signed Checksums
 
-Semua file diverifikasi dengan SHA256. `SHA256SUMS.txt` ditandatangani dengan Cosign (keyless):
+All files are verified with SHA256. `SHA256SUMS.txt` is signed with Cosign (keyless):
 
 ```bash
 cosign verify-blob --bundle SHA256SUMS.txt.bundle --certificate-identity-regexp 'esclusehq/solys' --certificate-oidc-issuer https://token.actions.githubusercontent.com SHA256SUMS.txt
