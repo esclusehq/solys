@@ -9,3 +9,4 @@ target/
 *.swo
 *~
 .cargo/config.toml
+.planning/
