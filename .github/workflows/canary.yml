@@ -83,7 +83,8 @@ jobs:
         run: |
           for f in *; do
             [ -f "$f" ] && sha256sum "$f"
-          done > SHA256SUMS.txt
+          done > SHA256SUMS.tmp
+          mv SHA256SUMS.tmp SHA256SUMS.txt
       - name: Upload release artifacts
         uses: actions/upload-artifact@v4
         with:
