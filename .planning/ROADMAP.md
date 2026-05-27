@@ -38,7 +38,7 @@ Plans:
 **Plans:** 2 plans
 
 Plans:
-- [ ] 50-01-PLAN.md — CI/CD core workflows (release.yml, canary.yml, ci.yml) + packaging infrastructure
+- [x] 50-01-PLAN.md — CI/CD core workflows (release.yml, canary.yml, ci.yml) + packaging infrastructure
 - [ ] 50-02-PLAN.md — Installer scripts (install.sh, install.ps1)
 
 ### Phase 51: Automasi DNS berbasis Cloudflare API

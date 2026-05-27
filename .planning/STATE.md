@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Phase 50 context gathered
-last_updated: "2026-05-27T07:06:53.800Z"
-last_activity: 2026-05-27 -- Phase 50 planning complete
+stopped_at: Completed 50-01-PLAN.md — CI/CD core workflows + packaging infrastructure
+last_updated: "2026-05-27T07:23:00.660Z"
+last_activity: 2026-05-27
 progress:
   total_phases: 19
   completed_phases: 2
   total_plans: 8
-  completed_plans: 3
-  percent: 38
+  completed_plans: 4
+  percent: 50
 ---
 
 # Project State: Esluce
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-09)
 
 **Core value:** Users can deploy game servers to cloud nodes with minimal configuration and manage them via a web control panel.
-**Current focus:** Phase 45 — observability
+**Current focus:** Phase 50 — automasi-binary-build-solys
 
 ## Current Position
 
-Phase: 20
-Plan: Not started
+Phase: 50 (automasi-binary-build-solys) — EXECUTING
+Plan: 2 of 2
 Status: Ready to execute
-Last activity: 2026-05-27 -- Phase 50 planning complete
+Last activity: 2026-05-27
 
-Progress: [██████████████████████████████████] 100%
+Progress: [█████░░░░░] 50%
 
 ## Performance Metrics
 
@@ -86,6 +86,7 @@ Progress: [███████████████████████
 | Phase 7 P01-04 | 600 | 11 tasks | 8 files |
 | Phase 13 P01 | 5 | 1 tasks | 0 files |
 | Phase 46-multi-platform P03 | 120 | 2 tasks | 2 files |
+| Phase 50-automasi-binary-build-solys P01 | 2 min | 3 tasks | 9 files |
 
 ## Accumulated Context
 
@@ -156,6 +157,9 @@ Recent decisions affecting current work:
 - [Phase ?]: Tree view lazy-loads children on folder expand
 - [Phase ?]: Chunked upload uses 1MB base64 chunks with session ID for resume
 - [Phase 46]: Added Windows build target (x86_64-pc-windows-msvc) with mingw-w64 cross-compiler
+- [Phase 50-automasi-binary-build-solys]: Windows cross-compilation uses x86_64-pc-windows-gnu target (mingw-w64) on ubuntu-latest
+- [Phase 50-automasi-binary-build-solys]: ARM64 builds use native ubuntu-24.04-arm GitHub runner (not cross-compile)
+- [Phase 50-automasi-binary-build-solys]: R2 authentication uses API tokens stored as GitHub secrets (not OIDC)
 
 ### Pending Todos
 
@@ -184,6 +188,6 @@ None yet.
 
 Last activity: 2026-05-12 - Completed quick task 260512-f2t: tambahkan 'supported games' di landing page
 
-Last session: 2026-05-27T06:20:52.358Z
-Stopped at: Phase 50 context gathered
-Resume file: .planning/phases/50-automasi-binary-build-solys/50-CONTEXT.md
+Last session: 2026-05-27T07:23:00.630Z
+Stopped at: Completed 50-01-PLAN.md — CI/CD core workflows + packaging infrastructure
+Resume file: .planning/phases/50-automasi-binary-build-solys/50-02-PLAN.md
