@@ -80,7 +80,10 @@ jobs:
           fi
       - name: Generate SHA256 checksums
         working-directory: release/
-        run: sha256sum * > SHA256SUMS.txt
+        run: |
+          for f in *; do
+            [ -f "$f" ] && sha256sum "$f"
+          done > SHA256SUMS.txt
       - name: Upload release artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -90,6 +93,8 @@ jobs:
   sign:
     needs: [package]
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     steps:
       - uses: actions/download-artifact@v4
         with:
@@ -97,11 +102,11 @@ jobs:
       - name: Install cosign
         uses: sigstore/cosign-installer@v4.1.0
       - name: Sign checksums with cosign
+        env:
+          COSIGN_EXPERIMENTAL: 1
         run: |
           cosign sign-blob SHA256SUMS.txt \
-            --bundle SHA256SUMS.txt.bundle \
-            --output-signature SHA256SUMS.txt.sig \
-            --output-certificate SHA256SUMS.txt.pem
+            --bundle SHA256SUMS.txt.bundle
       - name: Upload signed artifacts
         uses: actions/upload-artifact@v4
         with:
