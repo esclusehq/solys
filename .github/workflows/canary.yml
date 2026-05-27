@@ -28,10 +28,6 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/checkout@v4
-        with:
-          repository: esclusehq/agent-core
-          path: ../agent-core
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
