@@ -7,4 +7,5 @@ target/
 .DS_Store
 *.swp
 *.swo
-*~.cargo/config.toml
+
+.cargo/config.toml
