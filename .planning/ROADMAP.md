@@ -35,11 +35,11 @@ Plans:
 **Goal:** Build pipeline otomatis: Push ke GitHub → GitHub Actions → Build binaries → Upload ke R2 → Cloudflare CDN → get.esluce.com → Users install/update
 **Requirements**: None
 **Depends on:** Phase 49
-**Plans:** 2 plans
+**Plans:** 2/2 plans complete
 
 Plans:
 - [x] 50-01-PLAN.md — CI/CD core workflows (release.yml, canary.yml, ci.yml) + packaging infrastructure
-- [ ] 50-02-PLAN.md — Installer scripts (install.sh, install.ps1)
+- [x] 50-02-PLAN.md — Installer scripts (install.sh, install.ps1)
 
 ### Phase 51: Automasi DNS berbasis Cloudflare API
 
