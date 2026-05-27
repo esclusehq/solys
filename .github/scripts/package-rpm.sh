@@ -10,6 +10,12 @@ if [ -z "$VERSION" ]; then
 fi
 OUTPUT_DIR="$5"
 
+HOST_ARCH=$(uname -m)
+if [ "$HOST_ARCH" != "$ARCH" ]; then
+  echo "Warning: skipping RPM build for $ARCH on $HOST_ARCH (host mismatch)"
+  exit 0
+fi
+
 PKG_NAME="escluse-agent"
 TMPDIR=$(mktemp -d)
 trap 'rm -rf "$TMPDIR"' EXIT
