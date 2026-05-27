@@ -187,11 +187,10 @@ jobs:
             --endpoint-url "${R2_ENDPOINT}" \
             --recursive \
             --exclude ".git/*"
-          # Copy to latest/
-          aws s3 cp "s3://${R2_BUCKET}/v${VERSION}/" "s3://${R2_BUCKET}/latest/" \
+          # Sync to latest/
+          aws s3 sync "s3://${R2_BUCKET}/v${VERSION}/" "s3://${R2_BUCKET}/latest/" \
             --endpoint-url "${R2_ENDPOINT}" \
-            --recursive \
-            --copy-props none
+            --no-progress
 
   manifest:
     needs: [upload, validate]
