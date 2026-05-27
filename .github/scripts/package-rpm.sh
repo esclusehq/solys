@@ -16,7 +16,7 @@ trap 'rm -rf "$TMPDIR"' EXIT
 
 # Create RPM build tree
 RPMDIR="${TMPDIR}/rpmbuild"
-mkdir -p "${RPMDIR}/{BUILD,RPMS,SOURCES,SPECS,SRPMS}"
+mkdir -p "${RPMDIR}/BUILD" "${RPMDIR}/RPMS" "${RPMDIR}/SOURCES" "${RPMDIR}/SPECS" "${RPMDIR}/SRPMS"
 mkdir -p "${RPMDIR}/BUILDROOT/${PKG_NAME}-${VERSION}-1.${ARCH}/usr/local/bin"
 
 # Copy binary
