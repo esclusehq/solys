@@ -4,6 +4,10 @@ BINARY_PATH="$1"
 BINARY_NAME="$2"
 ARCH="$3"
 VERSION="$4"
+if [ -z "$VERSION" ]; then
+  echo "Error: VERSION is empty" >&2
+  exit 1
+fi
 OUTPUT_DIR="$5"
 
 PKG_NAME="escluse-agent"
