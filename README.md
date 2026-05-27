@@ -87,6 +87,7 @@ Create the config file:
 **Linux:**
 ```bash
 mkdir -p ~/.config/escluse-agent && cat > ~/.config/escluse-agent/config.toml << 'EOF'
+[server]
 api_key = "esk_your_api_key_here"
 backend_url = "wss://app.esluce.com/api/ws/node"
 EOF
@@ -96,6 +97,7 @@ EOF
 ```powershell
 New-Item -Type Directory -Force "$env:APPDATA\escluse-agent"
 @"
+[server]
 api_key = "esk_your_api_key_here"
 backend_url = "wss://app.esluce.com/api/ws/node"
 "@ | Set-Content "$env:APPDATA\escluse-agent\config.toml"
