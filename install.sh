@@ -4,7 +4,7 @@
 #        curl -fsSL https://get.esluce.com/latest/install.sh | bash -s v1.2.3
 set -euo pipefail
 
-REPO="escluse/escluse"
+REPO="esclusehq/solys"
 INSTALL_DIR="${ESCLUSE_BIN_DIR:-/usr/local/bin}"
 VERSION="${1:-latest}"
 

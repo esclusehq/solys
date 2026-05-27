@@ -8,7 +8,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-$Repo = "escluse/escluse"
+$Repo = "esclusehq/solys"
 
 function Write-Info  { Write-Host "INFO: $args" -ForegroundColor Cyan }
 function Write-Ok    { Write-Host "OK:   $args" -ForegroundColor Green }
