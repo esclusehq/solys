@@ -8,8 +8,7 @@ on:
 env:
   CARGO_TERM_COLOR: always
   BINARY_NAME: escluse-agent
-  PROJECT_PATH: agent/solys
-  R2_BUCKET: solys-releases
+  R2_BUCKET: solys-release
 
 jobs:
   validate:
@@ -57,10 +56,9 @@ jobs:
           target: ${{ matrix.target }}
       - name: Build
         run: |
-          cargo build --release --manifest-path ${{ env.PROJECT_PATH }}/Cargo.toml \
+          cargo build --release --manifest-path Cargo.toml \
             --target ${{ matrix.target }}
       - name: Stage binary
-        working-directory: ${{ env.PROJECT_PATH }}
         run: |
           mkdir -p staging
           SRC="target/${{ matrix.target }}/release/${{ env.BINARY_NAME }}${{ matrix.ext }}"
@@ -69,7 +67,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: binary-${{ matrix.target }}
-          path: ${{ env.PROJECT_PATH }}/staging/
+          path: staging/
 
   package:
     needs: [build]
@@ -126,11 +124,11 @@ jobs:
       - name: Build NSIS installer
         run: |
           if [ -d "binary-x86_64-pc-windows-gnu" ]; then
-            mkdir -p agent/solys/release/package
-            cp binary-x86_64-pc-windows-gnu/escluse-agent.exe agent/solys/release/package/
+            mkdir -p release/package
+            cp binary-x86_64-pc-windows-gnu/escluse-agent.exe release/package/
             sudo apt-get update && sudo apt-get install -y nsis
-            cd agent/solys/installer && makensis escluse-agent.nsi && cd ../../..
-            cp agent/solys/release/package/escluse-agent-setup.exe release/ 2>/dev/null || true
+            cd installer && makensis escluse-agent.nsi && cd ..
+            cp release/package/escluse-agent-setup.exe release/ 2>/dev/null || true
           fi
       - name: Generate SHA256 checksums
         working-directory: release/

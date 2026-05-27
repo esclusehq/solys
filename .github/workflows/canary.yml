@@ -8,8 +8,7 @@ on:
 env:
   CARGO_TERM_COLOR: always
   BINARY_NAME: escluse-agent
-  PROJECT_PATH: agent/solys
-  R2_BUCKET: solys-releases
+  R2_BUCKET: solys-release
 
 jobs:
   build:
@@ -39,10 +38,9 @@ jobs:
           target: ${{ matrix.target }}
       - name: Build
         run: |
-          cargo build --release --manifest-path ${{ env.PROJECT_PATH }}/Cargo.toml \
+          cargo build --release --manifest-path Cargo.toml \
             --target ${{ matrix.target }}
       - name: Stage binary
-        working-directory: ${{ env.PROJECT_PATH }}
         run: |
           mkdir -p staging
           SRC="target/${{ matrix.target }}/release/${{ env.BINARY_NAME }}${{ matrix.ext }}"
@@ -51,7 +49,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: binary-${{ matrix.target }}
-          path: ${{ env.PROJECT_PATH }}/staging/
+          path: staging/
 
   package:
     needs: [build]
