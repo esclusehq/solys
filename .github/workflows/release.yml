@@ -144,10 +144,16 @@ jobs:
     needs: [package, validate]
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+        with:
+          path: repo
       - uses: actions/download-artifact@v4
         with:
           pattern: packages-*
           merge-multiple: true
+      - name: Stage install scripts
+        run: |
+          cp repo/install.sh repo/install.ps1 . 2>/dev/null || true
       - name: Generate SHA256 checksums
         run: |
           for f in *; do
