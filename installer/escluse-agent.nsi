@@ -56,9 +56,11 @@ Section "Escluse Agent" SEC_AGENT
   
   SetOutPath "$INSTDIR"
   
-  ; Main binaries - escluse-agent.exe (headless service) + escluse-gui.exe (GUI controller)
+  ; Main binaries - escluse-agent.exe (headless service)
   File "..\..\release\package\escluse-agent.exe"
   File "..\..\release\package\escluse-service.exe"
+  ; escluse-gui.exe is included only when available (CI builds may not produce it)
+  IfFileExists "..\..\release\package\escluse-gui.exe" 0 +2
   File "..\..\release\package\escluse-gui.exe"
   
   ; Config directory and file
