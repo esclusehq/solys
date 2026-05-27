@@ -55,6 +55,24 @@ Or using PowerShell:
 curl.exe -fsSL https://get.esluce.com/latest/install.ps1 | powershell -c -
 ```
 
+## Configuration
+
+Create `~/.config/escluse-agent/config.toml`:
+
+```toml
+api_key = "esk_your_api_key_here"
+backend_url = "wss://app.esluce.com/api/ws/node"
+```
+
+Get your API key from the [Escluse Dashboard](https://app.esluce.com) → **Nodes** → **Add Node**.
+
+Alternatively, set the `ESCLUSE_AGENT_API_KEY` environment variable:
+
+```bash
+export ESCLUSE_AGENT_API_KEY="esk_your_api_key_here"
+escluse-agent
+```
+
 ### Signed Checksums
 
 All files are verified with SHA256. `SHA256SUMS.txt` is signed with Cosign (keyless):
