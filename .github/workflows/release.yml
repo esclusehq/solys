@@ -17,6 +17,10 @@ jobs:
       version: ${{ steps.version.outputs.version }}
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: esclusehq/agent-core
+          path: ../agent-core
       - id: version
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
@@ -46,6 +50,10 @@ jobs:
             pkg_arch_deb: ""
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: esclusehq/agent-core
+          path: ../agent-core
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
