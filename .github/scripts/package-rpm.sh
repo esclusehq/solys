@@ -17,10 +17,8 @@ trap 'rm -rf "$TMPDIR"' EXIT
 # Create RPM build tree
 RPMDIR="${TMPDIR}/rpmbuild"
 mkdir -p "${RPMDIR}/BUILD" "${RPMDIR}/RPMS" "${RPMDIR}/SOURCES" "${RPMDIR}/SPECS" "${RPMDIR}/SRPMS"
-mkdir -p "${RPMDIR}/BUILDROOT/${PKG_NAME}-${VERSION}-1.${ARCH}/usr/local/bin"
-
-# Copy binary
-cp "${BINARY_PATH}/${BINARY_NAME}" "${RPMDIR}/BUILDROOT/${PKG_NAME}-${VERSION}-1.${ARCH}/usr/local/bin/"
+# Copy binary to SOURCES (spec %install handles BUILDROOT)
+cp "${BINARY_PATH}/${BINARY_NAME}" "${RPMDIR}/SOURCES/"
 
 # Create spec file
 cat > "${RPMDIR}/SPECS/${PKG_NAME}.spec" <<- SPEC
