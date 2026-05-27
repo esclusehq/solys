@@ -1,4 +1,4 @@
-[patch.https://github.com/esclusehq/agent-core]
+[patch."https://github.com/esclusehq/agent-core"]
 agent-proto      = { path = "../agent-core/crates/agent-proto" }
 agent-config     = { path = "../agent-core/crates/agent-config" }
 agent-security   = { path = "../agent-core/crates/agent-security" }
