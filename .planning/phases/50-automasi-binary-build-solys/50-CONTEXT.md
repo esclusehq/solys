@@ -16,9 +16,9 @@ Automated CI/CD pipeline that builds the Solys agent binaries across platforms o
 ### Build Target Matrix (D-01 to D-04)
 
 - **D-01:** Platforms — Linux x86_64, Linux aarch64 (ARM64), Windows x86_64
-- **D-02:** Windows build — cross-compile from Linux runner using mingw-w64 (x86_64-pc-windows-msvc target, as done in Phase 46)
+- **D-02:** Windows build — cross-compile from Linux runner using mingw-w64 (x86_64-pc-windows-gnu target — research found mingw produces GNU binaries, not MSVC; `x86_64-pc-windows-msvc` would require a `windows-latest` runner)
 - **D-03:** ARM build — use native GitHub ARM64 runner for Linux aarch64 (not cross-compile from x86)
-- **D-04:** Packaging — raw binary tarballs + system packages (.deb, .rpm for Linux; .msi for Windows)
+- **D-04:** Packaging — raw binary tarballs + system packages (.deb, .rpm for Linux; NSIS .exe installer and .zip for Windows)
 
 ### Release Versioning & CDN (D-05 to D-07)
 
@@ -35,7 +35,7 @@ Automated CI/CD pipeline that builds the Solys agent binaries across platforms o
 
 - **D-08:** Triggers — push to main (canary build), pull requests to main (CI check only), semver tags (release build). Also support manual workflow dispatch
 - **D-09:** Binary integrity — SHA256 checksums file per release + signing with Sigstore/cosign (keyless signing via GitHub OIDC)
-- **D-10:** Credentials — GitHub OIDC for authenticating to Cloudflare R2 (no long-lived secrets stored in CI)
+- **D-10:** Credentials — R2 API tokens (Access Key ID + Secret Access Key) stored as GitHub Actions secrets, scoped to the bucket. Research found R2 doesn't natively support OIDC token exchange; full OIDC would require a Cloudflare Worker as STS
 
 ### the agent's Discretion
 - Installer update mechanism (install.sh / PowerShell script) — user did not discuss this area; agent may choose standard approach (fetch latest binary + verify checksum + cosign signature)
