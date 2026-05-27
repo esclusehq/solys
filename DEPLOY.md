@@ -397,7 +397,12 @@ cd ..
 
 ```bash
 docker build -f api/Dockerfile -t escluse-backend:latest api/
-docker build -f app/Dockerfile.prod -t escluse-frontend:latest app/
+set -a && source app/.env 2>/dev/null; set +a
+docker build -f app/Dockerfile.prod -t escluse-frontend:latest \
+  --build-arg VITE_SUPABASE_URL="$VITE_SUPABASE_URL" \
+  --build-arg VITE_SUPABASE_ANON_KEY="$VITE_SUPABASE_ANON_KEY" \
+  --build-arg VITE_API_URL="$VITE_API_URL" \
+  app/
 ```
 
 ### Step 2: Save images to tar

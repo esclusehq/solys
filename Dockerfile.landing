@@ -1,0 +1,4 @@
+FROM nginx:alpine
+COPY landing-page-escluse/dist /usr/share/nginx/html
+COPY landing-page-escluse/assets /usr/share/nginx/html/assets
+COPY gateway/nginx.landing.conf /etc/nginx/nginx.conf
