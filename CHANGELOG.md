@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **CI/CD release pipeline** — GitHub Actions workflow with 6 jobs: validate, build (3-platform matrix), package, sign (cosign), upload to R2, update versions.json
+- **Canary builds** — push-to-main triggers build + upload to `canary/` R2 path
+- **PR checks** — CI workflow with 3-platform build matrix, no upload
+- **Debian packaging** — `.deb` package generation via `dpkg-deb` for amd64 + arm64
+- **RPM packaging** — `.rpm` package generation via `rpmbuild` for x86_64 + aarch64
+- **Version manifest** — `update-manifest.sh` generates `versions.json` with checksums per platform
+- **NSIS installer CI compatibility** — `IfFileExists` guard for optional GUI binary
+- **Linux/macOS installer** — `install.sh` with platform detection, SHA256 + cosign verification, `ESCLUSE_BIN_DIR` override
+- **Windows installer** — `install.ps1` with `Get-FileHash` verification, `ProgramFiles` install, User PATH update
+
 ## [v0.0.1] - 2026-05-12
 
 ### Added
