@@ -133,7 +133,10 @@ jobs:
           fi
       - name: Generate SHA256 checksums
         working-directory: release/
-        run: sha256sum * > SHA256SUMS.txt
+        run: |
+          for f in *; do
+            [ -f "$f" ] && sha256sum "$f"
+          done > SHA256SUMS.txt
       - name: Upload release artifacts
         uses: actions/upload-artifact@v4
         with:
