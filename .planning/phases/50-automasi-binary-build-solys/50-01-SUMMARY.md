@@ -20,12 +20,12 @@ tech-stack:
 
 key-files:
   created:
-    - .github/workflows/release.yml — Full release pipeline (validate → build → package → sign → upload → manifest)
-    - .github/workflows/canary.yml — Canary build on push to main, uploads to canary/ R2 path
-    - .github/workflows/ci.yml — PR CI check, build-only with fail-fast
-    - .github/scripts/package-deb.sh — Debian packaging script using dpkg-deb
-    - .github/scripts/package-rpm.sh — RPM packaging script using rpmbuild
-    - .github/scripts/update-manifest.sh — versions.json manifest generator and R2 uploader
+    - agent/solys/.github/workflows/release.yml — Full release pipeline (validate → build → package → sign → upload → manifest)
+    - agent/solys/.github/workflows/canary.yml — Canary build on push to main, uploads to canary/ R2 path
+    - agent/solys/.github/workflows/ci.yml — PR CI check, build-only with fail-fast
+    - agent/solys/.github/scripts/package-deb.sh — Debian packaging script using dpkg-deb
+    - agent/solys/.github/scripts/package-rpm.sh — RPM packaging script using rpmbuild
+    - agent/solys/.github/scripts/update-manifest.sh — versions.json manifest generator and R2 uploader
     - agent/solys/packaging/debian/control — Debian control file template
     - agent/solys/packaging/escluse-agent.spec — RPM spec file template
   modified:

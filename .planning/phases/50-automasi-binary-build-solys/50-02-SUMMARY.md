@@ -19,8 +19,8 @@ tech-stack:
 
 key-files:
   created:
-    - install.sh — Linux/macOS installer script (156 lines, bash syntax verified)
-    - install.ps1 — Windows PowerShell installer script (222 lines)
+    - agent/solys/install.sh — Linux/macOS installer script (156 lines, bash syntax verified)
+    - agent/solys/install.ps1 — Windows PowerShell installer script (222 lines)
   modified: []
 
 key-decisions:
