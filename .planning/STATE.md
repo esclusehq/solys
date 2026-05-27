@@ -3,9 +3,9 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: completed
-stopped_at: Completed 50-02-PLAN.md — installer scripts (install.sh + install.ps1)
-last_updated: "2026-05-27T22:30:00.000Z"
-last_activity: 2026-05-27 -- Phase 49 and 50 completed
+stopped_at: Completed 51-03-PLAN.md — frontend Cloudflare settings UI
+last_updated: "2026-05-28T00:00:00.000Z"
+last_activity: 2026-05-27 -- Phase 49, 50, 51 completed
 ---
 
 # Project State: Esluce
@@ -15,16 +15,17 @@ last_activity: 2026-05-27 -- Phase 49 and 50 completed
 See: .planning/PROJECT.md (updated 2026-04-09)
 
 **Core value:** Users can deploy game servers to cloud nodes with minimal configuration and manage them via a web control panel.
-**Current focus:** Phase 51 — Automasi DNS Cloudflare
+**Current focus:** Phase 52 — Improve API Documentation
 
 ## Current Position
 
 Phase: 49 — COMPLETE
 Phase: 50 — COMPLETE
-Status: Phase 49 + 50 complete
-Last activity: 2026-05-27 -- Phase 49 and 50 completed
+Phase: 51 — COMPLETE
+Status: Phase 49, 50, 51 complete
+Last activity: 2026-05-27 -- Phase 49, 50, 51 completed
 
-Progress: [██████░░░░] 63%
+Progress: [███████░░░] 66%
 
 ## Performance Metrics
 
@@ -181,8 +182,8 @@ None yet.
 
 ## Session Continuity
 
-Last activity: 2026-05-27 — Phase 49 and 50 completed
+Last activity: 2026-05-27 — Phase 49, 50, 51 completed
 
-Last session: 2026-05-27T22:30:00.000Z
-Stopped at: Phase 49 (login fix) and Phase 50 (solys CI) completed
+Last session: 2026-05-28T00:00:00.000Z
+Stopped at: Phase 51 (Cloudflare DNS) completed
 Resume file: None

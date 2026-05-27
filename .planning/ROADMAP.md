@@ -46,7 +46,12 @@ Plans:
 **Goal:** Agent dapat menghubungkan domain ke IP client secara otomatis via Cloudflare API agar Minecraft server bisa online ke public
 **Requirements**: None
 **Depends on:** Phase 50
-**Plans:** 0 plans
+**Plans:** 3/3 plans complete
+
+Plans:
+- [x] 51-01-PLAN.md — Backend Foundation: DB seed, CloudflareConfig entity, settings API, WebSocket protocol extension
+- [x] 51-02-PLAN.md — Agent DNS Implementation: Cloudflare DNS handler, IP watcher, auto-refresh (DDNS-like)
+- [x] 51-03-PLAN.md — Frontend UI: Cloudflare settings tab with API token config, auto-refresh toggle, test connection
 
 ### Phase 52: Improve API Documentation
 
