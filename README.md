@@ -57,11 +57,13 @@ curl.exe -fsSL https://get.esluce.com/latest/install.ps1 | powershell -c -
 
 ## Configuration
 
-Create `~/.config/escluse-agent/config.toml`:
+Create the config file:
 
-```toml
+```bash
+mkdir -p ~/.config/escluse-agent && cat > ~/.config/escluse-agent/config.toml << 'EOF'
 api_key = "esk_your_api_key_here"
 backend_url = "wss://app.esluce.com/api/ws/node"
+EOF
 ```
 
 Get your API key from the [Escluse Dashboard](https://app.esluce.com) → **Nodes** → **Add Node**.
