@@ -83,23 +83,23 @@ Plans:
 **Goal:** Halaman profile untuk users setelah OAuth login - view/update profile info (email, avatar, name), update display name, change password (email accounts), view login history, delete account option
 **Requirements**: None
 **Depends on:** Phase 49 (Fix login functionality)
-**Plans:** 6 plans
+**Plans:** 6/6 plans complete
 
 **Wave 1**
-- [ ] 53-01-PLAN.md — Database migrations + Supabase Storage bucket setup
+- [x] 53-01-PLAN.md — Database migrations + Supabase Storage bucket setup
 
 **Wave 2**
-- [ ] 53-02-PLAN.md — Extend User model/repository with new profile fields
+- [x] 53-02-PLAN.md — Extend User model/repository with new profile fields
 
 **Wave 3**
-- [ ] 53-03-PLAN.md — Backend handlers + routes for profile, login history, account deletion
+- [x] 53-03-PLAN.md — Backend handlers + routes for profile, login history, account deletion
 
 **Wave 4**
-- [ ] 53-04-PLAN.md — Frontend infra: authStore extensions + useProfile hook
-- [ ] 53-06-PLAN.md — Deletion cleanup cron job background service
+- [x] 53-04-PLAN.md — Frontend infra: authStore extensions + useProfile hook
+- [x] 53-06-PLAN.md — Deletion cleanup cron job background service
 
 **Wave 5**
-- [ ] 53-05-PLAN.md — Frontend profile tab components + sidebar user info
+- [x] 53-05-PLAN.md — Frontend profile tab components + sidebar user info
 
 ### Phase 54: Email Verification Flow
 
