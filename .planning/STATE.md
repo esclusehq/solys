@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Phase 52 context gathered
-last_updated: "2026-05-29T14:46:40.714Z"
-last_activity: 2026-05-29 -- Phase 52 planning complete
+stopped_at: Completed 52-02-PLAN.md - Sidebar Configuration
+last_updated: "2026-05-29T15:11:37.065Z"
+last_activity: 2026-05-29
 progress:
   total_phases: 19
   completed_phases: 5
   total_plans: 19
-  completed_plans: 11
-  percent: 58
+  completed_plans: 13
+  percent: 68
 ---
 
 # Project State: Esluce
@@ -25,13 +25,14 @@ See: .planning/PROJECT.md (updated 2026-04-09)
 
 ## Current Position
 
-Phase: 49 — COMPLETE
+Phase: 52 (Improve API Documentation) — EXECUTING
+Plan: 2 of 8
 Phase: 50 — COMPLETE
 Phase: 51 — COMPLETE
 Status: Ready to execute
-Last activity: 2026-05-29 -- Phase 52 planning complete
+Last activity: 2026-05-29
 
-Progress: [███████░░░] 66%
+Progress: [███████░░░] 68%
 
 ## Performance Metrics
 
@@ -89,6 +90,7 @@ Progress: [███████░░░] 66%
 | Phase 46-multi-platform P03 | 120 | 2 tasks | 2 files |
 | Phase 50-automasi-binary-build-solys P01 | 2 min | 3 tasks | 9 files |
 | Phase 50-automasi-binary-build-solys P02 | 1 min | 2 tasks | 2 files |
+| Phase 52-improve-api-docs P02 | 3 min | 2 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -162,6 +164,114 @@ Recent decisions affecting current work:
 - [Phase 50-automasi-binary-build-solys]: Windows cross-compilation uses x86_64-pc-windows-gnu target (mingw-w64) on ubuntu-latest
 - [Phase 50-automasi-binary-build-solys]: ARM64 builds use native ubuntu-24.04-arm GitHub runner (not cross-compile)
 - [Phase 50-automasi-binary-build-solys]: R2 authentication uses API tokens stored as GitHub secrets (not OIDC)
+- [Phase 52-improve-api-docs]: ---
+
+phase: 52-improve-api-docs
+plan: 02
+subsystem: docs
+tags: vitepress, sidebar, config, navigation
+
+requires:
+
+  - phase: 52-improve-api-docs
+    provides: Phase context (RESEARCH.md, PATTERNS.md)
+provides:
+
+  - Expanded API Reference sidebar with 30+ entries across nested groups
+  - Sidebar in all 4 roots (/, /getting-started/, /api/, /about/) identically updated
+
+affects:
+
+  - 52-03 through 52-08 (content pages become visible via sidebar links)
+
+tech-stack:
+  added: []
+  patterns:
+
+    - Nested sidebar groups with collapsed subgroups
+    - 4-root sidebar duplication pattern for VitePress multi-root nav
+
+key-files:
+  created: []
+  modified:
+
+    - docs/.vitepress/config.js
+
+key-decisions:
+
+  - "All 4 sidebar roots updated identically with same expanded API Reference structure"
+  - "collapsed: false on top-level API Reference, collapsed: true on all nested groups"
+  - "4 standalone pages (Webhooks, Alerts, Agents, Jobs, Usage & Quotas, Runtimes, Deploy API, Error Codes, Changelog) kept as top-level items"
+
+requirements-completed: []
+
+duration: 3 min
+completed: 2026-05-29
+---
+
+# Phase 52: Improve API Docs — Plan 02 Summary
+
+**Expanded VitePress sidebar from 4 to 30+ API Reference entries with nested resource groups across all 4 sidebar roots**
+
+## Performance
+
+- **Duration:** 3 min
+- **Started:** 2026-05-29T15:08:15Z
+- **Completed:** 2026-05-29T15:10:57Z
+- **Tasks:** 2
+- **Files modified:** 1
+
+## Accomplishments
+
+- Expanded flat 4-item API Reference sidebar to full nested tree across all 4 sidebar roots
+- Added Servers group with 12 sub-pages (CRUD, Operations, Files, Console, Backups, Plugins, Git, Build, Deploy, Profiling, Properties, Cron Tasks)
+- Added Nodes group with 5 sub-pages (Management, API Keys, Registration, Commands, WebSocket)
+- Added Billing group with 3 sub-pages (Overview, Subscriptions, Webhooks)
+- Added Settings group (S3 Storage, Cloudflare DNS), Templates group (Server, Plugin, Modpack), SDKs group (Node.js, Python)
+- Added standalone pages: Authentication, Webhooks, Alerts, Agents, Jobs, Usage & Quotas, Runtimes, Deploy API, Error Codes, Changelog
+- Preserved existing About Escluse and Getting Started sections intact
+- Validated build completes successfully with exit code 0
+
+## Task Commits
+
+1. **Task 1: Update VitePress config.js with expanded API Reference sidebar** — `ebb960e` (feat) in docs submodule, `cfaf3c2` (feat) in parent repo
+2. **Task 2: Validate build with new sidebar config** — no file changes needed (build verification only)
+
+**Plan metadata:** Submodule ref updated in Task 1 commit.
+
+## Files Created/Modified
+
+- `docs/.vitepress/config.js` — Modified: expanded API Reference section from 4 flat items to 30+ entries across 14 groups/sub-sections, identical across all 4 sidebar roots
+
+## Decisions Made
+
+- All 4 sidebar roots (`/`, `/getting-started/`, `/api/`, `/about/`) updated identically to ensure consistent navigation
+- `collapsed: false` on the top-level API Reference section for immediate visibility; `collapsed: true` on all nested groups to keep the sidebar navigable
+- Standalone pages (Webhooks, Alerts, Agents, Jobs, etc.) kept at top level for quick access rather than buried in groups
+- SDKs section organized as a collapsed group with Node.js and Python entries
+
+## Deviations from Plan
+
+None - plan executed exactly as written.
+
+## Issues Encountered
+
+None.
+
+## Known Stubs
+
+No stubs found — all 30+ sidebar entries reference valid link paths that will have content created in subsequent plans (52-03 through 52-08). The sidebar config is structurally complete.
+
+## Next Phase Readiness
+
+- Sidebar navigation tree is complete and ready for content pages
+- Build validates successfully with expanded config
+- Ready for Plan 52-03 (Core Docs: overview, auth guide, error catalog, changelog)
+
+---
+
+*Phase: 52-improve-api-docs*
+*Completed: 2026-05-29*
 
 ### Pending Todos
 
@@ -190,6 +300,6 @@ None yet.
 
 Last activity: 2026-05-27 — Phase 49, 50, 51 completed
 
-Last session: 2026-05-29T14:11:44.892Z
-Stopped at: Phase 52 context gathered
-Resume file: .planning/phases/52-improve-api-docs/52-CONTEXT.md
+Last session: 2026-05-29T15:11:32.103Z
+Stopped at: Completed 52-02-PLAN.md - Sidebar Configuration
+Resume file: None
