@@ -58,7 +58,7 @@ Plans:
 **Goal:** Enhance API docs di https://docs.esluce.com/api/overview dengan detailed descriptions, request/response examples, auth guide, rate limiting, error codes, dan SDK guides untuk Node.js dan Python
 **Requirements**: None
 **Depends on:** Phase 47 (Docs Website)
-**Plans:** 7/8 plans executed
+**Plans:** 8/8 plans complete
 
 Plans:
 **Wave 1**
@@ -71,7 +71,7 @@ Plans:
 - [x] 52-05-PLAN.md — Servers Extended: files, backups, plugins, git, build, deploy, profiling
 - [x] 52-06-PLAN.md — Nodes + Billing: all node endpoints + billing with sub-pages
 - [x] 52-07-PLAN.md — Remaining Resources: webhooks, alerts, settings, templates, agents, jobs, usage, runtimes, deploy
-- [ ] 52-08-PLAN.md — SDK Guides: Node.js + Python quickstarts
+- [x] 52-08-PLAN.md — SDK Guides: Node.js + Python quickstarts
 
 **Cross-cutting constraints:**
 - D-05: Field-level schema tables on every page
