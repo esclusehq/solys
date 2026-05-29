@@ -67,7 +67,7 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1 completion)*
 - [x] 52-03-PLAN.md — Core Docs: overview restructure, auth guide, error catalog, changelog
-- [ ] 52-04-PLAN.md — Servers Group: CRUD, operations, console, properties, cron tasks
+- [x] 52-04-PLAN.md — Servers Group: CRUD, operations, console, properties, cron tasks
 - [ ] 52-05-PLAN.md — Servers Extended: files, backups, plugins, git, build, deploy, profiling
 - [ ] 52-06-PLAN.md — Nodes + Billing: all node endpoints + billing with sub-pages
 - [ ] 52-07-PLAN.md — Remaining Resources: webhooks, alerts, settings, templates, agents, jobs, usage, runtimes, deploy
