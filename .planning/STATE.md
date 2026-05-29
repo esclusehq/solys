@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 52-02-PLAN.md - Sidebar Configuration
-last_updated: "2026-05-29T15:22:34.611Z"
+stopped_at: Completed 52-05-PLAN.md - Extended Server Resource Endpoints
+last_updated: "2026-05-29T16:10:36.462Z"
 last_activity: 2026-05-29
 progress:
   total_phases: 19
   completed_phases: 5
   total_plans: 19
-  completed_plans: 15
-  percent: 79
+  completed_plans: 16
+  percent: 84
 ---
 
 # Project State: Esluce
@@ -26,13 +26,13 @@ See: .planning/PROJECT.md (updated 2026-04-09)
 ## Current Position
 
 Phase: 52 (Improve API Documentation) — EXECUTING
-Plan: 3 of 8
+Plan: 6 of 8
 Phase: 50 — COMPLETE
 Phase: 51 — COMPLETE
 Status: Ready to execute
 Last activity: 2026-05-29
 
-Progress: [████████░░] 79%
+Progress: [████████░░] 84%
 
 ## Performance Metrics
 
@@ -92,6 +92,7 @@ Progress: [████████░░] 79%
 | Phase 50-automasi-binary-build-solys P02 | 1 min | 2 tasks | 2 files |
 | Phase 52-improve-api-docs P02 | 3 min | 2 tasks | 1 files |
 | Phase 52-improve-api-docs P04 | 4 min | 3 tasks | 5 files |
+| Phase 52-improve-api-docs P05 | 3 min | 3 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -165,7 +166,9 @@ Recent decisions affecting current work:
 - [Phase 50-automasi-binary-build-solys]: Windows cross-compilation uses x86_64-pc-windows-gnu target (mingw-w64) on ubuntu-latest
 - [Phase 50-automasi-binary-build-solys]: ARM64 builds use native ubuntu-24.04-arm GitHub runner (not cross-compile)
 - [Phase 50-automasi-binary-build-solys]: R2 authentication uses API tokens stored as GitHub secrets (not OIDC)
-- [Phase 52-improve-api-docs]: ---
+- [Phase 52-improve-api-docs 05]: Grouped files.md into 3 sub-sections for readability across 15 endpoints
+- [Phase 52-improve-api-docs 05]: Split deploy page into per-server and global endpoints
+- [Phase 52-improve-api-docs 05]: Profiling page includes JVM-specific diagnostics for Java servers
 
 phase: 52-improve-api-docs
 plan: 02
@@ -301,6 +304,6 @@ None yet.
 
 Last activity: 2026-05-27 — Phase 49, 50, 51 completed
 
-Last session: 2026-05-29T15:22:20.032Z
-Stopped at: Completed 52-02-PLAN.md - Sidebar Configuration
+Last session: 2026-05-29T15:28:24Z
+Stopped at: Completed 52-05-PLAN.md - Extended Server Resource Endpoints
 Resume file: None
