@@ -58,7 +58,25 @@ Plans:
 **Goal:** Enhance API docs di https://docs.esluce.com/api/overview dengan detailed descriptions, request/response examples, auth guide, rate limiting, error codes, dan SDK guides untuk Node.js dan Python
 **Requirements**: None
 **Depends on:** Phase 47 (Docs Website)
-**Plans:** 0 plans
+**Plans:** 8 plans (Wave 1: 2, Wave 2: 6)
+
+Plans:
+**Wave 1**
+- [ ] 52-01-PLAN.md — VitePress Infrastructure: data loader, Vue components, theme registration, CSS
+- [ ] 52-02-PLAN.md — Sidebar Configuration: full API Reference navigation tree
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [ ] 52-03-PLAN.md — Core Docs: overview restructure, auth guide, error catalog, changelog
+- [ ] 52-04-PLAN.md — Servers Group: CRUD, operations, console, properties, cron tasks
+- [ ] 52-05-PLAN.md — Servers Extended: files, backups, plugins, git, build, deploy, profiling
+- [ ] 52-06-PLAN.md — Nodes + Billing: all node endpoints + billing with sub-pages
+- [ ] 52-07-PLAN.md — Remaining Resources: webhooks, alerts, settings, templates, agents, jobs, usage, runtimes, deploy
+- [ ] 52-08-PLAN.md — SDK Guides: Node.js + Python quickstarts
+
+**Cross-cutting constraints:**
+- D-05: Field-level schema tables on every page
+- D-06: curl + Node.js SDK + Python SDK examples per endpoint
+- D-04: HTTP interface only, no proprietary implementation
 
 ### Phase 53: User Profile Management
 
