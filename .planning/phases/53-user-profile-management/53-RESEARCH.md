@@ -418,22 +418,13 @@ async fn update_profile(
 | A3 | The cron job for 14-day hard cleanup runs as a new service in `application/services/` | Architecture Patterns | If the project uses a different scheduling mechanism (e.g., pg_cron), the implementation approach changes |
 | A4 | The `avatar_url` should be stored in the `users` table rather than a separate profiles table | Standard Stack | If the user profile data warrants a normalized `profiles` table, the migration design changes |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
-1. **Where are avatar files stored in Supabase Storage bucket path format?**
-   - What we know: The bucket will be called `avatars`, set as public bucket.
-   - What's unclear: Exact path convention (e.g., `{user_id}/{uuid}.ext` vs `{user_id}/avatar.ext`). Unique paths avoid CDN cache issues.
-   - Recommendation: Use `avatars/{user_id}/{uuid}.{ext}` — unique per upload, avoids CDN staleness.
+1. **Where are avatar files stored in Supabase Storage bucket path format?** → RESOLVED: `avatars/{user_id}/{uuid}.{ext}` — unique per upload, avoids CDN staleness. Implemented in Plan 53-01 (bucket creation + RLS) and Plan 53-04 (uploadAvatar function generates unique UUID paths).
 
-2. **Does the existing `me` response need to include `display_name` and `avatar_url`?**
-   - What we know: The auth handler's `me()` endpoint returns user data. The frontend authStore populates from this.
-   - What's unclear: Whether to extend the existing `/api/v1/auth/me` response or create a separate `/api/v1/auth/profile` endpoint.
-   - Recommendation: Extend `/api/v1/auth/me` to include `display_name` and `avatar_url` (they're simple nullable columns on the same `users` table). Create `/api/v1/auth/profile` as a PUT endpoint for updates.
+2. **Does the existing `me` response need to include `display_name` and `avatar_url`?** → RESOLVED: Extend `/api/v1/auth/me` to include `display_name` and `avatar_url`. Create `PUT /api/v1/auth/profile` endpoint for updates. Implemented in Plan 53-03 (auth handlers extend me, create update_profile handler).
 
-3. **How to handle cron-based permanent deletion?**
-   - What we know: D-07 requires permanent deletion after 14-day grace period.
-   - What's unclear: The exact scheduling mechanism available (project has `cron` crate in Cargo.toml but no existing cron setup).
-   - Recommendation: Add a background task in `api/src/application/services/` that runs on a timer (e.g., every hour), checks `scheduled_deletion_at < NOW()`, and does `DELETE FROM users WHERE scheduled_deletion_at < NOW() - INTERVAL '14 days'` plus related cleanup (revoke sessions, etc.).
+3. **How to handle cron-based permanent deletion?** → RESOLVED: Background task in `api/src/application/services/deletion_cleanup.rs` with 1-hour timer interval. Checks `scheduled_deletion_at < NOW()`, performs hard DELETE + session cleanup. Implemented in Plan 53-06.
 
 ## Environment Availability
 
