@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useAuthStore } from '../../store/authStore'
 import { useUIStore } from '../../store/uiStore'
 import { supabase, signOut } from '../../lib/supabase'
+import { fetchApi } from '../../api/client'
 import { webhooksApi, cloudflareApi } from '../../lib/api'
 import { useProfile, uploadAvatar } from '../../hooks/useProfile'
 import CloudflareSettings from '../../components/settings/CloudflareSettings'
@@ -62,6 +63,11 @@ export default function SettingsPage() {
   const [apiKeys, setApiKeys] = useState([])
   const [showNewApiKey, setShowNewApiKey] = useState('')
   const [apiLoading, setApiLoading] = useState(false)
+
+  // Restart defaults state (admin)
+  const [globalRestart, setGlobalRestart] = useState({})
+  const [globalRestartLoading, setGlobalRestartLoading] = useState(false)
+  const [globalRestartSaving, setGlobalRestartSaving] = useState(false)
 
   const getUserRole = () => {
     return user?.role || user?.user_metadata?.role || 'member'
@@ -363,6 +369,25 @@ export default function SettingsPage() {
   useEffect(() => {
     loadApiKeys()
   }, [])
+
+  const loadRestartDefaults = async () => {
+    setGlobalRestartLoading(true)
+    try {
+      const data = await fetchApi('/api/v1/settings/restart-defaults')
+      setGlobalRestart(data.data || { max_restart_attempts: 5, restart_cooldown_seconds: 300 })
+    } catch (err) {
+      console.error('Failed to load restart defaults:', err)
+      setGlobalRestart({ max_restart_attempts: 5, restart_cooldown_seconds: 300 })
+    } finally {
+      setGlobalRestartLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    if (activeTab === 'restart-defaults') {
+      loadRestartDefaults()
+    }
+  }, [activeTab])
 
   const generateApiKey = async () => {
     setApiLoading(true)
@@ -957,6 +982,79 @@ export default function SettingsPage() {
     </div>
   )
 
+  const renderRestartDefaultsTab = () => (
+    <div className="space-y-6">
+      <div>
+        <h3 className="text-lg font-medium text-white mb-2">Global Restart Defaults</h3>
+        <p className="text-gray-400 text-sm mb-4">
+          Default values applied to new servers. Per-server settings override these values.
+        </p>
+
+        {globalRestartLoading ? (
+          <div className="text-gray-400">Loading...</div>
+        ) : (
+          <div className="space-y-4">
+            <div>
+              <label className="block text-gray-400 text-sm mb-1">Max Restart Attempts</label>
+              <input
+                type="number"
+                value={globalRestart.max_restart_attempts ?? 5}
+                min={1} max={20}
+                onChange={(e) => setGlobalRestart(prev => ({
+                  ...prev,
+                  max_restart_attempts: Math.max(1, Math.min(20, parseInt(e.target.value) || 5))
+                }))}
+                className="w-full max-w-xs px-4 py-2 bg-gray-700 text-white rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              <p className="text-gray-500 text-xs mt-1">
+                Maximum restart attempts before giving up. Default: 5
+              </p>
+            </div>
+            <div>
+              <label className="block text-gray-400 text-sm mb-1">Restart Cooldown (seconds)</label>
+              <input
+                type="number"
+                value={globalRestart.restart_cooldown_seconds ?? 300}
+                min={30} max={3600}
+                onChange={(e) => setGlobalRestart(prev => ({
+                  ...prev,
+                  restart_cooldown_seconds: Math.max(30, Math.min(3600, parseInt(e.target.value) || 300))
+                }))}
+                className="w-full max-w-xs px-4 py-2 bg-gray-700 text-white rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              <p className="text-gray-500 text-xs mt-1">
+                Wait time between restart attempts (seconds). Default: 300
+              </p>
+            </div>
+            <button
+              disabled={globalRestartSaving}
+              onClick={async () => {
+                setGlobalRestartSaving(true)
+                try {
+                  await fetchApi('/api/v1/settings/restart-defaults', {
+                    method: 'PUT',
+                    body: JSON.stringify({
+                      max_restart_attempts: globalRestart.max_restart_attempts,
+                      restart_cooldown_seconds: globalRestart.restart_cooldown_seconds,
+                    }),
+                  })
+                  addToast({ type: 'success', message: 'Restart defaults saved!' })
+                } catch (err) {
+                  addToast({ type: 'error', message: err.message || 'Failed to save restart defaults' })
+                } finally {
+                  setGlobalRestartSaving(false)
+                }
+              }}
+              className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+            >
+              {globalRestartSaving ? 'Saving...' : 'Save Changes'}
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+
   const isAdmin = ['owner', 'admin'].includes(getUserRole())
 
   const tabs = [
@@ -967,6 +1065,7 @@ export default function SettingsPage() {
     { id: 'webhooks', label: 'Webhooks' },
     ...(isAdmin ? [{ id: 'cloudflare', label: 'Cloudflare DNS' }] : []),
     ...(isAdmin ? [{ id: 'storage', label: 'Storage' }] : []),
+    ...(isAdmin ? [{ id: 'restart-defaults', label: 'Restart Defaults' }] : []),
   ]
 
   // Mock team members (nanti bisa dari API)
@@ -1328,6 +1427,7 @@ export default function SettingsPage() {
       {activeTab === 'webhooks' && renderWebhooksTab()}
       {activeTab === 'cloudflare' && <CloudflareSettings />}
       {activeTab === 'storage' && <S3ProfileSettings />}
+      {activeTab === 'restart-defaults' && renderRestartDefaultsTab()}
     </div>
   )
 }

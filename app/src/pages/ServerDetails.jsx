@@ -1,7 +1,7 @@
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { fetchApi } from '../api/client';
-import { startServer, stopServer, sendCommand, updateServer } from '../hooks/useServers';
+import { startServer, stopServer, sendCommand, updateServer, sleepServer, wakeServer } from '../hooks/useServers';
 import { useWebSocket } from '../hooks/useWebSocket';
 import { useAlertHistory } from '../hooks/useAlerts';
 import StatusBadge from '../components/StatusBadge';
@@ -53,6 +53,20 @@ export default function ServerDetails() {
     const [webhookSaving, setWebhookSaving] = useState(false);
     const [webhookToast, setWebhookToast] = useState(null);
 
+    // Sleep config state
+    const [autoWake, setAutoWake] = useState(false);
+    const [sleepTimeout, setSleepTimeout] = useState(30);
+    const [sleepSaving, setSleepSaving] = useState(false);
+    const [sleepToast, setSleepToast] = useState(null);
+
+    // Restart Policy state
+    const [autoRestart, setAutoRestart] = useState(false);
+    const [maxRestartAttempts, setMaxRestartAttempts] = useState(5);
+    const [restartCooldown, setRestartCooldown] = useState(300);
+    const [healthCheckTimeout, setHealthCheckTimeout] = useState(5);
+    const [restartSaving, setRestartSaving] = useState(false);
+    const [restartToast, setRestartToast] = useState(null);
+
     // Backup config state
     const [backupConfig, setBackupConfig] = useState({
         auto_backup_enabled: false,
@@ -72,6 +86,12 @@ export default function ServerDetails() {
         fetchApi(`/servers/${id}`).then(data => {
             setServer(data);
             setWebhookUrl(data.discord_webhook_url || '');
+            setAutoWake(data.auto_wake || false);
+            setSleepTimeout(data.sleep_timeout_minutes || 30);
+            setAutoRestart(data.auto_restart || false);
+            setMaxRestartAttempts(data.max_restart_attempts ?? 5);
+            setRestartCooldown(data.restart_cooldown_seconds ?? 300);
+            setHealthCheckTimeout(data.health_check_timeout_seconds ?? 5);
             setBackupConfig({
                 auto_backup_enabled: data.auto_backup_enabled || false,
                 backup_cron: data.backup_cron || '',
@@ -141,13 +161,16 @@ export default function ServerDetails() {
     }, [logs]);
 
     const handleToggle = async () => {
-        console.log('[handleToggle] Current status:', server.status, 'Server ID:', id);
         try {
             if (server.status === 'running') {
-                console.log('[handleToggle] Calling stopServer...');
-                await stopServer(id);
+                if (autoWake) {
+                    await sleepServer(id);
+                } else {
+                    await stopServer(id);
+                }
+            } else if (server.status === 'stopped' && server.auto_wake) {
+                await wakeServer(id);
             } else {
-                console.log('[handleToggle] Calling startServer...');
                 await startServer(id);
             }
         } catch (err) { alert(err.message); }
@@ -188,6 +211,45 @@ export default function ServerDetails() {
         ];
     }, [tpsHistory.length]);
 
+    const handleSaveSleepConfig = async () => {
+        try {
+            setSleepSaving(true);
+            await updateServer(id, { auto_wake: autoWake, sleep_timeout_minutes: sleepTimeout });
+            setServer(prev => ({ ...prev, auto_wake: autoWake, sleep_timeout_minutes: sleepTimeout }));
+            setSleepToast({ type: 'success', message: '✅ Sleep configuration saved' });
+        } catch (e) {
+            setSleepToast({ type: 'error', message: `❌ Could not save sleep settings. ${e.message}` });
+        } finally {
+            setSleepSaving(false);
+            setTimeout(() => setSleepToast(null), 4000);
+        }
+    };
+
+    const handleSaveRestartConfig = async () => {
+        try {
+            setRestartSaving(true);
+            await updateServer(id, {
+                auto_restart: autoRestart,
+                max_restart_attempts: maxRestartAttempts,
+                restart_cooldown_seconds: restartCooldown,
+                health_check_timeout_seconds: healthCheckTimeout,
+            });
+            setServer(prev => ({
+                ...prev,
+                auto_restart: autoRestart,
+                max_restart_attempts: maxRestartAttempts,
+                restart_cooldown_seconds: restartCooldown,
+                health_check_timeout_seconds: healthCheckTimeout,
+            }));
+            setRestartToast({ type: 'success', message: '✅ Restart policy saved' });
+        } catch (e) {
+            setRestartToast({ type: 'error', message: `❌ Could not save restart policy. ${e.message}` });
+        } finally {
+            setRestartSaving(false);
+            setTimeout(() => setRestartToast(null), 4000);
+        }
+    };
+
     if (loading) return <div className="flex-1 flex items-center justify-center text-[var(--color-text-muted)]">Loading...</div>;
     if (!server) return <div className="flex-1 flex items-center justify-center text-[var(--color-text-muted)]">Server not found</div>;
 
@@ -224,8 +286,8 @@ export default function ServerDetails() {
                                     : 'border-[var(--color-cosmic-cyan)] text-[var(--color-cosmic-cyan)] hover:bg-[rgba(13,223,242,0.1)]'
                             }`}
                     >
-                        {isTransitional ? '⏳' : server.status === 'running' ? '■' : '▶'}
-                        {isTransitional ? (server.status === 'container_running' ? 'Starting Minecraft...' : server.status === 'starting' ? 'Starting...' : 'Stopping...') : server.status === 'running' ? 'Stop' : 'Start'}
+                        {isTransitional ? '⏳' : server.status === 'running' ? (autoWake ? '💤' : '■') : (server.auto_wake ? '💤' : '▶')}
+                        {isTransitional ? (server.status === 'container_running' ? 'Starting Minecraft...' : server.status === 'starting' ? 'Starting...' : 'Stopping...') : server.status === 'running' ? (autoWake ? ' Sleep' : ' Stop') : (server.auto_wake ? ' Wake' : ' Start')}
                     </button>
                     <Link to="/console"
                         className="px-5 py-2 rounded-xl bg-[rgba(255,255,255,0.03)] border border-[var(--color-cosmic-border)] text-[var(--color-text-main)] font-bold text-sm hover:border-[var(--color-cosmic-cyan)]/50 transition-all flex items-center gap-2">
@@ -381,6 +443,196 @@ export default function ServerDetails() {
                             </p>
                         </section>
 
+                        {/* ─── SLEEP & WAKE CONFIG ─── */}
+                        <section className="glass-panel p-6 mt-6">
+                            <h3 className="text-lg font-bold mb-1">Sleep & Wake</h3>
+                            <p className="text-xs text-[var(--color-text-muted)] mb-5">
+                                Automatically stop server when inactive and wake on demand.
+                            </p>
+
+                            {sleepToast && (
+                                <div className={`mb-4 px-4 py-3 rounded-lg text-sm font-medium border ${sleepToast.type === 'success'
+                                    ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
+                                    : 'bg-red-500/10 border-red-500/30 text-red-400'
+                                    }`}>
+                                    {sleepToast.message}
+                                </div>
+                            )}
+
+                            {/* Auto Sleep Toggle */}
+                            <div className="flex items-center gap-3 p-4 rounded-xl border cursor-pointer
+                                            hover:border-[var(--color-cosmic-cyan)]/50"
+                                 onClick={() => setAutoWake(!autoWake)}>
+                                <div className={`w-12 h-6 rounded-full transition-colors
+                                                ${autoWake ? 'bg-[var(--color-cosmic-cyan)]' : 'bg-[var(--color-cosmic-border)]'}`}>
+                                    <div className={`w-5 h-5 rounded-full bg-white transition-transform
+                                                    ${autoWake ? 'translate-x-6' : 'translate-x-0.5'}`} />
+                                </div>
+                                <div className="flex-1">
+                                    <p className="text-sm font-bold">Auto Sleep</p>
+                                    <p className="text-xs text-[var(--color-text-muted)]">Stop server after inactivity</p>
+                                </div>
+                            </div>
+
+                            {/* Sleep Timeout (visible only when toggle ON) */}
+                            {autoWake && (
+                                <div className="mt-4">
+                                    <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-2">
+                                        Sleep after (minutes of 0 players)
+                                    </label>
+                                    <input type="number"
+                                           value={sleepTimeout}
+                                           min={5} max={240}
+                                           onChange={e => setSleepTimeout(Math.max(5, Math.min(240, parseInt(e.target.value) || 30)))}
+                                           className="w-full px-4 py-2.5 rounded-lg text-sm
+                                                       bg-[var(--color-cosmic-card)]/60 border border-[var(--color-cosmic-border)]
+                                                       text-[var(--color-text-main)] placeholder:text-[var(--color-text-muted)]
+                                                       focus:outline-none focus:border-[var(--color-cosmic-cyan)] transition-all" />
+                                    <p className="text-[10px] text-[var(--color-text-muted)] mt-2">
+                                        Server will auto-sleep after this many minutes with zero players.
+                                    </p>
+                                </div>
+                            )}
+
+                            {/* Save Button */}
+                            <button
+                                disabled={sleepSaving}
+                                onClick={handleSaveSleepConfig}
+                                className="mt-5 w-full py-2.5 rounded-lg text-sm font-bold
+                                           bg-[var(--color-cosmic-cyan)]/10 text-[var(--color-cosmic-cyan)]
+                                           hover:bg-[var(--color-cosmic-cyan)]/20 border border-[var(--color-cosmic-cyan)]/30
+                                           disabled:opacity-50 transition-all">
+                                {sleepSaving ? 'Saving...' : 'Save Changes'}
+                            </button>
+                        </section>
+
+                        {/* ─── RESTART POLICY CONFIG (Phase 57) ─── */}
+                        <section className="glass-panel p-6 mt-6">
+                            <h3 className="text-lg font-bold mb-1">Restart Policy</h3>
+                            <p className="text-xs text-[var(--color-text-muted)] mb-5">
+                                Automatically restart server on crash or unresponsive state.
+                            </p>
+
+                            {restartToast && (
+                                <div className={`mb-4 px-4 py-3 rounded-lg text-sm font-medium border ${restartToast.type === 'success'
+                                    ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
+                                    : 'bg-red-500/10 border-red-500/30 text-red-400'
+                                    }`}>
+                                    {restartToast.message}
+                                </div>
+                            )}
+
+                            {/* Auto Restart Toggle */}
+                            <div className="flex items-center gap-3 p-4 rounded-xl border cursor-pointer
+                                            hover:border-[var(--color-cosmic-cyan)]/50"
+                                 onClick={() => setAutoRestart(!autoRestart)}>
+                                <div className={`w-12 h-6 rounded-full transition-colors
+                                                ${autoRestart ? 'bg-[var(--color-cosmic-cyan)]' : 'bg-[var(--color-cosmic-border)]'}`}>
+                                    <div className={`w-5 h-5 rounded-full bg-white transition-transform
+                                                    ${autoRestart ? 'translate-x-6' : 'translate-x-0.5'}`} />
+                                </div>
+                                <div className="flex-1">
+                                    <p className="text-sm font-bold">Auto Restart</p>
+                                    <p className="text-xs text-[var(--color-text-muted)]">Restart on crash or unresponsive</p>
+                                </div>
+                            </div>
+
+                            {/* Max Restart Attempts (visible only when toggle ON) */}
+                            {autoRestart && (
+                                <>
+                                    <div className="mt-4">
+                                        <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-2">
+                                            Max Restart Attempts
+                                        </label>
+                                        <input type="number"
+                                               value={maxRestartAttempts}
+                                               min={1} max={20}
+                                               onChange={e => setMaxRestartAttempts(Math.max(1, Math.min(20, parseInt(e.target.value) || 5)))}
+                                               className="w-full px-4 py-2.5 rounded-lg text-sm
+                                                           bg-[var(--color-cosmic-card)]/60 border border-[var(--color-cosmic-border)]
+                                                           text-[var(--color-text-main)] placeholder:text-[var(--color-text-muted)]
+                                                           focus:outline-none focus:border-[var(--color-cosmic-cyan)] transition-all" />
+                                        <p className="text-[10px] text-[var(--color-text-muted)] mt-2">
+                                            Maximum automatic restart attempts before giving up.
+                                        </p>
+                                    </div>
+
+                                    <div className="mt-4">
+                                        <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-2">
+                                            Restart Cooldown (seconds)
+                                        </label>
+                                        <input type="number"
+                                               value={restartCooldown}
+                                               min={30} max={3600}
+                                               onChange={e => setRestartCooldown(Math.max(30, Math.min(3600, parseInt(e.target.value) || 300)))}
+                                               className="w-full px-4 py-2.5 rounded-lg text-sm
+                                                           bg-[var(--color-cosmic-card)]/60 border border-[var(--color-cosmic-border)]
+                                                           text-[var(--color-text-main)] placeholder:text-[var(--color-text-muted)]
+                                                           focus:outline-none focus:border-[var(--color-cosmic-cyan)] transition-all" />
+                                        <p className="text-[10px] text-[var(--color-text-muted)] mt-2">
+                                            Wait time between restart attempts (exponential backoff up to this cap).
+                                        </p>
+                                    </div>
+
+                                    <div className="mt-4">
+                                        <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-2">
+                                            Health Check Timeout (seconds)
+                                        </label>
+                                        <input type="number"
+                                               value={healthCheckTimeout}
+                                               min={1} max={60}
+                                               onChange={e => setHealthCheckTimeout(Math.max(1, Math.min(60, parseInt(e.target.value) || 5)))}
+                                               className="w-full px-4 py-2.5 rounded-lg text-sm
+                                                           bg-[var(--color-cosmic-card)]/60 border border-[var(--color-cosmic-border)]
+                                                           text-[var(--color-text-main)] placeholder:text-[var(--color-text-muted)]
+                                                           focus:outline-none focus:border-[var(--color-cosmic-cyan)] transition-all" />
+                                        <p className="text-[10px] text-[var(--color-text-muted)] mt-2">
+                                            RCON health check timeout. Server marked unresponsive if exceeded.
+                                        </p>
+                                    </div>
+                                </>
+                            )}
+
+                            {/* Restart History Display (always visible) */}
+                            <div className="mt-4 p-4 rounded-xl bg-[rgba(255,255,255,0.02)] border border-[var(--color-cosmic-border)]">
+                                <p className="text-xs font-bold text-[var(--color-text-muted)] mb-2 uppercase tracking-wider">
+                                    Restart History
+                                </p>
+                                <div className="grid grid-cols-2 gap-3 text-sm">
+                                    <div>
+                                        <span className="text-[var(--color-text-muted)] text-xs">Restart Count:</span>
+                                        <p className="font-bold">{server.restart_count ?? 0}</p>
+                                    </div>
+                                    <div>
+                                        <span className="text-[var(--color-text-muted)] text-xs">Last Restart:</span>
+                                        <p className="font-bold">
+                                            {server.last_restart_at
+                                                ? new Date(server.last_restart_at).toLocaleString()
+                                                : '—'}
+                                        </p>
+                                    </div>
+                                    {server.last_restart_reason && (
+                                        <div className="col-span-2">
+                                            <span className="text-[var(--color-text-muted)] text-xs">Reason:</span>
+                                            <p className="font-bold text-[var(--color-cosmic-orange)]">
+                                                {server.last_restart_reason}
+                                            </p>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+
+                            {/* Save Button */}
+                            <button
+                                disabled={restartSaving}
+                                onClick={handleSaveRestartConfig}
+                                className="mt-5 w-full py-2.5 rounded-lg text-sm font-bold
+                                           bg-[var(--color-cosmic-cyan)]/10 text-[var(--color-cosmic-cyan)]
+                                           hover:bg-[var(--color-cosmic-cyan)]/20 border border-[var(--color-cosmic-cyan)]/30
+                                           disabled:opacity-50 transition-all">
+                                {restartSaving ? 'Saving...' : 'Save Changes'}
+                            </button>
+                        </section>
 
                     </div>
                 ) : (
@@ -473,7 +725,7 @@ export default function ServerDetails() {
                                 <div className="flex items-center justify-between mb-6">
                                     <h3 className="text-lg font-bold flex items-center gap-2">
                                         Server Information
-                                        <StatusBadge status={server.status} />
+                                        <StatusBadge status={server.status} autoWake={server.auto_wake} />
                                     </h3>
                                     <button
                                         onClick={handleToggle}
