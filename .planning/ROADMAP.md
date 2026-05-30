@@ -140,13 +140,13 @@ Plans:
 **Goal:** Server dapat kembali aktif otomatis setelah offline atau sleep - auto restart on crash, sleep mode detection, automatic wake-up mechanisms
 **Requirements**: None
 **Depends on:** Phase 51 (Automasi DNS)
-**Plans:** 4 plans
+**Plans:** 1/4 plans executed
 
 **Wave 1**
-- [ ] 56-01-PLAN.md — DB Migration + Domain Entities (add auto_wake, sleep_timeout_minutes, restart backoff fields)
+- [x] 56-01-PLAN.md — DB Migration + Domain Entities (add auto_wake, sleep_timeout_minutes, restart backoff fields)
 
 **Wave 2** *(blocked on Wave 1 completion)*
-- [ ] 56-02-PLAN.md — DTOs + Use Cases + Sleep/Wake API Endpoints
+- [x] 56-02-PLAN.md — DTOs + Use Cases + Sleep/Wake API Endpoints
 - [ ] 56-03-PLAN.md — Monitoring Service: Sleep Detection + Auto-Restart Backoff
 
 **Wave 3** *(blocked on Wave 2 completion)*
