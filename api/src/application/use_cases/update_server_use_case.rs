@@ -125,6 +125,17 @@ where
             server.restart_cooldown_seconds = restart_cooldown_seconds;
         }
 
+        // Restart Policy & Health Check (Phase 57)
+        if let Some(last_restart_at) = req.last_restart_at {
+            server.last_restart_at = Some(last_restart_at);
+        }
+        if let Some(last_restart_reason) = req.last_restart_reason {
+            server.last_restart_reason = if last_restart_reason.is_empty() { None } else { Some(last_restart_reason) };
+        }
+        if let Some(health_check_timeout_seconds) = req.health_check_timeout_seconds {
+            server.health_check_timeout_seconds = health_check_timeout_seconds;
+        }
+
         server.updated_at = Utc::now();
 
         self.repository.update(&server).await?;

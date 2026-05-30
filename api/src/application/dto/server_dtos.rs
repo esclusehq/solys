@@ -91,6 +91,11 @@ pub struct UpdateServerRequest {
     pub max_restart_attempts: Option<i32>,
     pub restart_cooldown_seconds: Option<i32>,
 
+    // Restart Policy & Health Check (Phase 57)
+    pub last_restart_at: Option<DateTime<Utc>>,
+    pub last_restart_reason: Option<String>,
+    pub health_check_timeout_seconds: Option<i32>,
+
     // Git remote configuration
     pub git_remote_url: Option<String>,
     pub git_remote_username: Option<String>,
@@ -136,6 +141,9 @@ impl Default for UpdateServerRequest {
             sleep_timeout_minutes: None,
             max_restart_attempts: None,
             restart_cooldown_seconds: None,
+            last_restart_at: None,
+            last_restart_reason: None,
+            health_check_timeout_seconds: None,
             git_remote_url: None,
             git_remote_username: None,
             git_remote_token: None,
@@ -179,6 +187,11 @@ pub struct ServerResponse {
     pub sleep_timeout_minutes: i32,
     pub max_restart_attempts: i32,
     pub restart_cooldown_seconds: i32,
+
+    // Restart Policy & Health Check (Phase 57)
+    pub last_restart_at: Option<DateTime<Utc>>,
+    pub last_restart_reason: Option<String>,
+    pub health_check_timeout_seconds: i32,
 
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
