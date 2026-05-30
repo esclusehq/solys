@@ -44,6 +44,9 @@ yarn-error.log*
 *.gz
 skills-lock.json
 
+# Rust build artifacts
+worker/target/
+
 # Backup files
 *.bak
 *.tmp
