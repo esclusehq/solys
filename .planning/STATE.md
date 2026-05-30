@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: verifying
+status: completed
 stopped_at: Phase 58 context gathered
-last_updated: "2026-05-30T17:01:37.564Z"
-last_activity: 2026-05-30 -- Phase 57 execution complete
+last_updated: "2026-05-30T21:19:42.174Z"
+last_activity: 2026-05-30 -- Phase 58 marked complete
 progress:
   total_phases: 19
-  completed_phases: 10
-  total_plans: 43
-  completed_plans: 42
-  percent: 98
+  completed_phases: 11
+  total_plans: 48
+  completed_plans: 47
+  percent: 58
 ---
 
 # Project State: Esluce
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-09)
 
 **Core value:** Users can deploy game servers to cloud nodes with minimal configuration and manage them via a web control panel.
-**Current focus:** Phase 57 — auto-restart-policies (COMPLETE)
+**Current focus:** Phase 58 — server-plugin-modpack-templates
 
 ## Current Position
 
-Phase: 57 — COMPLETE
-Plan: 4 of 4 (COMPLETE)
-Status: Phase complete — ready for verification
-Last activity: 2026-05-30 -- Phase 57 execution complete
+Phase: 58 — COMPLETE
+Plan: 1 of 5
+Status: Phase 58 complete
+Last activity: 2026-05-30 -- Phase 58 marked complete
 
 Progress: [██████████] 98%
 
