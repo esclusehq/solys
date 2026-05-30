@@ -1,5 +1,6 @@
 use async_trait::async_trait;
 use sqlx::PgPool;
+use sqlx::Row;
 use uuid::Uuid;
 use anyhow::{Context, Result};
 

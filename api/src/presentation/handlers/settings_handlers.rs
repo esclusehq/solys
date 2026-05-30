@@ -360,3 +360,108 @@ pub async fn delete_s3_profile(
         })))),
     }
 }
+
+// -- Modrinth API Key (Admin) --
+
+/// GET /settings/modrinth-api-key
+pub async fn get_modrinth_api_key(
+    State(container): State<ApiState>,
+    user: AuthUser,
+) -> Result<(StatusCode, Json<serde_json::Value>), (StatusCode, Json<serde_json::Value>)> {
+    if !user.is_admin() {
+        return Err((StatusCode::FORBIDDEN, Json(json!({
+            "success": false,
+            "error": { "message": "Admin access required" }
+        }))));
+    }
+    match container.settings_repository.get_modrinth_api_key().await {
+        Ok(key) => Ok((StatusCode::OK, Json(json!({
+            "success": true,
+            "data": {
+                "api_key_set": !key.is_empty(),
+            }
+        })))),
+        Err(e) => Err((StatusCode::INTERNAL_SERVER_ERROR, Json(json!({
+            "success": false,
+            "error": { "message": e.to_string() }
+        })))),
+    }
+}
+
+/// PUT /settings/modrinth-api-key
+pub async fn save_modrinth_api_key(
+    State(container): State<ApiState>,
+    user: AuthUser,
+    Json(payload): Json<serde_json::Value>,
+) -> Result<(StatusCode, Json<serde_json::Value>), (StatusCode, Json<serde_json::Value>)> {
+    if !user.is_admin() {
+        return Err((StatusCode::FORBIDDEN, Json(json!({
+            "success": false,
+            "error": { "message": "Admin access required" }
+        }))));
+    }
+    let api_key = payload.get("api_key").and_then(|v| v.as_str()).unwrap_or("");
+    match container.settings_repository.save_modrinth_api_key(api_key).await {
+        Ok(_) => Ok((StatusCode::OK, Json(json!({
+            "success": true,
+            "data": null
+        })))),
+        Err(e) => Err((StatusCode::INTERNAL_SERVER_ERROR, Json(json!({
+            "success": false,
+            "error": { "message": e.to_string() }
+        })))),
+    }
+}
+
+// -- CurseForge API Key (Admin) --
+
+/// GET /settings/curseforge-api-key
+pub async fn get_curseforge_api_key(
+    State(container): State<ApiState>,
+    user: AuthUser,
+) -> Result<(StatusCode, Json<serde_json::Value>), (StatusCode, Json<serde_json::Value>)> {
+    if !user.is_admin() {
+        return Err((StatusCode::FORBIDDEN, Json(json!({
+            "success": false,
+            "error": { "message": "Admin access required" }
+        }))));
+    }
+    match container.settings_repository.get_curseforge_api_key().await {
+        Ok(key) => Ok((StatusCode::OK, Json(json!({
+            "success": true,
+            "data": {
+                "api_key_set": !key.is_empty(),
+            }
+        })))),
+        Err(e) => Err((StatusCode::INTERNAL_SERVER_ERROR, Json(json!({
+            "success": false,
+            "error": { "message": e.to_string() }
+        })))),
+    }
+}
+
+/// PUT /settings/curseforge-api-key
+pub async fn save_curseforge_api_key(
+    State(container): State<ApiState>,
+    user: AuthUser,
+    Json(payload): Json<serde_json::Value>,
+) -> Result<(StatusCode, Json<serde_json::Value>), (StatusCode, Json<serde_json::Value>)> {
+    if !user.is_admin() {
+        return Err((StatusCode::FORBIDDEN, Json(json!({
+            "success": false,
+            "error": { "message": "Admin access required" }
+        }))));
+    }
+    let api_key = payload.get("api_key").and_then(|v| v.as_str()).unwrap_or("");
+    match container.settings_repository.save_curseforge_api_key(api_key).await {
+        Ok(_) => Ok((StatusCode::OK, Json(json!({
+            "success": true,
+            "data": null
+        })))),
+        Err(e) => Err((StatusCode::INTERNAL_SERVER_ERROR, Json(json!({
+            "success": false,
+            "error": { "message": e.to_string() }
+        })))),
+    }
+}
+

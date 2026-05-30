@@ -39,7 +39,7 @@ impl BackupConfigService {
         }
 
         // Verify server exists
-        let server = self.server_repo.find_by_id(server_id)
+        let _server = self.server_repo.find_by_id(server_id)
             .await?
             .ok_or_else(|| anyhow::anyhow!("Server not found"))?;
 

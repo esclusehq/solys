@@ -3,6 +3,7 @@ use chrono::Utc;
 use cron::Schedule;
 use serde_json::Value as JsonValue;
 use sqlx::PgPool;
+use sqlx::Row;
 use std::str::FromStr;
 use uuid::Uuid;
 use anyhow::{Context, Result};

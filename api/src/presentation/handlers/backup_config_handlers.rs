@@ -15,7 +15,7 @@ use crate::application::services::backup_config_service::BackupConfigService;
 pub async fn get_backup_config(
     Path(server_id): Path<Uuid>,
     State(state): State<ApiState>,
-    auth_user: AuthUser,
+    _auth_user: AuthUser,
 ) -> Result<impl IntoResponse, (axum::http::StatusCode, Json<serde_json::Value>)> {
     let service = BackupConfigService::new(
         state.backup_config_repository.clone(),

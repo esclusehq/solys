@@ -126,4 +126,76 @@ impl SettingsRepository for PostgresSettingsRepository {
 
         Ok(())
     }
+
+    async fn get_modrinth_api_key(&self) -> Result<String> {
+        let row = sqlx::query("SELECT value FROM app_settings WHERE key = 'modrinth_api_key'")
+            .fetch_optional(&self.pool)
+            .await
+            .context("Failed to fetch Modrinth API key")?;
+
+        match row {
+            Some(row) => {
+                let value: serde_json::Value = row.try_get("value")?;
+                let key: String = serde_json::from_value(value)
+                    .context("Failed to deserialize Modrinth API key")?;
+                Ok(key)
+            }
+            None => Ok(String::new()),
+        }
+    }
+
+    async fn save_modrinth_api_key(&self, api_key: &str) -> Result<()> {
+        let value = serde_json::to_value(api_key)
+            .context("Failed to serialize Modrinth API key")?;
+
+        sqlx::query(
+            r#"
+            INSERT INTO app_settings (key, value, updated_at)
+            VALUES ('modrinth_api_key', $1, NOW())
+            ON CONFLICT (key) DO UPDATE SET value = $1, updated_at = NOW()
+            "#,
+        )
+        .bind(value)
+        .execute(&self.pool)
+        .await
+        .context("Failed to save Modrinth API key")?;
+
+        Ok(())
+    }
+
+    async fn get_curseforge_api_key(&self) -> Result<String> {
+        let row = sqlx::query("SELECT value FROM app_settings WHERE key = 'curseforge_api_key'")
+            .fetch_optional(&self.pool)
+            .await
+            .context("Failed to fetch CurseForge API key")?;
+
+        match row {
+            Some(row) => {
+                let value: serde_json::Value = row.try_get("value")?;
+                let key: String = serde_json::from_value(value)
+                    .context("Failed to deserialize CurseForge API key")?;
+                Ok(key)
+            }
+            None => Ok(String::new()),
+        }
+    }
+
+    async fn save_curseforge_api_key(&self, api_key: &str) -> Result<()> {
+        let value = serde_json::to_value(api_key)
+            .context("Failed to serialize CurseForge API key")?;
+
+        sqlx::query(
+            r#"
+            INSERT INTO app_settings (key, value, updated_at)
+            VALUES ('curseforge_api_key', $1, NOW())
+            ON CONFLICT (key) DO UPDATE SET value = $1, updated_at = NOW()
+            "#,
+        )
+        .bind(value)
+        .execute(&self.pool)
+        .await
+        .context("Failed to save CurseForge API key")?;
+
+        Ok(())
+    }
 }
