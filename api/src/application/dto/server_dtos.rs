@@ -49,6 +49,8 @@ pub struct CreateServerRequest {
     pub ram_mb: Option<i32>,
     #[serde(default)]
     pub max_players: Option<i32>,
+    #[serde(default)]
+    pub template_id: Option<Uuid>,
 }
 
 #[derive(Debug, Deserialize)]
