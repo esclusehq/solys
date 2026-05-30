@@ -152,7 +152,7 @@ None - no external service configuration required.
 
 ---
 
-### Self-Check: PASSED
+## Self-Check: PASSED
 
 - ✅ `app/src/components/StatusBadge.jsx` - autoWake prop + sleeping state present
 - ✅ `app/src/index.css` - `.status-dot.sleeping` rule present with orange glow
@@ -166,3 +166,5 @@ None - no external service configuration required.
 
 *Phase: 56-auto-online-sleep-recovery*
 *Completed: 2026-05-30*
+
+Verified: All 8 modified files exist, all 4 feat(56-04) commits in app submodule + 2 docs(56-04) commits in parent repo. All acceptance criteria pass.
