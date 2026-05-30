@@ -10,6 +10,7 @@ pub struct Config {
     pub worker_concurrency: u32,
     pub jwt_secret: String,
     pub app_url: String,
+    pub api_base_url: String,
 }
 
 impl Config {
@@ -41,6 +42,9 @@ impl Config {
         let app_url = env::var("APP_URL")
             .unwrap_or_else(|_| "http://localhost:8080".to_string());
 
+        let api_base_url = env::var("API_BASE_URL")
+            .unwrap_or_else(|_| "http://api:3000".to_string());
+
         Ok(Self {
             database_url,
             redis_url,
@@ -49,6 +53,7 @@ impl Config {
             worker_concurrency,
             jwt_secret,
             app_url,
+            api_base_url,
         })
     }
 }
