@@ -95,6 +95,8 @@ export const serversApi = {
   start: (id) => api.post(`/servers/${id}/start`),
   stop: (id) => api.post(`/servers/${id}/stop`),
   restart: (id) => api.post(`/servers/${id}/restart`),
+  sleep: (id) => api.post(`/servers/${id}/sleep`),
+  wake: (id) => api.post(`/servers/${id}/wake`),
   getLogs: (id, params) => api.get(`/servers/${id}/logs`, { params }),
   streamLogs: (id, params) => api.get(`/servers/${id}/logs/stream`, { params }),
   getStats: (id) => api.get(`/servers/${id}/stats`),
@@ -160,6 +162,16 @@ export const tasksApi = {
 
 export const templatesApi = {
   list: (params) => api.get('/templates', { params }),
+  get: (id) => api.get(`/templates/${id}`),
+  create: (data) => api.post('/templates', data),
+  update: (id, data) => api.put(`/templates/${id}`, data),
+  delete: (id) => api.delete(`/templates/${id}`),
+  createServer: (id, data) => api.post(`/templates/${id}/create-server`, data),
+}
+
+export const modsApi = {
+  search: (params) => api.get('/plugins/search', { params }),
+  getVersions: (projectId, params) => api.get(`/plugins/${projectId}/versions`, { params }),
 }
 
 export const cloudflareApi = {
