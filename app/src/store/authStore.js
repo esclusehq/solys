@@ -104,6 +104,38 @@ export const useAuthStore = create(
         }
       },
 
+      resendVerification: async () => {
+          set({ isLoading: true, error: null })
+          try {
+              const result = await authApi.resendVerification()
+              set({ isLoading: false })
+              useUIStore.getState().addToast({
+                  type: 'success',
+                  message: 'Verification email sent! Check your inbox.',
+              })
+              return result
+          } catch (err) {
+              set({ error: err.message, isLoading: false })
+              throw err
+          }
+      },
+
+      changeEmail: async (newEmail) => {
+          set({ isLoading: true, error: null })
+          try {
+              const result = await authApi.changeEmail(newEmail)
+              set({ isLoading: false })
+              useUIStore.getState().addToast({
+                  type: 'success',
+                  message: `Verification email sent to ${newEmail}. Check your inbox.`,
+              })
+              return result
+          } catch (err) {
+              set({ error: err.message, isLoading: false })
+              throw err
+          }
+      },
+
       setUser: (user) => set({ user }),
       
       setAuth: (user) => set({

@@ -194,7 +194,13 @@ Plans:
 **Goal:** Mengatur start, stop, restart, dan sleep server secara otomatis berdasarkan jadwal - scheduled start/stop, recurring schedules, timezone support
 **Requirements**: None
 **Depends on:** Phase 57 (Auto Restart Policies)
-**Plans:** 0 plans
+**Plans:** 3 plans
+
+**Wave 1**
+- [ ] 59-01-PLAN.md — Data Layer: migration (4 new columns), entity + DTO extension, repository updates, handler validation updates
+**Wave 2** *(blocked on Wave 1)*
+- [ ] 59-02-PLAN.md — Worker: cron_eval extension (all task types + timezone), job handlers (start/stop/restart/sleep with D-05/D-06/D-07/D-08), API dispatch endpoint
+- [ ] 59-03-PLAN.md — Frontend: useScheduledActions hook, API client methods, Scheduled Actions section in ServerDetails Settings tab
 
 ### Phase 60: Crash Detection
 

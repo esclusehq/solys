@@ -11,4 +11,12 @@ pub trait SettingsRepository: Send + Sync {
     async fn save_cloudflare_config(&self, config: &CloudflareConfig) -> Result<()>;
     async fn get_restart_defaults(&self) -> Result<RestartDefaults>;
     async fn save_restart_defaults(&self, config: &RestartDefaults) -> Result<()>;
+
+    // Modrinth API key
+    async fn get_modrinth_api_key(&self) -> Result<String>;
+    async fn save_modrinth_api_key(&self, api_key: &str) -> Result<()>;
+
+    // CurseForge API key
+    async fn get_curseforge_api_key(&self) -> Result<String>;
+    async fn save_curseforge_api_key(&self, api_key: &str) -> Result<()>;
 }
