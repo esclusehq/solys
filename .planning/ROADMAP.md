@@ -106,7 +106,18 @@ Plans:
 **Goal:** Verifikasi email untuk users yang signup dengan email - send verification email on registration, resend verification option, require verified email for sensitive actions
 **Requirements**: None
 **Depends on:** Phase 49 (Fix login functionality)
-**Plans:** 0 plans
+**Plans:** 5 plans
+
+**Wave 1**
+- [ ] 54-01-PLAN.md — Backend Foundation: migration, model, VerifiedUser extractor, resend + OAuth auto-verify + email change endpoint
+- [ ] 54-02-PLAN.md — Frontend Auth Infrastructure: authStore + API client extensions
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [ ] 54-03-PLAN.md — Frontend Verification Components: VerifyEmailPage fix, Banner, Dialog
+- [ ] 54-05-PLAN.md — Backend Gating: VerifiedUser on billing, subscription, webhook handlers
+
+**Wave 3** *(blocked on Wave 2 completion)*
+- [ ] 54-04-PLAN.md — Frontend Integration: Banner in App.jsx layout, VerifiedRoute wrapper, email change form in SettingsPage
 
 ### Phase 55: Scheduled Backups
 
