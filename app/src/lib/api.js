@@ -187,3 +187,10 @@ export const s3ProfilesApi = {
   update: (id, data) => api.put(`/settings/s3/profiles/${id}`, data),
   delete: (id) => api.delete(`/settings/s3/profiles/${id}`),
 }
+
+export const schedulingApi = {
+  list: (serverId) => api.get(`/servers/${serverId}/tasks`),
+  create: (serverId, data) => api.post(`/servers/${serverId}/tasks`, data),
+  update: (serverId, taskId, data) => api.patch(`/servers/${serverId}/tasks/${taskId}`, data),
+  delete: (serverId, taskId) => api.delete(`/servers/${serverId}/tasks/${taskId}`),
+}
