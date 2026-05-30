@@ -106,18 +106,21 @@ Plans:
 **Goal:** Verifikasi email untuk users yang signup dengan email - send verification email on registration, resend verification option, require verified email for sensitive actions
 **Requirements**: None
 **Depends on:** Phase 49 (Fix login functionality)
-**Plans:** 5 plans
+**Plans:** 6/6 plans complete
 
 **Wave 1**
-- [ ] 54-01-PLAN.md — Backend Foundation: migration, model, VerifiedUser extractor, resend + OAuth auto-verify + email change endpoint
-- [ ] 54-02-PLAN.md — Frontend Auth Infrastructure: authStore + API client extensions
+- [x] 54-01-PLAN.md — Backend Foundation: migration, model, VerifiedUser extractor, resend + OAuth auto-verify + email change endpoint
+- [x] 54-02-PLAN.md — Frontend Auth Infrastructure: authStore + API client extensions
 
 **Wave 2** *(blocked on Wave 1 completion)*
-- [ ] 54-03-PLAN.md — Frontend Verification Components: VerifyEmailPage fix, Banner, Dialog
-- [ ] 54-05-PLAN.md — Backend Gating: VerifiedUser on billing, subscription, webhook handlers
+- [x] 54-03-PLAN.md — Frontend Verification Components: VerifyEmailPage fix, Banner (D-07 fix: button enabled during cooldown, toast on click), Dialog
+- [x] 54-05-PLAN.md — Backend Gating: VerifiedUser on billing, subscription, webhook, and server handlers (4 files)
 
 **Wave 3** *(blocked on Wave 2 completion)*
-- [ ] 54-04-PLAN.md — Frontend Integration: Banner in App.jsx layout, VerifiedRoute wrapper, email change form in SettingsPage
+- [x] 54-04-PLAN.md — Frontend Integration: Banner in App.jsx layout, VerifiedRoute wrapper, email change form in SettingsPage
+
+**Wave 4** *(blocked on Wave 1 completion, no code changes)*
+- [x] 54-06-PLAN.md — Deferred Gating Strategy: Document for D-08 categories without existing handlers (Identity & Access, Integration Extensions)
 
 ### Phase 55: Scheduled Backups
 
