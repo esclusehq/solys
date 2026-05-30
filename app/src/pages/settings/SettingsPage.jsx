@@ -5,9 +5,10 @@ import { supabase, signOut } from '../../lib/supabase'
 import { webhooksApi, cloudflareApi } from '../../lib/api'
 import { useProfile, uploadAvatar } from '../../hooks/useProfile'
 import CloudflareSettings from '../../components/settings/CloudflareSettings'
+import S3ProfileSettings from '../../components/settings/S3ProfileSettings'
 
 export default function SettingsPage() {
-  const { user, logout, refreshUser } = useAuthStore()
+  const { user, logout, refreshUser, changeEmail } = useAuthStore()
   const { addToast } = useUIStore()
   
   const [name, setName] = useState('')
@@ -37,6 +38,10 @@ export default function SettingsPage() {
   const [savingProfile, setSavingProfile] = useState(false)
   const [uploadingAvatar, setUploadingAvatar] = useState(false)
   const [dragOver, setDragOver] = useState(false)
+
+  // Email change states (D-14)
+  const [newEmail, setNewEmail] = useState('')
+  const [changingEmail, setChangingEmail] = useState(false)
 
   // Login history state
   const [loginHistory, setLoginHistory] = useState([])
@@ -121,6 +126,25 @@ export default function SettingsPage() {
     } finally {
       setPasswordLoading(false)
     }
+  }
+
+  // Email Change (D-14)
+  const handleEmailChange = async (e) => {
+      e.preventDefault()
+      if (!newEmail.trim()) {
+          addToast({ type: 'error', message: 'Please enter a new email address' })
+          return
+      }
+      setChangingEmail(true)
+      try {
+          await changeEmail(newEmail.trim())
+          setNewEmail('')
+          addToast({ type: 'success', message: `Verification email sent to ${newEmail.trim()}` })
+      } catch (err) {
+          addToast({ type: 'error', message: err.message || 'Failed to change email' })
+      } finally {
+          setChangingEmail(false)
+      }
   }
 
   // Profile handlers
@@ -503,14 +527,36 @@ export default function SettingsPage() {
           </div>
           
           <div>
-            <label className="block text-gray-400 mb-1">Email</label>
+            <label className="block text-gray-400 mb-1">Current Email</label>
             <input
               type="email"
-              value={email}
+              value={user?.email || ''}
               disabled
-              className="w-full px-4 py-2 bg-gray-600 text-gray-400 rounded cursor-not-allowed"
+              className="w-full px-4 py-2 bg-gray-600 text-gray-400 rounded cursor-not-allowed mb-4"
             />
-            <p className="text-gray-500 text-xs mt-1">Email cannot be changed</p>
+            <form onSubmit={handleEmailChange} className="space-y-3">
+              <label className="block text-gray-400 mb-1">Change Email</label>
+              <div className="flex gap-2">
+                <input
+                  type="email"
+                  value={newEmail}
+                  onChange={(e) => setNewEmail(e.target.value)}
+                  placeholder="new@email.com"
+                  className="flex-1 px-4 py-2 bg-gray-700 text-white rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  required
+                />
+                <button
+                  type="submit"
+                  disabled={changingEmail || !newEmail.trim()}
+                  className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 text-sm whitespace-nowrap"
+                >
+                  {changingEmail ? 'Sending...' : 'Change Email'}
+                </button>
+              </div>
+              <p className="text-gray-500 text-xs">
+                A verification email will be sent to the new address. Your current email remains active until verified.
+              </p>
+            </form>
           </div>
 
           <button
@@ -920,6 +966,7 @@ export default function SettingsPage() {
     { id: 'api', label: 'API Keys' },
     { id: 'webhooks', label: 'Webhooks' },
     ...(isAdmin ? [{ id: 'cloudflare', label: 'Cloudflare DNS' }] : []),
+    ...(isAdmin ? [{ id: 'storage', label: 'Storage' }] : []),
   ]
 
   // Mock team members (nanti bisa dari API)
@@ -1280,6 +1327,7 @@ export default function SettingsPage() {
       {activeTab === 'api' && renderApiTab()}
       {activeTab === 'webhooks' && renderWebhooksTab()}
       {activeTab === 'cloudflare' && <CloudflareSettings />}
+      {activeTab === 'storage' && <S3ProfileSettings />}
     </div>
   )
 }
