@@ -157,7 +157,17 @@ Plans:
 **Goal:** Restart server secara otomatis saat crash atau tidak merespons - crash detection, configurable restart rules, max restart attempts, cooldown periods
 **Requirements**: None
 **Depends on:** Phase 56 (Auto Online & Sleep Recovery)
-**Plans:** 0 plans
+**Plans:** 4 plans
+
+**Wave 1**
+- [ ] 57-01-PLAN.md — Data Layer: migration + entity fields + both repositories
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [ ] 57-02-PLAN.md — Backend API: DTOs, use cases, handlers, global defaults storage
+- [ ] 57-03-PLAN.md — MonitoringService: RCON health check, unresponsive detection, events
+
+**Wave 3** *(blocked on Wave 2 completion)*
+- [ ] 57-04-PLAN.md — Frontend UI: Restart Policy section + global defaults settings tab
 
 ### Phase 58: Server, Plugin, and Modpack Templates
 
