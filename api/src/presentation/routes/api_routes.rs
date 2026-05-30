@@ -57,6 +57,8 @@ pub fn routes(container: Arc<AppContainer>) -> Router {
         .route("/api/v1/nodes/register", post(crate::presentation::handlers::node_registration_token_handlers::register_with_token))
         .route("/api/v1/nodes/:id/commands", post(crate::presentation::handlers::node_handlers::poll_node_commands))
         .route("/api/v1/nodes/:id/commands/result", post(crate::presentation::handlers::node_handlers::report_command_result))
+        // Internal: Worker→Agent command dispatch (Phase 59)
+        .route("/api/v1/nodes/:id/dispatch", post(crate::presentation::handlers::node_handlers::dispatch_node_command))
         .route("/api/ws/node", get(crate::presentation::handlers::node_ws_handler::ws_node_handler))
         
         // Jobs & Webhooks
@@ -80,6 +82,14 @@ pub fn routes(container: Arc<AppContainer>) -> Router {
         .route("/api/v1/settings/cloudflare", get(crate::presentation::handlers::settings_handlers::get_cloudflare_config).put(crate::presentation::handlers::settings_handlers::save_cloudflare_config))
         .route("/api/v1/settings/cloudflare/test", post(crate::presentation::handlers::settings_handlers::test_cloudflare_config))
         .route("/api/v1/settings/restart-defaults", get(crate::presentation::handlers::settings_handlers::get_restart_defaults).put(crate::presentation::handlers::settings_handlers::save_restart_defaults))
+        // Modrinth API key (admin only)
+        .route("/api/v1/settings/modrinth-api-key",
+            get(crate::presentation::handlers::settings_handlers::get_modrinth_api_key)
+            .put(crate::presentation::handlers::settings_handlers::save_modrinth_api_key))
+        // CurseForge API key (admin only)
+        .route("/api/v1/settings/curseforge-api-key",
+            get(crate::presentation::handlers::settings_handlers::get_curseforge_api_key)
+            .put(crate::presentation::handlers::settings_handlers::save_curseforge_api_key))
         
         // Deploy (global)
         .route("/api/v1/deploy/projects", get(crate::presentation::handlers::deployment_handlers::get_modrinth_projects))
