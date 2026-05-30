@@ -89,7 +89,12 @@ pub fn routes(container: Arc<AppContainer>) -> Router {
         .route("/api/v1/runtimes", get(crate::presentation::handlers::runtime_handlers::get_available_runtimes))
         
         // Templates
-        .route("/api/v1/templates", get(crate::presentation::handlers::template_handlers::list_templates))
+        .route("/api/v1/templates", get(crate::presentation::handlers::template_handlers::list_templates)
+            .post(crate::presentation::handlers::template_handlers::create_template))
+        .route("/api/v1/templates/:id", get(crate::presentation::handlers::template_handlers::get_template)
+            .put(crate::presentation::handlers::template_handlers::update_template)
+            .delete(crate::presentation::handlers::template_handlers::delete_template))
+        .route("/api/v1/templates/:id/create-server", post(crate::presentation::handlers::template_handlers::apply_template_to_server))
         
         // Plugin Templates
         .route("/api/v1/plugin-templates", get(crate::presentation::handlers::plugin_template_handlers::list_plugin_templates))
