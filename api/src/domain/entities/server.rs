@@ -47,6 +47,11 @@ pub struct Server {
     pub max_restart_attempts: i32,
     pub restart_cooldown_seconds: i32,
 
+    // Restart Policy & Health Check (Phase 57)
+    pub last_restart_at: Option<DateTime<Utc>>,
+    pub last_restart_reason: Option<String>,
+    pub health_check_timeout_seconds: i32,
+
     // Git remote configuration
     pub git_remote_url: Option<String>,
     pub git_remote_username: Option<String>,
