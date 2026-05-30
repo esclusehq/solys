@@ -150,7 +150,7 @@ Plans:
 - [x] 56-03-PLAN.md — Monitoring Service: Sleep Detection + Auto-Restart Backoff
 
 **Wave 3** *(blocked on Wave 2 completion)*
-- [ ] 56-04-PLAN.md — Frontend UI: Status Badge, Action Button, Sleep Config Panel
+- [x] 56-04-PLAN.md — Frontend UI: Status Badge, Action Button, Sleep Config Panel
 
 ### Phase 57: Auto Restart Policies
 
