@@ -23,8 +23,8 @@ impl ServerRepository for PostgresServerRepository {
     async fn create(&self, server: &Server) -> Result<()> {
         sqlx::query(
             r#"
-            INSERT INTO servers (id, user_id, name, game, status, host, port, username, password_auth, executor_type, environment, server_path, start_command, stop_command, container_name, public_host, mc_version, mc_loader, auto_pause, ram_allocation, discord_webhook_url, auto_backup_enabled, backup_cron, backup_provider, backup_path, max_retained_backups, auto_restart, restart_count, enable_tailscale, tailscale_auth_key, custom_container_name, ip_binding, template, network_name, git_remote_url, git_remote_username, git_remote_token, node_id, auto_wake, sleep_timeout_minutes, last_player_activity, max_restart_attempts, restart_cooldown_seconds, created_at, updated_at)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::server_environment, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44, $45)
+            INSERT INTO servers (id, user_id, name, game, status, host, port, username, password_auth, executor_type, environment, server_path, start_command, stop_command, container_name, public_host, mc_version, mc_loader, auto_pause, ram_allocation, discord_webhook_url, auto_backup_enabled, backup_cron, backup_provider, backup_path, max_retained_backups, auto_restart, restart_count, enable_tailscale, tailscale_auth_key, custom_container_name, ip_binding, template, network_name, git_remote_url, git_remote_username, git_remote_token, node_id, auto_wake, sleep_timeout_minutes, last_player_activity, max_restart_attempts, restart_cooldown_seconds, last_restart_at, last_restart_reason, health_check_timeout_seconds, created_at, updated_at)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::server_environment, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44, $45, $46, $47, $48)
             "#,
         )
         .bind(server.id)
@@ -70,6 +70,9 @@ impl ServerRepository for PostgresServerRepository {
         .bind(server.last_player_activity)
         .bind(server.max_restart_attempts)
         .bind(server.restart_cooldown_seconds)
+        .bind(server.last_restart_at)
+        .bind(&server.last_restart_reason)
+        .bind(server.health_check_timeout_seconds)
         .bind(server.created_at.naive_utc())
         .bind(server.updated_at.naive_utc())
         .execute(&self.pool)
@@ -81,7 +84,7 @@ impl ServerRepository for PostgresServerRepository {
     async fn find_by_id(&self, id: &Uuid) -> Result<Option<Server>> {
         let row = sqlx::query(
             r#"
-            SELECT id, user_id, name, game, status, COALESCE(host, '') as host, COALESCE(port, 0) as port, username, password_auth, executor_type, environment::text as environment, server_path, start_command, stop_command, container_name, public_host, mc_version, mc_loader, auto_pause, ram_allocation, discord_webhook_url, auto_backup_enabled, backup_cron, backup_provider, backup_path, max_retained_backups, auto_restart, restart_count, enable_tailscale, tailscale_auth_key, custom_container_name, ip_binding, template, network_name, git_remote_url, git_remote_username, git_remote_token, node_id, auto_wake, sleep_timeout_minutes, last_player_activity, max_restart_attempts, restart_cooldown_seconds, created_at, updated_at
+            SELECT id, user_id, name, game, status, COALESCE(host, '') as host, COALESCE(port, 0) as port, username, password_auth, executor_type, environment::text as environment, server_path, start_command, stop_command, container_name, public_host, mc_version, mc_loader, auto_pause, ram_allocation, discord_webhook_url, auto_backup_enabled, backup_cron, backup_provider, backup_path, max_retained_backups, auto_restart, restart_count, enable_tailscale, tailscale_auth_key, custom_container_name, ip_binding, template, network_name, git_remote_url, git_remote_username, git_remote_token, node_id, auto_wake, sleep_timeout_minutes, last_player_activity, max_restart_attempts, restart_cooldown_seconds, last_restart_at, last_restart_reason, health_check_timeout_seconds, created_at, updated_at
             FROM servers
             WHERE id = $1
             "#,
@@ -145,6 +148,11 @@ impl ServerRepository for PostgresServerRepository {
                 max_restart_attempts: row.try_get("max_restart_attempts").unwrap_or(5),
                 restart_cooldown_seconds: row.try_get("restart_cooldown_seconds").unwrap_or(300),
 
+                // Restart Policy & Health Check (Phase 57)
+                last_restart_at: row.try_get("last_restart_at").ok().flatten(),
+                last_restart_reason: row.try_get("last_restart_reason").ok().flatten(),
+                health_check_timeout_seconds: row.try_get("health_check_timeout_seconds").unwrap_or(5),
+
                 created_at: chrono::DateTime::from_naive_utc_and_offset(row.try_get("created_at")?, chrono::Utc),
                 updated_at: chrono::DateTime::from_naive_utc_and_offset(row.try_get("updated_at")?, chrono::Utc),
             })),
@@ -155,7 +163,7 @@ impl ServerRepository for PostgresServerRepository {
     async fn list(&self) -> Result<Vec<Server>> {
         let rows = sqlx::query(
             r#"
-            SELECT id, user_id, name, COALESCE(host, '') as host, COALESCE(port, 0) as port, username, game, password_auth, executor_type, environment::text as environment, server_path, start_command, stop_command, container_name, public_host, mc_version, mc_loader, auto_pause, ram_allocation, discord_webhook_url, auto_backup_enabled, backup_cron, backup_provider, backup_path, max_retained_backups, auto_restart, restart_count, enable_tailscale, tailscale_auth_key, custom_container_name, ip_binding, template, network_name, git_remote_url, git_remote_username, git_remote_token, status, node_id, auto_wake, sleep_timeout_minutes, last_player_activity, max_restart_attempts, restart_cooldown_seconds, created_at, updated_at
+            SELECT id, user_id, name, COALESCE(host, '') as host, COALESCE(port, 0) as port, username, game, password_auth, executor_type, environment::text as environment, server_path, start_command, stop_command, container_name, public_host, mc_version, mc_loader, auto_pause, ram_allocation, discord_webhook_url, auto_backup_enabled, backup_cron, backup_provider, backup_path, max_retained_backups, auto_restart, restart_count, enable_tailscale, tailscale_auth_key, custom_container_name, ip_binding, template, network_name, git_remote_url, git_remote_username, git_remote_token, status, node_id, auto_wake, sleep_timeout_minutes, last_player_activity, max_restart_attempts, restart_cooldown_seconds, last_restart_at, last_restart_reason, health_check_timeout_seconds, created_at, updated_at
             FROM servers
             WHERE deleted_at IS NULL
             ORDER BY created_at DESC
@@ -219,6 +227,11 @@ impl ServerRepository for PostgresServerRepository {
                 max_restart_attempts: row.try_get("max_restart_attempts").unwrap_or(5),
                 restart_cooldown_seconds: row.try_get("restart_cooldown_seconds").unwrap_or(300),
 
+                // Restart Policy & Health Check (Phase 57)
+                last_restart_at: row.try_get("last_restart_at").ok().flatten(),
+                last_restart_reason: row.try_get("last_restart_reason").ok().flatten(),
+                health_check_timeout_seconds: row.try_get("health_check_timeout_seconds").unwrap_or(5),
+
                 status: row.try_get("status")?,
                 created_at: chrono::DateTime::from_naive_utc_and_offset(row.try_get("created_at")?, chrono::Utc),
                 updated_at: chrono::DateTime::from_naive_utc_and_offset(row.try_get("updated_at")?, chrono::Utc),
@@ -232,7 +245,7 @@ impl ServerRepository for PostgresServerRepository {
         sqlx::query(
             r#"
             UPDATE servers
-            SET name = $2, game = $3, status = $4, host = $5, port = $6, username = $7, password_auth = $8, executor_type = $9, environment = $10::server_environment, server_path = $11, start_command = $12, stop_command = $13, container_name = $14, public_host = $15, mc_version = $16, mc_loader = $17, auto_pause = $18, ram_allocation = $19, discord_webhook_url = $20, auto_backup_enabled = $21, backup_cron = $22, backup_provider = $23, backup_path = $24, max_retained_backups = $25, auto_restart = $26, restart_count = $27, enable_tailscale = $28, tailscale_auth_key = $29, custom_container_name = $30, ip_binding = $31, template = $32, network_name = $33, git_remote_url = $34, git_remote_username = $35, git_remote_token = $36, auto_wake = $37, sleep_timeout_minutes = $38, last_player_activity = $39, max_restart_attempts = $40, restart_cooldown_seconds = $41, updated_at = $42
+            SET name = $2, game = $3, status = $4, host = $5, port = $6, username = $7, password_auth = $8, executor_type = $9, environment = $10::server_environment, server_path = $11, start_command = $12, stop_command = $13, container_name = $14, public_host = $15, mc_version = $16, mc_loader = $17, auto_pause = $18, ram_allocation = $19, discord_webhook_url = $20, auto_backup_enabled = $21, backup_cron = $22, backup_provider = $23, backup_path = $24, max_retained_backups = $25, auto_restart = $26, restart_count = $27, enable_tailscale = $28, tailscale_auth_key = $29, custom_container_name = $30, ip_binding = $31, template = $32, network_name = $33, git_remote_url = $34, git_remote_username = $35, git_remote_token = $36, auto_wake = $37, sleep_timeout_minutes = $38, last_player_activity = $39, max_restart_attempts = $40, restart_cooldown_seconds = $41, last_restart_at = $42, last_restart_reason = $43, health_check_timeout_seconds = $44, updated_at = $45
             WHERE id = $1
             "#,
         )
@@ -277,6 +290,9 @@ impl ServerRepository for PostgresServerRepository {
         .bind(server.last_player_activity)
         .bind(server.max_restart_attempts)
         .bind(server.restart_cooldown_seconds)
+        .bind(server.last_restart_at)
+        .bind(&server.last_restart_reason)
+        .bind(server.health_check_timeout_seconds)
         .bind(server.updated_at.naive_utc())
         .execute(&self.pool)
         .await
@@ -319,7 +335,7 @@ impl ServerRepository for PostgresServerRepository {
     async fn find_by_node_id(&self, node_id: &Uuid) -> Result<Vec<Server>> {
         let rows = sqlx::query(
             r#"
-            SELECT id, user_id, name, game, status, COALESCE(host, '') as host, COALESCE(port, 0) as port, username, password_auth, executor_type, environment::text as environment, server_path, start_command, stop_command, container_name, public_host, mc_version, mc_loader, auto_pause, ram_allocation, discord_webhook_url, auto_backup_enabled, backup_cron, backup_provider, backup_path, max_retained_backups, auto_restart, restart_count, enable_tailscale, tailscale_auth_key, custom_container_name, ip_binding, template, network_name, git_remote_url, git_remote_username, git_remote_token, node_id, auto_wake, sleep_timeout_minutes, last_player_activity, max_restart_attempts, restart_cooldown_seconds, created_at, updated_at
+            SELECT id, user_id, name, game, status, COALESCE(host, '') as host, COALESCE(port, 0) as port, username, password_auth, executor_type, environment::text as environment, server_path, start_command, stop_command, container_name, public_host, mc_version, mc_loader, auto_pause, ram_allocation, discord_webhook_url, auto_backup_enabled, backup_cron, backup_provider, backup_path, max_retained_backups, auto_restart, restart_count, enable_tailscale, tailscale_auth_key, custom_container_name, ip_binding, template, network_name, git_remote_url, git_remote_username, git_remote_token, node_id, auto_wake, sleep_timeout_minutes, last_player_activity, max_restart_attempts, restart_cooldown_seconds, last_restart_at, last_restart_reason, health_check_timeout_seconds, created_at, updated_at
             FROM servers
             WHERE node_id = $1
             "#,
@@ -377,6 +393,11 @@ impl ServerRepository for PostgresServerRepository {
                 last_player_activity: row.try_get("last_player_activity").ok().flatten(),
                 max_restart_attempts: row.try_get("max_restart_attempts").unwrap_or(5),
                 restart_cooldown_seconds: row.try_get("restart_cooldown_seconds").unwrap_or(300),
+
+                // Restart Policy & Health Check (Phase 57)
+                last_restart_at: row.try_get("last_restart_at").ok().flatten(),
+                last_restart_reason: row.try_get("last_restart_reason").ok().flatten(),
+                health_check_timeout_seconds: row.try_get("health_check_timeout_seconds").unwrap_or(5),
 
                 created_at: chrono::DateTime::from_naive_utc_and_offset(row.try_get("created_at")?, chrono::Utc),
                 updated_at: chrono::DateTime::from_naive_utc_and_offset(row.try_get("updated_at")?, chrono::Utc),
