@@ -25,6 +25,10 @@ created: 2026-05-31
 
 **No shadcn detected.** Project uses a well-established custom design system (glass-panel, cosmic theme) across 12+ completed phases. All spacing, colors, and typography use Tailwind v4 utility classes + CSS custom properties.
 
+### Visual Focal Point
+
+The `+ Add Schedule` button (accent cyan, full-width, dashed-border container when empty) is the primary visual anchor on this screen. It draws attention to the main action both when the schedule list is empty (centered in a dashed empty-state container) and when populated (tucked below the list as a full-width button). Secondary anchors are the color-coded action type badges (green/red/amber/purple) and the enabled/disabled toggle ON/OFF state.
+
 ---
 
 ## Spacing Scale
@@ -43,8 +47,10 @@ Declared values (multiples of 4):
 | 3xl | `gap-12 mt-12` | 48px | Major section breaks |
 
 Exceptions:
-- Icon-only touch targets: none required (buttons have text labels)
-- Toggle switch: 12px width custom (not a spacing token — built via `w-12 h-6`)
+- **12px (`p-3`):** Schedule row inner padding. The row packs 4-5 elements (badge, info block, run-once badge, toggle, actions) horizontally. Using 16px (`p-4`) would create excess horizontal wrap at desktop widths. 12px keeps the row compact while maintaining the 4px grid rhythm (4 × 3 = 12).
+- **20px (`p-5`):** Button padding and list item gaps. 16px feels tight for the `+ Add Schedule` button — it needs visual weight as the primary CTA. 24px is too spacious for inline buttons. 20px hits the balance. (4 × 5 = 20.)
+- **Icon-only touch targets:** none required (buttons have text labels)
+- **Toggle switch:** 12px width custom (not a spacing token — built via `w-12 h-6`)
 
 ---
 
@@ -52,19 +58,18 @@ Exceptions:
 
 | Role | Tailwind | Size | Weight | Line Height |
 |------|----------|------|--------|-------------|
-| Body | `text-sm` | 14px | 400 (normal) | 1.5 |
+| Body | `text-sm` | 14px | 400 (regular) | 1.5 |
 | Label | `text-xs` | 12px | 600 (semibold) | 1.4 |
-| Heading | `text-lg` | 18px | 700 (bold) | 1.2 |
-| Display | `text-2xl` | 24px | 700 (bold) | 1.2 |
-| Schedule row | `text-sm font-medium` | 14px | 500 (medium) | 1.5 |
-| Badge text | `text-xs font-bold` | 12px | 700 (bold) | 1.2 |
-| Muted helper | `text-xs text-muted` | 12px | 400 (normal) | 1.4 |
-| Run-once badge | `text-[10px] font-bold` | 10px | 700 (bold) | 1.2 |
+| Heading | `text-lg` | 18px | 600 (semibold) | 1.2 |
+| Badge | `text-[10px]` | 10px | 600 (semibold) | 1.2 |
 
 **Notes:**
-- Exactly 4 sizes used in this phase: 10px (run-once badge), 12px (labels/muted), 14px (body), 18px (heading)
-- Exactly 2 weights used: 400 (body/muted) and 600/700 (labels/headings/badges)
-- Follows exact pattern from existing Sleep/Wake and Restart Policy sections
+- **4 sizes used:** 10px (run-once badge), 12px (labels, muted helper, badge text), 14px (body, schedule row info), 18px (section heading, form heading).
+- **2 weights used:** 400 (body, muted helper, schedule row info text) and 600 (labels, headings, badges, action badges, run-once badge, buttons, form labels).
+- Schedule row info uses `text-sm font-normal` (14px/400/1.5) — matches body text.
+- Section heading uses `text-lg font-semibold` (18px/600/1.2) — matches existing Sleep/Wake and Restart Policy section headings.
+- Run-once badge uses `text-[10px] font-semibold` (10px/600/1.2) with cyan border/background.
+- Follows exact pattern from existing Sleep/Wake and Restart Policy sections.
 
 ---
 
@@ -101,7 +106,7 @@ Exceptions:
 | Success | `bg-emerald-500/10` | `border-emerald-500/30` | `text-emerald-400` |
 | Error | `bg-red-500/10` | `border-red-500/30` | `text-red-400` |
 
-Accent reserved for: "Add Schedule" button, enabled toggle ON state, schedule row hover border, form focus ring, action type badge borders
+Accent reserved for: "Add Schedule" button, enabled toggle ON state, schedule row hover border, form focus ring, action type badge borders, run-once badge border.
 
 ---
 
@@ -117,6 +122,7 @@ Accent reserved for: "Add Schedule" button, enabled toggle ON state, schedule ro
 | Empty state body | `Create your first scheduled action to automatically start, stop, restart, or sleep this server.` |
 | Loading state | `Loading schedules...` (skeleton or text per existing pattern) |
 | Error state | `Failed to load schedules. [Retry]` — follows existing `fetchApi` error pattern with toast |
+| Save button label | `Save Schedule` (verb + noun) |
 | Save success toast | `✅ Schedule saved` |
 | Save error toast | `❌ Could not save schedule. {error}` |
 | Delete confirmation | **Heading:** `Delete Scheduled Action?` **Body:** `Are you sure you want to delete this scheduled action? This cannot be undone.` **Buttons:** Cancel / Delete |
@@ -169,7 +175,7 @@ This phase introduces one new section with internal sub-components. All follow e
         ├── CronInput (text field — editable when "Custom" preset selected)
         ├── TimezoneInput (text or dropdown with common timezones, default UTC)
         ├── RunOnceCheckbox (checkbox + label "Run once")
-        ├── SaveButton (primary cyan)
+        ├── SaveScheduleButton (primary cyan, label: "Save Schedule")
         └── CancelButton (secondary muted)
 ```
 
@@ -203,7 +209,7 @@ export const schedulingApi = {
 | **Loading** | `Loading schedules...` text or skeleton | Fetch in progress |
 | **Empty** | "No schedules yet" centered in dashed-border container + `+ Add Schedule` CTA | User can click to add |
 | **Populated** | List of ScheduleRow items | Each row shows action, schedule, timezone, last-run, toggle, actions |
-| **Add form open** | Inline form below section header (pushed schedule list down) | Type select, cron input, timezone, run-once, Save/Cancel |
+| **Add form open** | Inline form below section header (pushed schedule list down) | Type select, cron input, timezone, run-once, Save Schedule / Cancel |
 | **Edit form open** | Same form pre-populated with existing values | Same layout as add, but pre-filled |
 | **Saving** | Button shows "Saving..." (disabled) | Form fields remain editable |
 | **Success** | Toast notification "✅ Schedule saved" | Auto-dismiss after 4 seconds |
@@ -225,7 +231,7 @@ export const schedulingApi = {
      - When "Custom..." selected, cron text input appears
    - **Timezone** dropdown: Common timezones (UTC, America/New_York, America/Los_Angeles, Europe/London, Europe/Berlin, Asia/Tokyo, Asia/Jakarta, Asia/Singapore, Asia/Shanghai, Australia/Sydney) + text input for any IANA zone
    - **Run Once** checkbox with label "Run once and disable after execution"
-4. User clicks "Save" — validates on client:
+4. User clicks **"Save Schedule"** — validates on client:
    - Action type required
    - Cron expression valid (non-empty, standard 5-field format)
    - Timezone valid (IANA timezone or empty = UTC)
