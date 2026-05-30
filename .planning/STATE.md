@@ -4,14 +4,14 @@ milestone: v1.0
 milestone_name: milestone
 status: completed
 stopped_at: Phase 58 context gathered
-last_updated: "2026-05-30T21:19:42.174Z"
-last_activity: 2026-05-30 -- Phase 58 marked complete
+last_updated: "2026-05-30T21:34:07.817Z"
+last_activity: 2026-05-30 -- Phase 55 marked complete
 progress:
   total_phases: 19
-  completed_phases: 11
+  completed_phases: 12
   total_plans: 48
-  completed_plans: 47
-  percent: 58
+  completed_plans: 48
+  percent: 63
 ---
 
 # Project State: Esluce
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-09)
 
 **Core value:** Users can deploy game servers to cloud nodes with minimal configuration and manage them via a web control panel.
-**Current focus:** Phase 58 — server-plugin-modpack-templates
+**Current focus:** Phase 55 — scheduled-backups
 
 ## Current Position
 
-Phase: 58 — COMPLETE
-Plan: 1 of 5
-Status: Phase 58 complete
-Last activity: 2026-05-30 -- Phase 58 marked complete
+Phase: 55 — COMPLETE
+Plan: 1 of 4
+Status: Phase 55 complete
+Last activity: 2026-05-30 -- Phase 55 marked complete
 
 Progress: [██████████] 98%
 

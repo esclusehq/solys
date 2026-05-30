@@ -127,13 +127,13 @@ Plans:
 **Goal:** Backup otomatis untuk data server secara berkala dan terjadwal - configurable backup intervals, retention policies, backup storage location
 **Requirements**: None
 **Depends on:** Phase 51 (Automasi DNS)
-**Plans:** 4 plans
+**Plans:** 4/4 plans complete
 
 Plans:
-- [ ] 55-01-PLAN.md — Worker cron evaluation + backup dispatch via Redis queue
-- [ ] 55-02-PLAN.md — Agent backup execution with agent-backup crate (compress + upload)
-- [ ] 55-03-PLAN.md — API backup config CRUD + S3 profiles + migrations
-- [ ] 55-04-PLAN.md — Frontend backup config panel + S3 profile management UI
+- [x] 55-01-PLAN.md — Worker cron evaluation + backup dispatch via Redis queue
+- [x] 55-02-PLAN.md — Agent backup execution with agent-backup crate (compress + upload)
+- [x] 55-03-PLAN.md — API backup config CRUD + S3 profiles + migrations
+- [x] 55-04-PLAN.md — Frontend backup config panel + S3 profile management UI
 
 ### Phase 56: Auto Online & Sleep Recovery
 
