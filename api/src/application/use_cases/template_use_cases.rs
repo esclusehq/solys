@@ -6,6 +6,13 @@ use uuid::Uuid;
 use crate::domain::server::template::{TemplateRepository, Template};
 use crate::application::dto::template_dtos::*;
 
+/// Helper to convert Box<dyn StdError> repository errors into anyhow.
+macro_rules! map_err {
+    ($expr:expr) => {
+        $expr.await.map_err(|e| anyhow::anyhow!("{}", e))?
+    };
+}
+
 // ── Create Template Use Case ─────────────────────────────────────────
 
 pub struct CreateTemplateUseCase<R: TemplateRepository + ?Sized> {
@@ -33,7 +40,7 @@ impl<R: TemplateRepository + ?Sized> CreateTemplateUseCase<R> {
             created_at: now,
             updated_at: now,
         };
-        self.repository.create_template(&template).await?;
+        map_err!(self.repository.create_template(&template));
         Ok(template)
     }
 }
@@ -51,8 +58,8 @@ impl<R: TemplateRepository + ?Sized> ListTemplatesUseCase<R> {
 
     pub async fn execute(&self, user_id: Uuid, game_type: Option<String>) -> Result<Vec<Template>> {
         // Show public templates + user's own templates
-        let mut templates = self.repository.list_public_templates().await?;
-        let user_templates = self.repository.list_templates_by_user(user_id).await?;
+        let mut templates: Vec<Template> = map_err!(self.repository.list_public_templates());
+        let user_templates: Vec<Template> = map_err!(self.repository.list_templates_by_user(user_id));
         templates.extend(user_templates);
 
         // Deduplicate by id
@@ -79,10 +86,8 @@ impl<R: TemplateRepository + ?Sized> GetTemplateUseCase<R> {
     }
 
     pub async fn execute(&self, id: Uuid) -> Result<Template> {
-        self.repository
-            .get_template_by_id(id)
-            .await?
-            .ok_or_else(|| anyhow!("Template not found: {}", id))
+        let result: Option<Template> = map_err!(self.repository.get_template_by_id(id));
+        result.ok_or_else(|| anyhow!("Template not found: {}", id))
     }
 }
 
@@ -99,9 +104,10 @@ impl<R: TemplateRepository + ?Sized> UpdateTemplateUseCase<R> {
 
     pub async fn execute(&self, user_id: Uuid, id: Uuid, req: UpdateTemplateRequest) -> Result<Template> {
         // Fetch existing template
-        let existing = self.repository
+        let existing: Template = self.repository
             .get_template_by_id(id)
-            .await?
+            .await
+            .map_err(|e| anyhow::anyhow!("{}", e))?
             .ok_or_else(|| anyhow!("Template not found: {}", id))?;
 
         // Ownership check
@@ -124,7 +130,11 @@ impl<R: TemplateRepository + ?Sized> UpdateTemplateUseCase<R> {
             ..existing
         };
 
-        self.repository.update_template(&updated).await
+        let result: Template = self.repository
+            .update_template(&updated)
+            .await
+            .map_err(|e| anyhow::anyhow!("{}", e))?;
+        Ok(result)
     }
 }
 
@@ -140,9 +150,10 @@ impl<R: TemplateRepository + ?Sized> DeleteTemplateUseCase<R> {
     }
 
     pub async fn execute(&self, user_id: Uuid, id: Uuid) -> Result<()> {
-        let template = self.repository
+        let template: Template = self.repository
             .get_template_by_id(id)
-            .await?
+            .await
+            .map_err(|e| anyhow::anyhow!("{}", e))?
             .ok_or_else(|| anyhow!("Template not found: {}", id))?;
 
         // Ownership check
@@ -155,7 +166,10 @@ impl<R: TemplateRepository + ?Sized> DeleteTemplateUseCase<R> {
             return Err(anyhow!("Cannot delete built-in template"));
         }
 
-        self.repository.delete_template(id).await?;
+        self.repository
+            .delete_template(id)
+            .await
+            .map_err(|e| anyhow::anyhow!("{}", e))?;
         Ok(())
     }
 }
@@ -174,9 +188,10 @@ impl<R: TemplateRepository + ?Sized> ApplyTemplateUseCase<R> {
 
     /// Fetch a template by ID and return a deep clone of its config.
     pub async fn execute(&self, template_id: Uuid) -> Result<serde_json::Value> {
-        let template = self.repository
+        let template: Template = self.repository
             .get_template_by_id(template_id)
-            .await?
+            .await
+            .map_err(|e| anyhow::anyhow!("{}", e))?
             .ok_or_else(|| anyhow!("Template not found: {}", template_id))?;
 
         Ok(template.config.clone())
