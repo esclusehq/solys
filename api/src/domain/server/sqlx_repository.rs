@@ -21,11 +21,11 @@ impl SqlxServerRepository {
             r#"
             INSERT INTO servers (
                 id, user_id, agent_id, job_id, name, image, executor_type, node_id, status, remote_id, port, 
-                config, resources, auto_wake, sleep_timeout_minutes, endpoints
+                config, resources, auto_wake, sleep_timeout_minutes, last_restart_at, last_restart_reason, health_check_timeout_seconds, endpoints
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
             RETURNING id, user_id, agent_id, job_id, name, image, executor_type, node_id, status, remote_id, port,
-                config, resources, auto_wake, sleep_timeout_minutes, endpoints, created_at, updated_at, deleted_at
+                config, resources, auto_wake, sleep_timeout_minutes, last_restart_at, last_restart_reason, health_check_timeout_seconds, endpoints, created_at, updated_at, deleted_at
             "#,
         )
         .bind(server.id)
@@ -43,6 +43,9 @@ impl SqlxServerRepository {
         .bind(&server.resources)
         .bind(server.auto_wake)
         .bind(server.sleep_timeout_minutes)
+        .bind(server.last_restart_at)
+        .bind(&server.last_restart_reason)
+        .bind(server.health_check_timeout_seconds)
         .bind(&server.endpoints)
         .fetch_one(&self.pool)
         .await?;
@@ -52,7 +55,7 @@ impl SqlxServerRepository {
 
     pub async fn find_by_id(&self, id: Uuid) -> Result<Option<Server>, Box<dyn std::error::Error + Send + Sync>> {
         let result = sqlx::query_as::<_, Server>(
-            "SELECT id, user_id, agent_id, job_id, name, image, executor_type, node_id, status, remote_id, port, config, resources, auto_wake, sleep_timeout_minutes, endpoints, created_at, updated_at, deleted_at FROM servers WHERE id = $1 AND deleted_at IS NULL"
+            "SELECT id, user_id, agent_id, job_id, name, image, executor_type, node_id, status, remote_id, port, config, resources, auto_wake, sleep_timeout_minutes, last_restart_at, last_restart_reason, health_check_timeout_seconds, endpoints, created_at, updated_at, deleted_at FROM servers WHERE id = $1 AND deleted_at IS NULL"
         )
         .bind(id)
         .fetch_optional(&self.pool)
@@ -63,7 +66,7 @@ impl SqlxServerRepository {
 
     pub async fn find_all(&self) -> Result<Vec<Server>, Box<dyn std::error::Error + Send + Sync>> {
         let results = sqlx::query_as::<_, Server>(
-            "SELECT id, user_id, agent_id, job_id, name, image, executor_type, node_id, status, remote_id, port, config, resources, auto_wake, sleep_timeout_minutes, endpoints, created_at, updated_at, deleted_at FROM servers WHERE deleted_at IS NULL ORDER BY created_at DESC"
+            "SELECT id, user_id, agent_id, job_id, name, image, executor_type, node_id, status, remote_id, port, config, resources, auto_wake, sleep_timeout_minutes, last_restart_at, last_restart_reason, health_check_timeout_seconds, endpoints, created_at, updated_at, deleted_at FROM servers WHERE deleted_at IS NULL ORDER BY created_at DESC"
         )
         .fetch_all(&self.pool)
         .await?;
@@ -76,7 +79,7 @@ impl SqlxServerRepository {
             r#"
             UPDATE servers 
             SET agent_id = $2, job_id = $3, name = $4, image = $5, executor_type = $6, node_id = $7, status = $8, remote_id = $9, port = $10,
-                config = $11, resources = $12, auto_wake = $13, sleep_timeout_minutes = $14, endpoints = $15, updated_at = NOW()
+                config = $11, resources = $12, auto_wake = $13, sleep_timeout_minutes = $14, last_restart_at = $15, last_restart_reason = $16, health_check_timeout_seconds = $17, endpoints = $18, updated_at = NOW()
             WHERE id = $1 AND deleted_at IS NULL
             RETURNING *
             "#,
@@ -95,6 +98,9 @@ impl SqlxServerRepository {
         .bind(&server.resources)
         .bind(server.auto_wake)
         .bind(server.sleep_timeout_minutes)
+        .bind(server.last_restart_at)
+        .bind(&server.last_restart_reason)
+        .bind(server.health_check_timeout_seconds)
         .bind(&server.endpoints)
         .fetch_one(&self.pool)
         .await?;
@@ -117,8 +123,8 @@ impl ServerRepository for SqlxServerRepository {
     async fn create(&self, server: &Server) -> Result<Server, Box<dyn std::error::Error + Send + Sync>> {
         let result = sqlx::query_as::<_, Server>(
             r#"
-            INSERT INTO servers (id, user_id, agent_id, job_id, name, image, executor_type, node_id, status, remote_id, port, config, resources, auto_wake, sleep_timeout_minutes, endpoints, created_at, updated_at, deleted_at)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
+            INSERT INTO servers (id, user_id, agent_id, job_id, name, image, executor_type, node_id, status, remote_id, port, config, resources, auto_wake, sleep_timeout_minutes, last_restart_at, last_restart_reason, health_check_timeout_seconds, endpoints, created_at, updated_at, deleted_at)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)
             RETURNING *
             "#,
         )
@@ -137,6 +143,9 @@ impl ServerRepository for SqlxServerRepository {
         .bind(&server.resources)
             .bind(server.auto_wake)
             .bind(server.sleep_timeout_minutes)
+            .bind(server.last_restart_at)
+            .bind(&server.last_restart_reason)
+            .bind(server.health_check_timeout_seconds)
             .bind(&server.endpoints)
             .bind(server.created_at)
         .bind(server.updated_at)
@@ -149,7 +158,7 @@ impl ServerRepository for SqlxServerRepository {
 
     async fn find_by_id(&self, id: Uuid) -> Result<Option<Server>, Box<dyn std::error::Error + Send + Sync>> {
         let result = sqlx::query_as::<_, Server>(
-            "SELECT id, user_id, agent_id, job_id, name, image, executor_type, node_id, status, remote_id, port, config, resources, auto_wake, sleep_timeout_minutes, endpoints, created_at, updated_at, deleted_at FROM servers WHERE id = $1 AND deleted_at IS NULL"
+            "SELECT id, user_id, agent_id, job_id, name, image, executor_type, node_id, status, remote_id, port, config, resources, auto_wake, sleep_timeout_minutes, last_restart_at, last_restart_reason, health_check_timeout_seconds, endpoints, created_at, updated_at, deleted_at FROM servers WHERE id = $1 AND deleted_at IS NULL"
         )
         .bind(id)
         .fetch_optional(&self.pool)
@@ -160,7 +169,7 @@ impl ServerRepository for SqlxServerRepository {
 
     async fn find_by_user_id(&self, user_id: Uuid) -> Result<Vec<Server>, Box<dyn std::error::Error + Send + Sync>> {
         let results = sqlx::query_as::<_, Server>(
-            "SELECT id, user_id, agent_id, job_id, name, image, executor_type, node_id, status, remote_id, port, config, resources, auto_wake, sleep_timeout_minutes, endpoints, created_at, updated_at, deleted_at FROM servers WHERE user_id = $1 AND deleted_at IS NULL ORDER BY created_at DESC"
+            "SELECT id, user_id, agent_id, job_id, name, image, executor_type, node_id, status, remote_id, port, config, resources, auto_wake, sleep_timeout_minutes, last_restart_at, last_restart_reason, health_check_timeout_seconds, endpoints, created_at, updated_at, deleted_at FROM servers WHERE user_id = $1 AND deleted_at IS NULL ORDER BY created_at DESC"
         )
         .bind(user_id)
         .fetch_all(&self.pool)
@@ -171,7 +180,7 @@ impl ServerRepository for SqlxServerRepository {
 
     async fn find_by_agent_id(&self, agent_id: Uuid) -> Result<Vec<Server>, Box<dyn std::error::Error + Send + Sync>> {
         let results = sqlx::query_as::<_, Server>(
-            "SELECT id, user_id, agent_id, job_id, name, image, executor_type, node_id, status, remote_id, port, config, resources, auto_wake, sleep_timeout_minutes, endpoints, created_at, updated_at, deleted_at FROM servers WHERE agent_id = $1 AND deleted_at IS NULL ORDER BY created_at DESC"
+            "SELECT id, user_id, agent_id, job_id, name, image, executor_type, node_id, status, remote_id, port, config, resources, auto_wake, sleep_timeout_minutes, last_restart_at, last_restart_reason, health_check_timeout_seconds, endpoints, created_at, updated_at, deleted_at FROM servers WHERE agent_id = $1 AND deleted_at IS NULL ORDER BY created_at DESC"
         )
         .bind(agent_id)
         .fetch_all(&self.pool)
@@ -182,7 +191,7 @@ impl ServerRepository for SqlxServerRepository {
 
     async fn find_by_job_id(&self, job_id: Uuid) -> Result<Option<Server>, Box<dyn std::error::Error + Send + Sync>> {
         let result = sqlx::query_as::<_, Server>(
-            "SELECT id, user_id, agent_id, job_id, name, image, executor_type, node_id, status, remote_id, port, config, resources, auto_wake, sleep_timeout_minutes, endpoints, created_at, updated_at, deleted_at FROM servers WHERE job_id = $1 AND deleted_at IS NULL"
+            "SELECT id, user_id, agent_id, job_id, name, image, executor_type, node_id, status, remote_id, port, config, resources, auto_wake, sleep_timeout_minutes, last_restart_at, last_restart_reason, health_check_timeout_seconds, endpoints, created_at, updated_at, deleted_at FROM servers WHERE job_id = $1 AND deleted_at IS NULL"
         )
         .bind(job_id)
         .fetch_optional(&self.pool)
@@ -193,7 +202,7 @@ impl ServerRepository for SqlxServerRepository {
 
     async fn find_all(&self) -> Result<Vec<Server>, Box<dyn std::error::Error + Send + Sync>> {
         let results = sqlx::query_as::<_, Server>(
-            "SELECT id, user_id, agent_id, job_id, name, image, executor_type, node_id, status, remote_id, port, config, resources, auto_wake, sleep_timeout_minutes, endpoints, created_at, updated_at, deleted_at FROM servers WHERE deleted_at IS NULL ORDER BY created_at DESC"
+            "SELECT id, user_id, agent_id, job_id, name, image, executor_type, node_id, status, remote_id, port, config, resources, auto_wake, sleep_timeout_minutes, last_restart_at, last_restart_reason, health_check_timeout_seconds, endpoints, created_at, updated_at, deleted_at FROM servers WHERE deleted_at IS NULL ORDER BY created_at DESC"
         )
         .fetch_all(&self.pool)
         .await?;
@@ -206,7 +215,7 @@ impl ServerRepository for SqlxServerRepository {
             r#"
             UPDATE servers 
             SET agent_id = $2, job_id = $3, name = $4, image = $5, status = $6, remote_id = $7, 
-                config = $8, resources = $9, auto_wake = $10, sleep_timeout_minutes = $11, endpoints = $12, updated_at = NOW()
+                config = $8, resources = $9, auto_wake = $10, sleep_timeout_minutes = $11, last_restart_at = $12, last_restart_reason = $13, health_check_timeout_seconds = $14, endpoints = $15, updated_at = NOW()
             WHERE id = $1 AND deleted_at IS NULL
             RETURNING *
             "#,
@@ -222,6 +231,9 @@ impl ServerRepository for SqlxServerRepository {
         .bind(&server.resources)
         .bind(server.auto_wake)
         .bind(server.sleep_timeout_minutes)
+        .bind(server.last_restart_at)
+        .bind(&server.last_restart_reason)
+        .bind(server.health_check_timeout_seconds)
         .bind(&server.endpoints)
         .fetch_one(&self.pool)
         .await?;
