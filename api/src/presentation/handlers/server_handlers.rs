@@ -579,6 +579,9 @@ async fn update_server(
     if let Some(sleep_timeout_minutes) = payload.sleep_timeout_minutes {
         server.sleep_timeout_minutes = Some(sleep_timeout_minutes);
     }
+    if let Some(health_check_timeout_seconds) = payload.health_check_timeout_seconds {
+        server.health_check_timeout_seconds = Some(health_check_timeout_seconds);
+    }
 
     let updated = repo.update(&server)
         .await
