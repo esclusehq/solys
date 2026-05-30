@@ -174,7 +174,20 @@ Plans:
 **Goal:** Templates untuk server, plugin, dan modpack untuk mempermudah deployment dan konfigurasi server secara instan - pre-configured game templates, plugin bundles, modpack configurations
 **Requirements**: None
 **Depends on:** Phase 51 (Automasi DNS)
-**Plans:** 0 plans
+**Plans:** 5 plans in 4 waves
+
+**Wave 1**
+- [ ] 58-01-PLAN.md — Data Layer: migration, entity, repository (D-04/D-12 foundation)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [ ] 58-02-PLAN.md — Backend API: DTOs, use cases, handlers, routes, container wiring, CreateServer integration
+
+**Wave 3** *(blocked on Wave 2 completion)*
+- [ ] 58-03-PLAN.md — External Services: CurseForgeClient, Modrinth/CurseForge API key settings
+- [ ] 58-04-PLAN.md — Frontend Infrastructure: API client, hooks, components
+
+**Wave 4** *(blocked on Wave 3 completion)*
+- [ ] 58-05-PLAN.md — Frontend Pages: template library, create form, mod browser, App.jsx routes + sidebar
 
 ### Phase 59: Server Scheduling
 
