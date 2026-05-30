@@ -148,7 +148,10 @@ where
                                                 "[MONITOR] Server {} crashed, max restart attempts ({}/{}) reached. Giving up.",
                                                 full_server.name, current_count, max_attempts
                                             );
-                                            // Could publish an alert here in future phases
+                                            // Set last restart reason to max_attempts_reached
+                                            let mut updated = full_server.clone();
+                                            updated.last_restart_reason = Some("max_attempts_reached".to_string());
+                                            let _ = self.repository.update(&updated).await;
                                         } else {
                                             let backoff_secs = std::cmp::min(
                                                 30u32 * 2u32.pow(current_count as u32),  // 30s, 60s, 120s, 240s...
@@ -171,6 +174,8 @@ where
                                                         tracing::info!("[MONITOR] Backed-off auto-restart succeeded for {} (attempt {})", server_clone.name, current_count + 1);
                                                         let mut updated = server_clone.clone();
                                                         updated.restart_count = current_count + 1;
+                                                        updated.last_restart_at = Some(chrono::Utc::now());
+                                                        updated.last_restart_reason = Some("crash_detected".to_string());
                                                         let _ = repo_clone.update(&updated).await;
                                                     }
                                                     Err(e) => {
@@ -263,6 +268,85 @@ where
                             }
                             Err(e) => {
                                 tracing::warn!("[MONITOR] Failed to collect metrics for sleep detection on {}: {}", server.name, e);
+                            }
+                        }
+                    }
+
+                    // === RCON HEALTH CHECK (Phase 57) ===
+                    // Probe RCON for running servers to detect unresponsive state
+                    if status == "running" && server.auto_restart && server.health_check_timeout_seconds > 0 {
+                        match executor.collect_metrics(&server).await {
+                            Ok(_metrics) => {
+                                // RCON responded — server is healthy
+                                // No action needed
+                            }
+                            Err(e) => {
+                                tracing::warn!(
+                                    "[MONITOR] Server {} RCON health check failed: {}. Marking as unresponsive.",
+                                    server.name, e
+                                );
+                                // RCON failed — mark as unresponsive and trigger restart
+                                // Follow crash-detection restart pattern
+                                match self.repository.find_by_id(&server.id).await {
+                                    Ok(Some(full_server)) => {
+                                        if full_server.auto_restart {
+                                            let max_attempts = full_server.max_restart_attempts;
+                                            let current_count = full_server.restart_count;
+                                            if current_count >= max_attempts {
+                                                tracing::error!(
+                                                    "[MONITOR] Server {} unresponsive, max restart attempts ({}/{}) reached. Giving up.",
+                                                    full_server.name, current_count, max_attempts
+                                                );
+                                                // Set last restart reason to max_attempts_reached
+                                                let mut updated = full_server.clone();
+                                                updated.last_restart_reason = Some("max_attempts_reached".to_string());
+                                                let _ = self.repository.update(&updated).await;
+                                            } else {
+                                                let backoff_secs = std::cmp::min(
+                                                    30u32 * 2u32.pow(current_count as u32),
+                                                    full_server.restart_cooldown_seconds as u32,
+                                                );
+                                                tracing::warn!(
+                                                    "[MONITOR] Server {} unresponsive, restarting in {}s (attempt {}/{})...",
+                                                    full_server.name, backoff_secs, current_count + 1, max_attempts
+                                                );
+
+                                                // Spawn delayed restart to avoid blocking the loop
+                                                let repo_clone = self.repository.clone();
+                                                let factory_clone = self.executor_factory.clone();
+                                                let server_clone = full_server.clone();
+                                                tokio::spawn(async move {
+                                                    tokio::time::sleep(std::time::Duration::from_secs(backoff_secs as u64)).await;
+                                                    let exec = factory_clone.get_executor(&server_clone);
+                                                    match exec.start_server(&server_clone).await {
+                                                        Ok(_) => {
+                                                            tracing::info!("[MONITOR] RCON health-check restart succeeded for {} (attempt {})", server_clone.name, current_count + 1);
+                                                            let mut updated = server_clone.clone();
+                                                            updated.restart_count = current_count + 1;
+                                                            updated.last_restart_at = Some(chrono::Utc::now());
+                                                            updated.last_restart_reason = Some("unresponsive".to_string());
+                                                            let _ = repo_clone.update(&updated).await;
+                                                        }
+                                                        Err(e) => {
+                                                            tracing::error!("[MONITOR] RCON health-check restart failed for {}: {}", server_clone.name, e);
+                                                        }
+                                                    }
+                                                });
+                                            }
+                                        } else {
+                                            tracing::info!(
+                                                "[MONITOR] Server {} unresponsive but auto_restart is disabled",
+                                                server.name
+                                            );
+                                        }
+                                    }
+                                    Ok(None) => {
+                                        tracing::warn!("[MONITOR] Server {} not found in repository during health check", server.id);
+                                    }
+                                    Err(e) => {
+                                        tracing::error!("[MONITOR] Failed to fetch server {} for health check: {}", server.id, e);
+                                    }
+                                }
                             }
                         }
                     }
