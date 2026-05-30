@@ -18,6 +18,9 @@ pub struct Server {
     pub resources: serde_json::Value,
     pub auto_wake: Option<bool>,
     pub sleep_timeout_minutes: Option<i32>,
+    pub last_restart_at: Option<chrono::NaiveDateTime>,
+    pub last_restart_reason: Option<String>,
+    pub health_check_timeout_seconds: Option<i32>,
     pub endpoints: serde_json::Value,
     pub created_at: chrono::NaiveDateTime,
     pub updated_at: chrono::NaiveDateTime,
@@ -43,6 +46,9 @@ impl Server {
             resources: serde_json::json!({"ram": "1G", "cpu": 1, "disk": "5G"}),
             auto_wake: None,
             sleep_timeout_minutes: None,
+            last_restart_at: None,
+            last_restart_reason: None,
+            health_check_timeout_seconds: None,
             endpoints: serde_json::json!([]),
             created_at: now,
             updated_at: now,
@@ -103,6 +109,9 @@ pub struct UpdateServerRequest {
     pub resources: Option<serde_json::Value>,
     pub auto_wake: Option<bool>,
     pub sleep_timeout_minutes: Option<i32>,
+    pub last_restart_at: Option<chrono::NaiveDateTime>,
+    pub last_restart_reason: Option<String>,
+    pub health_check_timeout_seconds: Option<i32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
