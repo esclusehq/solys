@@ -58,7 +58,7 @@ Same as Phase 55 — established by `index.css` and existing component patterns:
 
 | Role | Size | Weight | Line Height | CSS / Tailwind |
 |------|------|--------|-------------|----------------|
-| Caption / Label / Badge | 12px | 400 (normal) / 600 (semibold) | 1.4 | `text-xs` — badge uses `font-semibold`, labels use `font-normal` |
+| Caption / Label / Badge | 12px | 400 (normal) / 700 (bold) | 1.4 | `text-xs` — badge uses `font-bold`, labels use `font-normal` |
 | Body / Form text | 14px | 400 (normal) | 1.5 | `text-sm` |
 | Section heading | 18px | 700 (bold) | 1.3 | `text-lg font-bold` (existing convention) |
 | Input value | 14px | 400 (normal) | 1.5 | `text-sm` for numbers, `text-sm font-mono` for timeout value display |
@@ -67,7 +67,7 @@ Same as Phase 55 — established by `index.css` and existing component patterns:
 
 **Notes:**
 - `font-mono` (Fira Code) available for technical values displayed in the UI.
-- Badge for Sleeping state reuses the same `text-xs font-semibold` pattern as existing `StatusBadge.jsx`.
+- Badge for Sleeping state uses `text-xs font-bold` (consolidated from `font-semibold` to keep max 2 weights).
 - Section headings use `font-bold` (700) per existing project convention — matches ServerDetails.jsx Settings tab.
 
 **Source:** Phase 55 typography table, confirmed via `StatusBadge.jsx`, `ServerDetails.jsx`, `app/src/index.css`.
