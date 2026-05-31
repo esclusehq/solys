@@ -231,13 +231,13 @@ Plans:
 
 ### Phase 62: Create CONTRIBUTING.md - Cara kontribusi
 
-**Goal:** [To be planned]
-**Requirements**: TBD
+**Goal:** Create CONTRIBUTING.md guide, CODE_OF_CONDUCT.md, and PULL_REQUEST_TEMPLATE.md for developers who want to contribute to the Esluce project
+**Requirements**: None
 **Depends on:** Phase 61
-**Plans:** 0 plans
+**Plans:** 1 plan
 
 Plans:
-- [ ] TBD (run /gsd-plan-phase 62 to break down)
+- [ ] 62-01-PLAN.md — Create CONTRIBUTING.md + CODE_OF_CONDUCT.md + PULL_REQUEST_TEMPLATE.md
 
 ### Phase 63: Create ARCHITECTURE.md - technical documentation (module-level)
 
