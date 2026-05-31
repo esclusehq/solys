@@ -163,7 +163,7 @@ impl AppContainer {
             redis_url: String::new(),
             redis_pool_size: 10,
             jwt_secret: "dev-secret-key-min-32-chars-long".to_string(),
-            jwt_access_token_expiry_minutes: 15,
+            jwt_access_token_expiry_minutes: 10080,
             jwt_refresh_token_expiry_days: 7,
             bcrypt_cost: 12,
             api_key_length: 32,

@@ -11,6 +11,12 @@ class ApiClient {
     return useAuthStore.getState().accessToken
   }
 
+  buildQueryString(params) {
+    const entries = Object.entries(params).filter(([, v]) => v !== undefined && v !== null && v !== '')
+    if (entries.length === 0) return ''
+    return '?' + entries.map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`).join('&')
+  }
+
   async request(endpoint, options = {}) {
     const token = this.getToken()
     
@@ -23,7 +29,12 @@ class ApiClient {
       headers['Authorization'] = `Bearer ${token}`
     }
 
-    const response = await fetch(`${this.baseUrl}${endpoint}`, {
+    let url = `${this.baseUrl}${endpoint}`
+    if (options.params) {
+      url += this.buildQueryString(options.params)
+    }
+
+    const response = await fetch(url, {
       ...options,
       headers,
       credentials: 'include',  // Include cookies for authentication
