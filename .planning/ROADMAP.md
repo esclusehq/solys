@@ -272,3 +272,13 @@ Plans:
 
 Plans:
 - [x] 65-01-PLAN.md — Add container runtime auto-install to Solys installer (created 2026-05-31)
+
+### Phase 66: integrasikan umami analitycs dashboard dengan RDS di project escluse
+
+**Goal:** Deploy self-hosted Umami Analytics on EC2 + RDS at analytics.esluce.com to track all esluce.com subdomains
+**Requirements**: TBD
+**Depends on:** Phase 65
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (run /gsd-plan-phase 66 to break down)
