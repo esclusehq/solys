@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: completed
+status: executing
 stopped_at: Phase 61 context gathered
-last_updated: "2026-05-31T08:31:20.143Z"
-last_activity: 2026-05-31 -- Phase 61 marked complete
+last_updated: "2026-05-31T08:56:40.781Z"
+last_activity: 2026-05-31 -- Phase 60 execution started
 progress:
   total_phases: 19
   completed_phases: 14
   total_plans: 56
   completed_plans: 53
-  percent: 74
+  percent: 95
 ---
 
 # Project State: Esluce
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-09)
 
 **Core value:** Users can deploy game servers to cloud nodes with minimal configuration and manage them via a web control panel.
-**Current focus:** Phase 61 — create-development-md-setup-local-dev-environment
+**Current focus:** Phase 60 — crash-detection
 
 ## Current Position
 
-Phase: 61 — COMPLETE
-Plan: 1 of 1
-Status: Phase 61 complete
-Last activity: 2026-05-31 -- Phase 61 marked complete
+Phase: 60 (crash-detection) — EXECUTING
+Plan: 1 of 4
+Status: Executing Phase 60
+Last activity: 2026-05-31 -- Phase 60 execution started
 
 Progress: [█████████░] 93%
 

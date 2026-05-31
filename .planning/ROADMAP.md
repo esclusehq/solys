@@ -207,17 +207,17 @@ Plans:
 **Goal:** Mendeteksi server yang berhenti atau crash secara otomatis dan menjalankan recovery.
 
 **Depends on:** Phase 57 (Auto Restart Policies)
-**Plans:** 4 plans
+**Plans:** 4/4 plans complete
 
 **Wave 1**
-- [ ] 60-01-PLAN.md — Data Layer: migration (server_crash_logs table), ServerCrashLog entity, PostgresCrashLogRepository
-- [ ] 60-02-PLAN.md — Agent Protocol + Crash Reporter: CrashReport WS message, agent crash data capture via Bollard events
+- [x] 60-01-PLAN.md — Data Layer: migration (server_crash_logs table), ServerCrashLog entity, PostgresCrashLogRepository
+- [x] 60-02-PLAN.md — Agent Protocol + Crash Reporter: CrashReport WS message, agent crash data capture via Bollard events
 
 **Wave 2** *(blocked on Wave 1 completion)*
 - [x] 60-03-PLAN.md — Backend Crash Processing: crash_classifier.rs, MonitoringService crash ingestion/recovery/notifications, WS CrashReport handler, REST API endpoints
 
 **Wave 3** *(blocked on Wave 2 completion)*
-- [ ] 60-04-PLAN.md — Frontend: useCrashLogs hook, API client functions, Crash History section in ServerDetails Settings tab
+- [x] 60-04-PLAN.md — Frontend: useCrashLogs hook, API client functions, Crash History section in ServerDetails Settings tab
 
 ### Phase 61: Create DEVELOPMENT.md - Setup local dev environment
 
