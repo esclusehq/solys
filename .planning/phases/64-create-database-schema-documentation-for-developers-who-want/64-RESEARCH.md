@@ -633,7 +633,7 @@ erDiagram
 | A5 | The generator tool does not need to run as part of CI | Environment Availability | If CI regeneration is desired later, a CI step would need adding |
 | A6 | `sqlx` 0.7 is compatible with the PostgreSQL version | Standard Stack | PostgreSQL 16 (from STACK.md) works with sqlx 0.7; confirmed by production usage |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **Where to place the generator Cargo.toml — workspace member or standalone?**
    - What we know: `api/Cargo.toml` exists but there's no root `Cargo.toml` workspace. `agent-core/Cargo.toml` is a separate workspace.
