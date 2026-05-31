@@ -59,4 +59,4 @@ app/
 landing-page-escluse/
 gateway/
 packages/
-migration/
+migration/tools/db-schema-gen/target/
