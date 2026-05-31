@@ -278,8 +278,8 @@ Plans:
 **Goal:** Deploy self-hosted Umami Analytics on EC2 + RDS at analytics.esluce.com to track all esluce.com subdomains
 **Requirements**: TBD
 **Depends on:** Phase 65
-**Plans:** 2 plans
+**Plans:** 1/2 plans executed
 
 **Wave 1**
-- [ ] 66-01-PLAN.md — Create Umami Docker stack (docker-compose.yml, Caddyfile, .env.example) + DEPLOYMENT.md
+- [x] 66-01-PLAN.md — Create Umami Docker stack (docker-compose.yml, Caddyfile, .env.example) + DEPLOYMENT.md
 - [ ] 66-02-PLAN.md — Inject Umami tracking scripts into landing-page-escluse/index.html and app/index.html
