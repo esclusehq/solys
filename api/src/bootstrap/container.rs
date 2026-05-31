@@ -1,5 +1,6 @@
 use std::sync::Arc;
 use sqlx::PgPool;
+use tokio::sync::mpsc;
 
 use crate::domain::{
     repositories::server_repository::ServerRepository,
@@ -63,7 +64,7 @@ use crate::domain::repositories::node_api_key_repository::NodeApiKeyRepository;
 use crate::domain::repositories::node_registration_token_repository::NodeRegistrationTokenRepository;
 use crate::domain::repositories::cron_task_repository::CronTaskRepository;
 use crate::domain::repositories::backup_config_repository::BackupConfigRepository;
-use crate::application::services::monitoring_service::MonitoringService;
+use crate::application::services::monitoring_service::{MonitoringService, CrashReportData};
 use crate::presentation::ws::node_connection_manager::NodeConnectionManager;
 use crate::application::services::webhook_service::WebhookService;
 use crate::application::services::backup_service::BackupService;
@@ -146,6 +147,8 @@ pub struct AppContainer {
     pub update_template_use_case: Arc<UpdateTemplateUseCase<dyn TemplateRepository>>,
     pub delete_template_use_case: Arc<DeleteTemplateUseCase<dyn TemplateRepository>>,
     pub apply_template_use_case: Arc<ApplyTemplateUseCase<dyn TemplateRepository>>,
+    // Crash report channel (Phase 60) — agent WS handler sends, MonitoringService drains
+    pub crash_report_tx: Option<mpsc::Sender<CrashReportData>>,
 }
 
 impl AppContainer {
@@ -322,13 +325,20 @@ impl AppContainer {
         backup_repo.clone(),
     ));
 
+        // Phase 60: Crash Detection channel
+        // The WS handler sends CrashReportData through this channel,
+        // and the MonitoringService drains it at the top of each tick.
+        let (crash_report_tx, crash_report_rx) = mpsc::channel::<CrashReportData>(256);
+
         let monitoring_service = Arc::new(MonitoringService::new(
             repo.clone(),
             metrics.clone(),
             factory.clone(),
             event_bus.clone(),
             evaluate_alerts_use_case.clone(),
-            node_repo.clone()
+            node_repo.clone(),
+            pool.clone(),
+            Some(crash_report_rx),
         ));
 
         let billing_service: Arc<dyn BillingService> = if config.lemon_squeezy_api_key.is_some() {
@@ -395,6 +405,7 @@ impl AppContainer {
             update_template_use_case,
             delete_template_use_case,
             apply_template_use_case,
+            crash_report_tx: Some(crash_report_tx),
         }
     }
 }

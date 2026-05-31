@@ -2,6 +2,7 @@ import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { fetchApi } from '../api/client';
 import { useScheduledActions } from '../hooks/useScheduledActions';
+import { useCrashLogs } from '../hooks/useCrashLogs';
 import { startServer, stopServer, sendCommand, updateServer, sleepServer, wakeServer } from '../hooks/useServers';
 import { useWebSocket } from '../hooks/useWebSocket';
 import { useAlertHistory } from '../hooks/useAlerts';
@@ -81,6 +82,9 @@ export default function ServerDetails() {
     const [scheduleToast, setScheduleToast] = useState(null);
     const [deleteConfirm, setDeleteConfirm] = useState(null);
 
+    // Crash History state (Phase 60)
+    const [crashToast, setCrashToast] = useState(null);
+
     // Backup config state
     const [backupConfig, setBackupConfig] = useState({
         auto_backup_enabled: false,
@@ -96,6 +100,16 @@ export default function ServerDetails() {
     const { schedules, loading: schedulesLoading, saving: schedulesSaving,
             createSchedule, updateSchedule, toggleSchedule, deleteSchedule,
             refresh: refreshSchedules } = useScheduledActions(id);
+    const {
+        logs: crashLogs,
+        total: crashTotal,
+        page: crashPage,
+        totalPages: crashTotalPages,
+        loading: crashLoading,
+        setPage: setCrashPage,
+        clearLogs: handleClearCrashLogs,
+        acknowledge: acknowledgeCrash,
+    } = useCrashLogs(id);
     
     const canUseBackup = userPlan !== 'free';
 
@@ -344,6 +358,55 @@ export default function ServerDetails() {
         }
         setTimeout(() => setScheduleToast(null), 4000);
     };
+
+    // Crash History handlers (Phase 60)
+    const showCrashToast = (type, message) => {
+        setCrashToast({ type, message });
+        setTimeout(() => setCrashToast(null), 4000);
+    };
+
+    const handleClearAllCrashLogs = async () => {
+        try {
+            await handleClearCrashLogs();
+            showCrashToast('success', 'Crash history cleared');
+        } catch (e) {
+            showCrashToast('error', `Failed to clear: ${e.message}`);
+        }
+    };
+
+    const handleAcknowledgeCrash = async (logId) => {
+        try {
+            await acknowledgeCrash(logId);
+            showCrashToast('success', 'Crash marked as resolved');
+        } catch (e) {
+            showCrashToast('error', `Failed to resolve: ${e.message}`);
+        }
+    };
+
+    const crashTypeConfig = {
+        oom: { label: 'OOM', color: 'text-red-400 bg-red-500/10 border-red-500/30' },
+        config_error: { label: 'Config Error', color: 'text-yellow-400 bg-yellow-500/10 border-yellow-500/30' },
+        plugin_crash: { label: 'Plugin Crash', color: 'text-orange-400 bg-orange-500/10 border-orange-500/30' },
+        generic: { label: 'Crash', color: 'text-[var(--color-text-muted)] bg-white/5 border-[var(--color-cosmic-border)]' },
+    };
+
+    function CrashTypeBadge({ type }) {
+        const config = crashTypeConfig[type] || crashTypeConfig.generic;
+        return (
+            <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${config.color}`}>
+                {config.label}
+            </span>
+        );
+    }
+
+    function formatRecoveryAction(action) {
+        const map = {
+            'auto_restarted': 'Auto-restarted',
+            'notified_only': 'Notified only',
+            'restart_disabled': 'Auto-restart disabled',
+        };
+        return map[action] || action;
+    }
 
     if (loading) return <div className="flex-1 flex items-center justify-center text-[var(--color-text-muted)]">Loading...</div>;
     if (!server) return <div className="flex-1 flex items-center justify-center text-[var(--color-text-muted)]">Server not found</div>;
@@ -959,6 +1022,106 @@ export default function ServerDetails() {
                                             + Add Schedule
                                         </button>
                                     )}
+                                </>
+                            )}
+                        </section>
+
+                        {/* ─── CRASH HISTORY (Phase 60) ─── */}
+                        <section className="glass-panel p-6 mt-6">
+                            <h3 className="text-lg font-bold mb-1">Crash History</h3>
+                            <p className="text-xs text-[var(--color-text-muted)] mb-5">
+                                Detailed crash log with diagnostic information.
+                            </p>
+
+                            {crashToast && (
+                                <div className={`mb-4 px-4 py-3 rounded-lg text-sm font-medium border ${
+                                    crashToast.type === 'success'
+                                        ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
+                                        : 'bg-red-500/10 border-red-500/30 text-red-400'
+                                }`}>
+                                    {crashToast.message}
+                                </div>
+                            )}
+
+                            {crashLoading ? (
+                                <div className="flex items-center justify-center py-8">
+                                    <span className="text-sm text-[var(--color-text-muted)]">Loading crash history...</span>
+                                </div>
+                            ) : crashLogs.length === 0 ? (
+                                <div className="p-8 rounded-xl border border-dashed border-[var(--color-cosmic-border)] text-center">
+                                    <p className="text-sm text-[var(--color-text-muted)]">No crash history</p>
+                                </div>
+                            ) : (
+                                <>
+                                    <div className="space-y-2">
+                                        {crashLogs.map(log => (
+                                            <div key={log.id} className="p-3 rounded-xl border border-[var(--color-cosmic-border)]">
+                                                <div className="flex items-center gap-2 mb-1">
+                                                    <CrashTypeBadge type={log.crash_type} />
+                                                    <span className="text-xs text-[var(--color-text-muted)]">
+                                                        {new Date(log.crashed_at).toLocaleString()}
+                                                    </span>
+                                                </div>
+                                                <div className="grid grid-cols-2 gap-2 text-xs">
+                                                    <span>Exit code: <strong>{log.exit_code}</strong></span>
+                                                    <span>Action: <strong>{formatRecoveryAction(log.recovery_action)}</strong></span>
+                                                </div>
+                                                {log.log_excerpt && (
+                                                    <pre className="mt-2 p-2 rounded bg-black/40 text-[11px] font-mono
+                                                                   text-[var(--color-text-muted)] overflow-x-auto whitespace-pre-wrap">
+                                                        {log.log_excerpt}
+                                                    </pre>
+                                                )}
+                                                {!log.resolved_at && (
+                                                    <button onClick={() => handleAcknowledgeCrash(log.id)}
+                                                            className="mt-2 text-xs text-[var(--color-cosmic-cyan)] hover:underline">
+                                                        Mark as Resolved
+                                                    </button>
+                                                )}
+                                            </div>
+                                        ))}
+                                    </div>
+
+                                    {crashTotalPages > 1 && (
+                                        <div className="flex items-center justify-center gap-2 mt-4">
+                                            <button
+                                                onClick={() => setCrashPage(Math.max(0, crashPage - 1))}
+                                                disabled={crashPage === 0}
+                                                className="px-3 py-1 rounded text-xs border border-[var(--color-cosmic-border)]
+                                                           disabled:opacity-40 disabled:cursor-not-allowed"
+                                            >
+                                                Previous
+                                            </button>
+                                            {Array.from({ length: crashTotalPages }, (_, i) => (
+                                                <button
+                                                    key={i}
+                                                    onClick={() => setCrashPage(i)}
+                                                    className={`px-3 py-1 rounded text-xs ${
+                                                        i === crashPage
+                                                            ? 'bg-[var(--color-cosmic-cyan)]/20 text-[var(--color-cosmic-cyan)]'
+                                                            : 'border border-[var(--color-cosmic-border)]'
+                                                    }`}
+                                                >
+                                                    {i + 1}
+                                                </button>
+                                            ))}
+                                            <button
+                                                onClick={() => setCrashPage(Math.min(crashTotalPages - 1, crashPage + 1))}
+                                                disabled={crashPage >= crashTotalPages - 1}
+                                                className="px-3 py-1 rounded text-xs border border-[var(--color-cosmic-border)]
+                                                           disabled:opacity-40 disabled:cursor-not-allowed"
+                                            >
+                                                Next
+                                            </button>
+                                        </div>
+                                    )}
+
+                                    <button onClick={handleClearAllCrashLogs}
+                                            className="mt-4 w-full py-2.5 rounded-lg text-sm font-bold
+                                                       bg-red-500/10 text-red-400 border border-red-500/30
+                                                       hover:bg-red-500/20 transition-all">
+                                        Clear Crash History
+                                    </button>
                                 </>
                             )}
                         </section>

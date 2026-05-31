@@ -144,3 +144,16 @@ export async function updateSchedule(serverId, taskId, data) {
 export async function deleteSchedule(serverId, taskId) {
     return fetchApi(`/servers/${serverId}/tasks/${taskId}`, { method: 'DELETE' });
 }
+
+// ─── Crash History (Phase 60) ───
+export async function getCrashLogs(serverId, limit = 20, offset = 0) {
+    return fetchApi(`/servers/${serverId}/crash-logs?limit=${limit}&offset=${offset}`);
+}
+
+export async function clearCrashLogs(serverId) {
+    return fetchApi(`/servers/${serverId}/crash-logs`, { method: 'DELETE' });
+}
+
+export async function acknowledgeCrash(serverId, logId) {
+    return fetchApi(`/servers/${serverId}/crash-logs/${logId}/resolve`, { method: 'POST' });
+}

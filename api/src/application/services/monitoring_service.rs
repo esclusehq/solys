@@ -1,14 +1,29 @@
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use anyhow::Result;
+use chrono::Utc;
+use sqlx::PgPool;
+use uuid::Uuid;
+use tokio::sync::mpsc;
 use crate::domain::{
+    entities::server::Server,
     repositories::{server_repository::ServerRepository, metrics_repository::MetricsRepository, node_repository::NodeRepository},
     factories::ExecutorFactory,
 };
 use crate::infrastructure::events::event_bus::EventBus;
+use crate::infrastructure::repositories::crash_log_repository::PostgresCrashLogRepository;
 use crate::shared::events::ServerEvent;
+use crate::application::services::crash_classifier::{self, CrashType};
+use crate::domain::entities::server_crash_log::ServerCrashLog;
 
 use crate::application::use_cases::evaluate_alerts_use_case::EvaluateAlertsUseCase;
+
+#[derive(Debug, Clone)]
+pub struct CrashReportData {
+    pub server_id: Uuid,
+    pub exit_code: i32,
+    pub log_excerpt: String,
+}
 
 pub struct MonitoringService<R, M, F, N>
 where
@@ -23,6 +38,8 @@ where
     event_bus: Arc<EventBus>,
     evaluate_alerts_use_case: Arc<EvaluateAlertsUseCase>,
     node_repository: Arc<N>,
+    pool: PgPool,
+    pub crash_report_rx: Mutex<Option<mpsc::Receiver<CrashReportData>>>,
 }
 
 impl<R, M, F, N> MonitoringService<R, M, F, N>
@@ -39,6 +56,8 @@ where
         event_bus: Arc<EventBus>,
         evaluate_alerts_use_case: Arc<EvaluateAlertsUseCase>,
         node_repository: Arc<N>,
+            pool: PgPool,
+            crash_report_rx: Option<mpsc::Receiver<CrashReportData>>,
     ) -> Self {
         Self {
             repository,
@@ -47,6 +66,8 @@ where
             event_bus,
             evaluate_alerts_use_case,
             node_repository,
+            pool,
+            crash_report_rx: Mutex::new(crash_report_rx),
         }
     }
 
@@ -76,6 +97,9 @@ where
     }
 
     async fn check_all_servers(&self) -> Result<()> {
+        // 0. Drain any pending crash reports from agent WS channel (Phase 60)
+        self.drain_crash_reports().await;
+
         // 1. Fetch all nodes first to check their status (D-07)
         let nodes = self.node_repository.list().await?;
         let offline_node_ids: std::collections::HashSet<uuid::Uuid> = nodes
@@ -395,5 +419,140 @@ where
             }
         }
         Ok(())
+    }
+
+    /// Drain crash reports from the agent WebSocket channel.
+    /// Called at the start of every monitoring loop tick.
+    async fn drain_crash_reports(&self) {
+        // Collect all pending reports while holding the lock, then drop it.
+        let reports: Vec<CrashReportData> = {
+            let mut guard = self.crash_report_rx.lock().unwrap();
+            let Some(ref mut rx) = *guard else {
+                return;
+            };
+            let mut reports = Vec::new();
+            loop {
+                match rx.try_recv() {
+                    Ok(report) => reports.push(report),
+                    Err(mpsc::error::TryRecvError::Empty) => break,
+                    Err(mpsc::error::TryRecvError::Disconnected) => {
+                        tracing::warn!("[CRASH] Crash report channel disconnected");
+                        break;
+                    }
+                }
+            }
+            reports
+        }; // MutexGuard dropped here — no .await while holding lock
+
+        for report in reports {
+            if let Err(e) = self.handle_crash_report(report).await {
+                tracing::error!("[CRASH] Failed to handle crash report: {}", e);
+            }
+        }
+    }
+
+    /// Full crash lifecycle: classify, persist, notify, execute recovery per D-03.
+    async fn handle_crash_report(&self, report: CrashReportData) -> Result<()> {
+        let server = self
+            .repository
+            .find_by_id(&report.server_id)
+            .await?
+            .ok_or_else(|| anyhow::anyhow!("Server {} not found", report.server_id))?;
+
+        // 2. Classify crash
+        let crash_type = crash_classifier::classify_crash(report.exit_code, &report.log_excerpt);
+
+        // 3. Determine recovery action per D-03
+        let recovery_action = match crash_type {
+            CrashType::Oom => "notify_only",
+            CrashType::ConfigError => "disable_auto_restart",
+            CrashType::PluginCrash => "auto_restart",
+            CrashType::Generic => "auto_restart",
+        };
+
+        tracing::warn!(
+            "[CRASH] Server {} crashed (type={:?}, exit_code={}, recovery={})",
+            server.name, crash_type, report.exit_code, recovery_action
+        );
+
+        // 4. Store crash log in DB
+        self.store_crash_log(&server, report.exit_code, &crash_type, &report.log_excerpt, recovery_action)
+            .await?;
+
+        // 5. Execute recovery action per D-03
+        match crash_type {
+            CrashType::Oom => {
+                self.notify_crash(&server, &crash_type, report.exit_code, "notify_only")
+                    .await;
+            }
+            CrashType::ConfigError => {
+                self.disable_auto_restart(&server).await;
+                self.notify_crash(&server, &crash_type, report.exit_code, "disable_auto_restart")
+                    .await;
+            }
+            CrashType::PluginCrash | CrashType::Generic => {
+                self.notify_crash(&server, &crash_type, report.exit_code, "auto_restart")
+                    .await;
+                // Auto-restart is handled by the existing monitoring loop above,
+                // which detects the status change and triggers the restart flow.
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Persist a crash log entry.
+    async fn store_crash_log(
+        &self,
+        server: &Server,
+        exit_code: i32,
+        crash_type: &CrashType,
+        log_excerpt: &str,
+        recovery_action: &str,
+    ) -> Result<()> {
+        let repo = PostgresCrashLogRepository::new(self.pool.clone());
+        let log = ServerCrashLog {
+            id: Uuid::new_v4(),
+            server_id: server.id,
+            crashed_at: Utc::now(),
+            exit_code,
+            crash_type: crash_type.as_str().to_string(),
+            log_excerpt: Some(log_excerpt.to_string()),
+            recovery_action: recovery_action.to_string(),
+            resolved_at: None,
+            created_at: Utc::now(),
+        };
+        repo.insert(&log).await?;
+        Ok(())
+    }
+
+    /// Publish crash event and log warning.
+    async fn notify_crash(
+        &self,
+        server: &Server,
+        crash_type: &CrashType,
+        exit_code: i32,
+        recovery_action: &str,
+    ) {
+        let _ = self.event_bus.publish(ServerEvent::CrashDetected {
+            server_id: server.id,
+            crash_type: crash_type.as_str().to_string(),
+            exit_code,
+            recovery_action: recovery_action.to_string(),
+        });
+    }
+
+    /// Disable auto-restart for config error crashes (D-03).
+    async fn disable_auto_restart(&self, server: &Server) {
+        let mut updated = server.clone();
+        updated.auto_restart = false;
+        updated.last_restart_reason = Some("config_error_crash".to_string());
+        if let Err(e) = self.repository.update(&updated).await {
+            tracing::error!(
+                "[CRASH] Failed to disable auto_restart for {}: {}",
+                server.name,
+                e
+            );
+        }
     }
 }

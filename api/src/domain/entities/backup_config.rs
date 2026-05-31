@@ -3,8 +3,10 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
 use uuid::Uuid;
 
-/// Logical aggregation of per-server backup configuration.
-/// Maps to servers.backup_* columns + corresponding cron_tasks rows.
+/// Per-server backup configuration aggregation. Maps to
+/// servers.backup_* columns and references a cron_task for
+/// scheduling. Determines provider, retention policy, and
+/// whether automatic backups are enabled.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BackupConfig {
     pub auto_backup_enabled: bool,

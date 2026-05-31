@@ -1,0 +1,22 @@
+-- Add new columns to servers table
+ALTER TABLE servers ADD COLUMN IF NOT EXISTS username TEXT NOT NULL DEFAULT 'root';
+-- status and executor_type already exist in my local schema perception? 
+-- Wait, previous migration 0001 had: id, name, host, port, status, created_at, updated_at.
+-- User request says: id, name, host, port, username, status, executor_type.
+-- So I need to ADD username and executor_type. Status might already be there but maybe different constraints.
+-- User SQL provided:
+-- CREATE TABLE servers (
+--    id UUID PRIMARY KEY,
+--    name TEXT NOT NULL,
+--    host TEXT NOT NULL,
+--    port INTEGER NOT NULL,
+--    username TEXT NOT NULL,
+--    status TEXT NOT NULL,
+--    executor_type TEXT NOT NULL,
+--    created_at TIMESTAMP NOT NULL DEFAULT NOW()
+-- );
+--
+-- Since table exists, I will ALTER it.
+ALTER TABLE servers ADD COLUMN IF NOT EXISTS executor_type TEXT NOT NULL DEFAULT 'ssh';
+-- Username already added above.
+-- Status exists.
