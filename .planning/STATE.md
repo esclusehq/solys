@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: completed
-stopped_at: Phase 64 context gathered
-last_updated: "2026-05-31T09:45:34.600Z"
+stopped_at: Phase 65 context gathered
+last_updated: "2026-05-31T09:51:05.133Z"
 last_activity: 2026-05-31 -- Phase 62 Plan 01 complete
 progress:
   total_phases: 19
@@ -494,6 +494,6 @@ None yet.
 
 Last activity: 2026-05-31 — Phase 62 Plan 01 complete
 
-Last session: 2026-05-31T09:45:34.568Z
-Stopped at: Phase 64 context gathered
-Resume file: .planning/phases/64-create-database-schema-documentation-for-developers-who-want/64-CONTEXT.md
+Last session: 2026-05-31T09:51:05.074Z
+Stopped at: Phase 65 context gathered
+Resume file: .planning/phases/65-buat-installer-script-auto-install-docker-sebelum-install-so/65-CONTEXT.md
