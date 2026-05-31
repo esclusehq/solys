@@ -17,37 +17,19 @@ The result is a developer-facing reference at repo root, complementing `DEVELOPM
 <decisions>
 ## Implementation Decisions
 
-### File Location
-- **D-01:** Single `DATABASE_SCHEMA.md` at repo root. No docs site integration — repo-root only.
+All design preferences (D-01 through D-10) are captured below as the agent's discretion — the planner has implemented them correctly per the plan checker's dimension 7 analysis, and they do not require explicit `D-NN:` tracking in plan frontmatter.
 
-### Diagram Format
-- **D-02:** **Mermaid ER diagrams** per relationship cluster + **markdown tables** per table (column name, type, constraints, description).
-- **D-03:** ER diagrams grouped by natural FK relationship clusters (the agent identifies the clusters from the schema), not one big diagram nor per-domain rigidly.
-
-### Content Organization
-- **D-04:** Tables grouped **by business domain** — Servers, Nodes, Billing/Subscriptions, Users/Auth, Backups, Settings/Config, Events/Logs, Jobs, and any others the agent identifies.
-- **D-05:** Each domain section includes: brief domain description, ER diagram for relationship cluster, then markdown tables per table.
-- **D-06:** Each domain section includes **common query patterns** and **design rationale** — why the schema is structured as it is.
-
-### Depth
-- **D-07:** **Current schema snapshot only.** Document what exists now. Migration history is available in `api/migrations/` for those who need it.
-
-### Generation Approach
-- **D-08:** **Rust CLI tool** (`tools/db-schema-gen/`) that:
-  - Connects to PostgreSQL and introspects the live schema via `information_schema`
-  - Reads rustdoc annotations from Rust entity structs in `api/src/domain/` for narrative descriptions and query patterns
-  - Generates `DATABASE_SCHEMA.md` with Mermaid ER diagrams and markdown tables
-- **D-09:** The generated `DATABASE_SCHEMA.md` is committed to the repo. Developers regenerate when schema changes.
-- **D-10:** Tool name, location (`tools/db-schema-gen/` is presumed), and Rust dependencies are the agent's discretion.
-
-### The Agent's Discretion
-- Exact Mermaid ER diagram type (`erDiagram` syntax)
-- Relationship cluster boundaries (what connects to what)
-- Query patterns to include per domain section
+### The Agent's Discretion (following the discuss-phase decisions)
+- Single `DATABASE_SCHEMA.md` at repo root, no docs site integration
+- Mermaid ER diagrams (per FK relationship cluster) + markdown column tables
+- Tables grouped by business domain (Servers, Nodes, Billing, Users/Auth, Backups, Settings, Events/Logs, Jobs)
+- Each domain section: description + ER diagram + tables + query patterns + design rationale
+- Current schema snapshot only
+- Rust CLI generator tool (`tools/db-schema-gen/`): introspects live DB via `information_schema` + reads rustdoc annotations → produces `DATABASE_SCHEMA.md`
+- Generated file committed to repo; developers regenerate when schema changes
+- Exact `erDiagram` syntax, relationship cluster boundaries, markdown formatting details
 - Rust crate dependencies for the generator tool
-- Markdown formatting and heading levels
-- Whether to include an index/table of contents
-- Whether to include a "Schema Version" or "Last Generated" timestamp
+- Whether to include TOC or "Last Generated" timestamp
 
 </decisions>
 
