@@ -224,10 +224,10 @@ Plans:
 **Goal:** Create a DEVELOPMENT.md entry point and docs/dev/ sub-files for developers to set up the Esluce project locally, covering prerequisites, clone, Docker infra, local Supabase, .env config, per-service run commands, end-to-end workflow, and troubleshooting.
 **Requirements**: None
 **Depends on:** Phase 60
-**Plans:** 1 plan
+**Plans:** 1/1 plans complete
 
 Plans:
-- [ ] 61-01-PLAN.md — Create root DEVELOPMENT.md + docs/dev/* sub-files (01-prerequisites, 02-setup, 03-configuration, 04-commands, 05-troubleshooting)
+- [x] 61-01-PLAN.md — Create root DEVELOPMENT.md + docs/dev/* sub-files (01-prerequisites, 02-setup, 03-configuration, 04-commands, 05-troubleshooting)
 
 ### Phase 62: Create CONTRIBUTING.md - Cara kontribusi
 
