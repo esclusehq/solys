@@ -214,7 +214,7 @@ Plans:
 - [ ] 60-02-PLAN.md — Agent Protocol + Crash Reporter: CrashReport WS message, agent crash data capture via Bollard events
 
 **Wave 2** *(blocked on Wave 1 completion)*
-- [ ] 60-03-PLAN.md — Backend Crash Processing: crash_classifier.rs, MonitoringService crash ingestion/recovery/notifications, WS CrashReport handler, REST API endpoints
+- [x] 60-03-PLAN.md — Backend Crash Processing: crash_classifier.rs, MonitoringService crash ingestion/recovery/notifications, WS CrashReport handler, REST API endpoints
 
 **Wave 3** *(blocked on Wave 2 completion)*
 - [ ] 60-04-PLAN.md — Frontend: useCrashLogs hook, API client functions, Crash History section in ServerDetails Settings tab
