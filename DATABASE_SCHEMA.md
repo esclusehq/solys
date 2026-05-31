@@ -643,8 +643,6 @@ erDiagram
         timestamp updated_at
         jsonb current_metrics
         uuid user_id FK
-        text container_runtime
-        text runtime_version
     }
     node_metrics {
         uuid id PK
@@ -732,8 +730,6 @@ erDiagram
 | `updated_at` | `timestamp` | NULLABLE, DEFAULT now() | Last modification timestamp |
 | `current_metrics` | `jsonb` | NULLABLE |  |
 | `user_id` | `uuid` | FK → users.id, NULLABLE | References the user resource |
-| `container_runtime` | `text` | NULLABLE |  |
-| `runtime_version` | `text` | NULLABLE |  |
 
 ### `server_nodes`
 
@@ -802,6 +798,14 @@ erDiagram
         jsonb endpoints
         timestamptz deleted_at
         jsonb deployment_snapshot
+        bool auto_wake
+        integer sleep_timeout_minutes
+        timestamptz last_player_activity
+        integer max_restart_attempts
+        integer restart_cooldown_seconds
+        timestamptz last_restart_at
+        text last_restart_reason
+        integer health_check_timeout_seconds
     }
     server_events {
         uuid id PK
@@ -820,13 +824,39 @@ erDiagram
         integer players
         timestamp created_at
     }
+    server_crash_logs {
+        uuid id PK
+        uuid server_id FK
+        timestamptz crashed_at
+        integer exit_code
+        text crash_type
+        text log_excerpt
+        text recovery_action
+        timestamptz resolved_at
+        timestamptz created_at
+    }
     nodes || servers o{ : references
     users || servers o{ : references
     agents || servers o{ : references
     jobs || servers o{ : references
     servers || server_events || : references
     servers || server_metrics || : references
+    servers || server_crash_logs || : references
 ```
+
+### `server_crash_logs`
+
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| `id` | `uuid` | PK, NOT NULL, DEFAULT gen_random_uuid() |  |
+| `server_id` | `uuid` | FK → servers.id, NOT NULL | References the server resource |
+| `crashed_at` | `timestamptz` | NOT NULL, DEFAULT now() |  |
+| `exit_code` | `integer` | NOT NULL |  |
+| `crash_type` | `text` | NOT NULL |  |
+| `log_excerpt` | `text` | NULLABLE |  |
+| `recovery_action` | `text` | NOT NULL |  |
+| `resolved_at` | `timestamptz` | NULLABLE |  |
+| `created_at` | `timestamptz` | NOT NULL, DEFAULT now() | Record creation timestamp |
 
 ### `server_events`
 
@@ -904,6 +934,14 @@ erDiagram
 | `endpoints` | `jsonb` | NULLABLE, DEFAULT '[]'::jsonb |  |
 | `deleted_at` | `timestamptz` | NULLABLE | Soft delete timestamp |
 | `deployment_snapshot` | `jsonb` | NOT NULL, DEFAULT '{}'::jsonb |  |
+| `auto_wake` | `bool` | NOT NULL, DEFAULT false |  |
+| `sleep_timeout_minutes` | `integer` | NOT NULL, DEFAULT 30 |  |
+| `last_player_activity` | `timestamptz` | NULLABLE |  |
+| `max_restart_attempts` | `integer` | NOT NULL, DEFAULT 5 |  |
+| `restart_cooldown_seconds` | `integer` | NOT NULL, DEFAULT 300 |  |
+| `last_restart_at` | `timestamptz` | NULLABLE |  |
+| `last_restart_reason` | `text` | NULLABLE |  |
+| `health_check_timeout_seconds` | `integer` | NOT NULL, DEFAULT 5 |  |
 
 ## Settings/Config Tables
 
@@ -923,6 +961,10 @@ erDiagram
         timestamptz next_run
         timestamptz created_at
         timestamptz updated_at
+        text timezone
+        bool run_once
+        text last_result
+        text last_error
     }
     servers || cron_tasks || : references
     users || cron_tasks || : references
@@ -951,6 +993,10 @@ erDiagram
 | `next_run` | `timestamptz` | NULLABLE |  |
 | `created_at` | `timestamptz` | NULLABLE, DEFAULT now() | Record creation timestamp |
 | `updated_at` | `timestamptz` | NULLABLE, DEFAULT now() | Last modification timestamp |
+| `timezone` | `text` | NOT NULL, DEFAULT 'UTC'::character varying |  |
+| `run_once` | `bool` | NOT NULL, DEFAULT false |  |
+| `last_result` | `text` | NULLABLE |  |
+| `last_error` | `text` | NULLABLE |  |
 
 ## Templates Tables
 
@@ -958,6 +1004,20 @@ Pre-configured server templates, modpack references, and plugin bundles for quic
 
 ```mermaid
 erDiagram
+    templates {
+        uuid id PK
+        text game_type
+        text category
+        text display_name
+        text description
+        jsonb config
+        text visibility
+        uuid user_id FK
+        bool is_builtin
+        bool is_active
+        timestamp created_at
+        timestamp updated_at
+    }
     modpack_templates {
         uuid id PK
         text game_type
@@ -974,6 +1034,7 @@ erDiagram
         timestamp created_at
         timestamp updated_at
     }
+    users || templates o{ : references
 ```
 
 ### `modpack_templates`
@@ -991,6 +1052,23 @@ erDiagram
 | `mod_count` | `integer` | NOT NULL, DEFAULT 0 |  |
 | `image_url` | `text` | NULLABLE |  |
 | `min_plan` | `text` | NOT NULL, DEFAULT 'hobby'::character varying |  |
+| `is_active` | `bool` | NOT NULL, DEFAULT true |  |
+| `created_at` | `timestamp` | NOT NULL, DEFAULT now() | Record creation timestamp |
+| `updated_at` | `timestamp` | NOT NULL, DEFAULT now() | Last modification timestamp |
+
+### `templates`
+
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| `id` | `uuid` | PK, NOT NULL, DEFAULT gen_random_uuid() |  |
+| `game_type` | `text` | NOT NULL |  |
+| `category` | `text` | NOT NULL |  |
+| `display_name` | `text` | NOT NULL |  |
+| `description` | `text` | NULLABLE |  |
+| `config` | `jsonb` | NOT NULL, DEFAULT '{}'::jsonb |  |
+| `visibility` | `text` | NOT NULL, DEFAULT 'private'::character varying |  |
+| `user_id` | `uuid` | FK → users.id, NULLABLE | References the user resource |
+| `is_builtin` | `bool` | NOT NULL, DEFAULT false |  |
 | `is_active` | `bool` | NOT NULL, DEFAULT true |  |
 | `created_at` | `timestamp` | NOT NULL, DEFAULT now() | Record creation timestamp |
 | `updated_at` | `timestamp` | NOT NULL, DEFAULT now() | Last modification timestamp |
@@ -1048,6 +1126,7 @@ erDiagram
         timestamptz password_reset_expires
         text verification_token
         timestamptz verification_expires
+        text pending_email
     }
     api_keys {
         uuid id PK
@@ -1157,6 +1236,7 @@ erDiagram
 | `password_reset_expires` | `timestamptz` | NULLABLE |  |
 | `verification_token` | `text` | NULLABLE |  |
 | `verification_expires` | `timestamptz` | NULLABLE |  |
+| `pending_email` | `text` | NULLABLE |  |
 
 ## Webhooks Tables
 
