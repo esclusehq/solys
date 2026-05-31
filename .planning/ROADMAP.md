@@ -268,7 +268,7 @@ Plans:
 **Goal:** [To be planned]
 **Requirements**: TBD
 **Depends on:** Phase 64
-**Plans:** 1 plan
+**Plans:** 1/1 plans complete
 
 Plans:
-- [ ] 65-01-PLAN.md — Add container runtime auto-install to Solys installer (created 2026-05-31)
+- [x] 65-01-PLAN.md — Add container runtime auto-install to Solys installer (created 2026-05-31)

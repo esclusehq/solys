@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: completed
-stopped_at: Phase 65 plan created
-last_updated: "2026-05-31T10:05:00.000Z"
-last_activity: 2026-05-31 -- Phase 65 Plan 01 created
+status: verifying
+stopped_at: Completed 65-01-PLAN.md
+last_updated: "2026-05-31T10:01:54.219Z"
+last_activity: 2026-05-31
 progress:
   total_phases: 19
-  completed_phases: 17
-  total_plans: 58
-  completed_plans: 58
-  percent: 100
+  completed_phases: 18
+  total_plans: 62
+  completed_plans: 59
+  percent: 95
 ---
 
 # Project State: Esluce
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-09)
 
 **Core value:** Users can deploy game servers to cloud nodes with minimal configuration and manage them via a web control panel.
-**Current focus:** Phase 60 — crash-detection
+**Current focus:** Phase 65 — buat-installer-script-auto-install-docker-sebelum-install-so
 
 ## Current Position
 
-Phase: 62 (create-contributing-md-cara-kontribusi) — COMPLETE
+Phase: 65 (buat-installer-script-auto-install-docker-sebelum-install-so) — EXECUTING
 Plan: 1 of 1
-Status: Complete
-Last activity: 2026-05-31 -- Phase 62 Plan 01 complete
+Status: Phase complete — ready for verification
+Last activity: 2026-05-31
 
-Progress: [██████████] 100%
+Progress: [██████████] 95%
 
 ## Performance Metrics
 
@@ -306,6 +306,7 @@ completed: 2026-05-29
 **Node management (17+ endpoints across 5 pages) and billing (5 endpoints across 3 pages) fully documented with code groups, parameter tables, error references, and cross-page navigation**
 
 - [Phase 52-improve-api-docs]: Followed RESEARCH.md 6-section structure for both SDK pages; used Escluse client pattern with placeholder credentials — Consistency across SDK documentation; security constraints per T-52-18
+- [Phase 65]: Shared CLEANUP_DIRS array replaces per-function traps to fix trap overwrite conflicts from multiple temp dirs — Multiple temp dirs had conflicting trap handlers; shared array provides unified cleanup
 
 ## Performance
 
@@ -494,6 +495,6 @@ None yet.
 
 Last activity: 2026-05-31 — Phase 62 Plan 01 complete
 
-Last session: 2026-05-31T09:51:05.074Z
-Stopped at: Phase 65 context gathered
-Resume file: .planning/phases/65-buat-installer-script-auto-install-docker-sebelum-install-so/65-CONTEXT.md
+Last session: 2026-05-31T10:01:54.186Z
+Stopped at: Completed 65-01-PLAN.md
+Resume file: None
