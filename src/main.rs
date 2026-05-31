@@ -18,6 +18,7 @@ mod agent_connection;
 mod api;
 mod audit;
 mod config_watcher;
+mod crash_reporter;
 mod handlers;
 mod rate_limit;
 mod startup;

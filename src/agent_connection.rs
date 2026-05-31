@@ -77,6 +77,14 @@ enum AgentMessage {
         line: String,
         stream: String,
     },
+    // Phase 60: Crash Detection — Report container crash forensic data
+    #[serde(rename = "crash_report")]
+    CrashReport {
+        server_id: Uuid,
+        exit_code: i32,
+        log_excerpt: String,
+        timestamp: String,
+    },
 }
 
 #[derive(Debug, Clone, serde::Deserialize)]
@@ -333,6 +341,70 @@ pub async fn run(
                 result_sender.set_connected(true);
                 result_sender.flush_buffer().await;
 
+                // Phase 60: Crash Detection — Docker events listener for container crashes
+                let (crash_tx, mut crash_rx) = mpsc::unbounded_channel::<AgentMessage>();
+                if let Some(docker_client) = runtime.docker() {
+                    let docker_clone = docker_client.clone();
+                    let crash_tx_clone = crash_tx.clone();
+                    tokio::spawn(async move {
+                        use bollard::system::EventsOptions;
+                        use futures_util::StreamExt;
+
+                        let mut events_stream = docker_clone.system_events::<&str>(None);
+
+                        while let Some(Ok(event)) = events_stream.next().await {
+                            if event.typ.as_deref() == Some("container")
+                                && event.action.as_deref() == Some("die")
+                            {
+                                if let Some(ref actor) = event.actor {
+                                    if let Some(container_id) = &actor.id {
+                                        // Skip if container_id is empty
+                                        if container_id.is_empty() {
+                                            continue;
+                                        }
+
+                                        // Try to find server_id from container labels
+                                        // Managed containers have "server_id" label set on creation
+                                        let server_id = actor.attributes.as_ref()
+                                            .and_then(|attrs| attrs.get("server_id"))
+                                            .and_then(|v| uuid::Uuid::parse_str(v).ok());
+
+                                        if let Some(sid) = server_id {
+                                            if let Ok((exit_code, log_excerpt)) =
+                                                crash_reporter::capture_crash_data(&docker_clone, container_id).await
+                                            {
+                                                let report = crash_reporter::build_crash_report(
+                                                    sid, exit_code, log_excerpt,
+                                                );
+                                                let _ = crash_tx_clone.send(report);
+                                            }
+                                        } else {
+                                            // No server_id label — try inspecting container to find labels
+                                            if let Ok(inspect) = docker_clone.inspect_container(container_id, None).await {
+                                                let server_id = inspect.config.as_ref()
+                                                    .and_then(|c| c.labels.as_ref())
+                                                    .and_then(|labels| labels.get("server_id"))
+                                                    .and_then(|v| uuid::Uuid::parse_str(v).ok());
+
+                                                if let Some(sid) = server_id {
+                                                    if let Ok((exit_code, log_excerpt)) =
+                                                        crash_reporter::capture_crash_data(&docker_clone, container_id).await
+                                                    {
+                                                        let report = crash_reporter::build_crash_report(
+                                                            sid, exit_code, log_excerpt,
+                                                        );
+                                                        let _ = crash_tx_clone.send(report);
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    });
+                }
+
                 loop {
                     // Check shutdown signal
                     if shutdown.load(Ordering::Relaxed) {
@@ -342,6 +414,12 @@ pub async fn run(
                     }
                     
                     tokio::select! {
+                        // Phase 60: Process crash reports from Docker event listener
+                        Some(crash_msg) = crash_rx.recv() => {
+                            if let Ok(msg) = serde_json::to_string(&crash_msg) {
+                                let _ = ws_sender.send(Message::Text(msg.into())).await;
+                            }
+                        }
                         _ = heartbeat_interval.tick() => {
                             // Send heartbeat with metrics
                             let node_id_value = *node_id.lock().unwrap();
@@ -407,6 +485,8 @@ pub async fn run(
                                                     "delete" => "server.delete",
                                                     "logs" => "server.logs",
                                                     "command" => "server.command",
+                                                    "backup.start" => "backup.start",
+                                                    "backup.restore" => "backup.restore",
                                                     _ => "unknown",
                                                 };
                                                 
