@@ -1,0 +1,1 @@
+ALTER TABLE servers ADD COLUMN discord_webhook_url VARCHAR DEFAULT NULL;

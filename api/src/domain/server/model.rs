@@ -1,6 +1,9 @@
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+/// Game server instance. Core entity representing a deployed
+/// game server with Docker image, port mapping, resource limits,
+/// and lifecycle state (pending/running/stopped).
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 pub struct Server {
     pub id: Uuid,

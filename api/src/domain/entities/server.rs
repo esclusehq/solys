@@ -2,6 +2,9 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+/// Primary game server record. Stores connection details, runtime configuration,
+/// backup settings, and deployment snapshot at creation time for immutability.
+/// References the owning user via user_id and the compute node via node_id.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Server {
     pub id: Uuid,
@@ -11,13 +14,16 @@ pub struct Server {
     pub port: i32,
     pub username: String,
     pub password_auth: String,
+    /// Runtime executor: "agent" (WebSocket to node), "ssh", "rcon", or "mock"
     pub executor_type: String,
     pub server_path: Option<String>,
     pub start_command: Option<String>,
     pub stop_command: Option<String>,
     pub container_name: Option<String>,
     pub public_host: Option<String>,
+    /// Minecraft version identifier
     pub mc_version: String,
+    /// Server loader: "vanilla", "paper", "spigot", "fabric", "forge", "bedrock"
     pub mc_loader: String,
     pub auto_pause: bool,
     pub ram_allocation: String,
@@ -27,6 +33,7 @@ pub struct Server {
     pub backup_provider: String,
     pub backup_path: Option<String>,
     pub max_retained_backups: i32,
+    /// Deployment environment: "production" or "development"
     pub environment: String,
     pub status: String,
 

@@ -29,6 +29,7 @@ use crate::presentation::handlers::profiling_handlers;
 use crate::presentation::handlers::build_handlers;
 use crate::presentation::handlers::deployment_handlers;
 use crate::presentation::handlers::search_handlers;
+use crate::infrastructure::repositories::crash_log_repository::PostgresCrashLogRepository;
 
 /// Handler for getting server properties from server.properties file
 pub async fn get_server_properties(
@@ -367,6 +368,9 @@ impl ServerHandlers {
             .route("/:id/deploy/rollback", post(deployment_handlers::rollback_deployment))
             // Image
             .route("/:id/image", post(update_image))
+            // Crash logs (Phase 60)
+            .route("/:id/crash-logs", get(list_crash_logs).delete(clear_crash_logs))
+            .route("/:id/crash-logs/:log_id/resolve", post(resolve_crash_log))
             // Health restart
             .route("/:id/health-restart", post(health_restart))
             // Server cleanup
@@ -2016,6 +2020,69 @@ async fn get_server_metrics_history(
     
     Ok(Json(ApiResponse::success(history)))
 }
+
+// ── Crash Log Handlers (Phase 60) ──────────────────────────────────────────────
+
+/// List crash logs for a server (paginated).
+pub async fn list_crash_logs(
+    Path(server_id): Path<Uuid>,
+    State(container): State<ApiState>,
+    Query(params): Query<CrashLogQuery>,
+) -> Result<impl IntoResponse, AppError> {
+    let limit = params.limit.unwrap_or(20).min(100);
+    let offset = params.offset.unwrap_or(0);
+
+    let repo = PostgresCrashLogRepository::new(container.pool.clone());
+    let logs = repo
+        .list_by_server(server_id, limit as i64, offset as i64)
+        .await
+        .map_err(|e| AppError::InternalError(anyhow::anyhow!("Failed to list crash logs: {}", e)))?;
+    let total = repo
+        .count_by_server(server_id)
+        .await
+        .map_err(|e| AppError::InternalError(anyhow::anyhow!("Failed to count crash logs: {}", e)))?;
+
+    Ok(ApiResponse::success(json!({
+        "logs": logs,
+        "total": total,
+        "limit": limit,
+        "offset": offset,
+    })))
+}
+
+/// Clear all crash logs for a server.
+pub async fn clear_crash_logs(
+    Path(server_id): Path<Uuid>,
+    State(container): State<ApiState>,
+) -> Result<impl IntoResponse, AppError> {
+    let repo = PostgresCrashLogRepository::new(container.pool.clone());
+    repo.delete_by_server(server_id)
+        .await
+        .map_err(|e| AppError::InternalError(anyhow::anyhow!("Failed to clear crash logs: {}", e)))?;
+
+    Ok(ApiResponse::success(json!({ "cleared": true })))
+}
+
+/// Resolve/acknowledge a single crash log.
+pub async fn resolve_crash_log(
+    Path((server_id, log_id)): Path<(Uuid, Uuid)>,
+    State(container): State<ApiState>,
+) -> Result<impl IntoResponse, AppError> {
+    let repo = PostgresCrashLogRepository::new(container.pool.clone());
+    repo.resolve(log_id)
+        .await
+        .map_err(|e| AppError::InternalError(anyhow::anyhow!("Failed to resolve crash log: {}", e)))?;
+
+    Ok(ApiResponse::success(json!({ "resolved": true, "log_id": log_id, "server_id": server_id })))
+}
+
+#[derive(Deserialize)]
+pub struct CrashLogQuery {
+    pub limit: Option<i64>,
+    pub offset: Option<i64>,
+}
+
+// ── End Crash Log Handlers ─────────────────────────────────────────────────────
 
 /// Helper function to read logs directly from Docker CLI (fallback when agent is not connected)
 async fn get_docker_logs(container_name: &str, tail: usize) -> Result<String, String> {

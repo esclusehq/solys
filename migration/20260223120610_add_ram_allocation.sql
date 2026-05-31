@@ -1,0 +1,1 @@
+ALTER TABLE servers ADD COLUMN ram_allocation VARCHAR(255) DEFAULT '1G';
