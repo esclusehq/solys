@@ -3,6 +3,7 @@ import { persist } from 'zustand/middleware'
 import { fetchApi } from '../api/client'
 import { useUIStore } from './uiStore'
 import * as authApi from '../api/auth'
+import { supabase } from '../lib/supabase'
 
 export const useAuthStore = create(
   persist(
@@ -11,6 +12,10 @@ export const useAuthStore = create(
       isAuthenticated: false,
       isLoading: false,
       error: null,
+      accessToken: null,
+      refreshToken: null,
+
+      setTokens: (accessToken, refreshToken) => set({ accessToken, refreshToken }),
 
       checkAuth: async () => {
         set({ isLoading: true })
@@ -23,10 +28,32 @@ export const useAuthStore = create(
           })
           return true
         } catch (err) {
+          // If backend auth fails, try to recover using Supabase session
+          try {
+            const { data: { session } } = await supabase.auth.getSession()
+            if (session?.user?.email) {
+              const provider = session.user.app_metadata?.provider || 'google'
+              const result = await authApi.oauthLogin(provider, session.user.email)
+              if (result?.access_token) {
+                set({ accessToken: result.access_token, refreshToken: result.refresh_token })
+              }
+              const user = await authApi.getMe()
+              set({ 
+                user, 
+                isAuthenticated: true, 
+                isLoading: false 
+              })
+              return true
+            }
+          } catch (recoveryErr) {
+            console.error('Auth recovery failed:', recoveryErr)
+          }
           set({ 
             user: null, 
             isAuthenticated: false, 
-            isLoading: false 
+            isLoading: false,
+            accessToken: null,
+            refreshToken: null,
           })
           return false
         }
@@ -35,7 +62,10 @@ export const useAuthStore = create(
       login: async (email, password) => {
         set({ isLoading: true, error: null })
         try {
-          await authApi.login(email, password)
+          const result = await authApi.login(email, password)
+          if (result?.access_token) {
+            set({ accessToken: result.access_token, refreshToken: result.refresh_token })
+          }
           const user = await authApi.getMe()
           set({ 
             user, 
@@ -52,7 +82,10 @@ export const useAuthStore = create(
       register: async (email, password, name) => {
         set({ isLoading: true, error: null })
         try {
-          await authApi.register(email, password)
+          const result = await authApi.register(email, password)
+          if (result?.access_token) {
+            set({ accessToken: result.access_token, refreshToken: result.refresh_token })
+          }
           const user = await authApi.getMe()
           set({ 
             user: { email, name }, 
@@ -138,21 +171,26 @@ export const useAuthStore = create(
 
       setUser: (user) => set({ user }),
       
-      setAuth: (user) => set({
+      setAuth: (user, accessToken, refreshToken) => set({
         user,
+        accessToken: accessToken || null,
+        refreshToken: refreshToken || null,
         isAuthenticated: true,
         isLoading: false,
       }),
 
       refreshAccessToken: async () => {
         try {
-          await authApi.refreshToken()
+          const result = await authApi.refreshToken()
+          if (result?.access_token) {
+            set({ accessToken: result.access_token, refreshToken: result.refresh_token })
+          }
           const user = await authApi.getMe()
           set({ user, isAuthenticated: true })
           return true
         } catch (err) {
           console.error('Token refresh failed:', err)
-          set({ user: null, isAuthenticated: false })
+          set({ user: null, isAuthenticated: false, accessToken: null, refreshToken: null })
           return false
         }
       },
@@ -223,6 +261,8 @@ export const useAuthStore = create(
       partialize: (state) => ({
         user: state.user,
         isAuthenticated: state.isAuthenticated,
+        accessToken: state.accessToken,
+        refreshToken: state.refreshToken,
       }),
     }
   )

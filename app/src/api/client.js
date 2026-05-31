@@ -1,9 +1,16 @@
+import { useAuthStore } from '../store/authStore';
+
 const API_BASE = '/api/v1';
 
 export async function fetchApi(endpoint, options = {}) {
     const headers = { 
         ...options.headers,
     };
+
+    const token = useAuthStore.getState().accessToken;
+    if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+    }
 
     if (!(options.body instanceof FormData) && !headers['Content-Type']) {
         headers['Content-Type'] = 'application/json';
