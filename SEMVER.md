@@ -16,40 +16,58 @@ MAJOR.MINOR.PATCH
 
 ## Aturan untuk Escluse
 
-### 1. Early Stage (v0.x.y)
+### 1. Release Schedule — Weekly (Seminggu Sekali)
+
+Release dilakukan **setiap hari Minggu** (atau hari terakhir minggu itu). Satu minggu = satu versi. Jika tidak ada perubahan di minggu tersebut, tetap rilis dengan versi patch bump dan entry changelog "No significant changes".
+
+### 2. Early Stage (v0.x.y)
 
 Selama masih di fase awal (v0), gunakan aturan berikut:
 
-- **0.1.0** - Initial public release untuk fitur signifikan
-- **0.2.0** - Fitur baru major
-- **0.0.x** - Bug fix dan perbaikan minor
+- **0.1.0, 0.2.0, 0.3.0, ...** - Minor bump setiap minggu untuk fitur baru
+- **0.0.x** - Patch hanya untuk hotfix di luar jadwal mingguan
 
-### 2. Versi Tidak Boleh Minus
+Tidak ada major bump sampai rilis stabil (v1.0.0).
+
+### 3. Weekly Bump Pattern
+
+Setiap minggu, versi MINOR naik 1:
+
+```
+Minggu 1: 0.1.0
+Minggu 2: 0.2.0
+Minggu 3: 0.3.0
+...
+Minggu N: 0.N.0
+```
+
+Patch bump (0.0.x) hanya untuk hotfix darurat di tengah minggu. Jika ada hotfix, tetap merge ke entry mingguan berikutnya.
+
+### 4. Versi Tidak Boleh Minus
 
 Tidak pernah ada versi negatif. Selalu naik:
 
 ```
-0.0.0 → 0.0.1 → 0.0.2
-0.1.0 → 0.2.0 → 0.3.0
-1.0.0 → 2.0.0 → 3.0.0
+0.0.0 → 0.1.0 → 0.2.0
+0.2.0 → 0.2.1 (hotfix) → 0.3.0
 ```
 
-### 3. Urutan Release
+### 5. Urutan Release
 
 Release harus diurutkan dari yang terbaru ke yang tertua (numerik, bukan tanggal):
 
 ```
-0.1.0  (terbaru)
-0.0.2
-0.0.1
+0.3.0  (terbaru — minggu ini)
+0.2.0
+0.1.0
 0.0.0  (tertua)
 ```
 
 ---
 
-## Wajib: Update Changelog Sebelum Deploy
+## Wajib: Update Changelog Tiap Release
 
-Setiap kali ada perubahan kode yang di-deploy ke production, **WAJIB** update Changelog di landing page.
+**WAJIB** update Changelog di landing page setiap kali rilis mingguan.
 
 ### Lokasi Changelog
 
@@ -59,9 +77,9 @@ Setiap kali ada perubahan kode yang di-deploy ke production, **WAJIB** update Ch
 
 ```typescript
 {
-  version: '0.1.0',
-  date: '2026-05-17',
-  type: 'minor',  // 'major' | 'minor' | 'patch' | 'initial'
+  version: '0.3.0',
+  date: '2026-06-01',
+  type: 'minor',  // 'minor' (mingguan) | 'patch' (hotfix)
   changes: {
     added: ['Fitur baru 1', 'Fitur baru 2'],
     improved: ['Perbaikan 1'],
@@ -82,22 +100,27 @@ Setiap kali ada perubahan kode yang di-deploy ke production, **WAJIB** update Ch
 
 ## Checklist Sebelum Deploy
 
-Setiap kali melakukan deploy ke EC2 (lihat [DEPLOY.md](./DEPLOY.md)):
+Setiap minggu sebelum deploy ke EC2 (lihat [DEPLOY.md](./DEPLOY.md)):
 
-- [ ] Apakah ada perubahan kode/features yang di-deploy?
+- [ ] Apakah sudah hari Minggu (atau akhir minggu)?
 - [ ] Apakah changelog sudah diupdate dengan entry versi baru?
 - [ ] Apakah format changelog sesuai SemVer (Added, Improved, Fixed, Removed, Security)?
+- [ ] Apakah semua commit dari semua repo sudah tercakup? (API, frontend, agent, landing page)
 
 ### Jika YA - Ada Perubahan
 
-1. Tambah entry baru di `Changelog.tsx` dengan versi yang tepat
-2. Commit dengan format: `feat: [deskripsi]` atau `fix: [deskripsi]`
-3. Push ke GitHub
-4. Deploy via [DEPLOY.md](./DEPLOY.md)
+1. Bump MINOR di `Changelog.tsx` (0.N.0)
+2. Kumpulkan semua commit dari semua repo sejak release terakhir
+3. Commit dengan format: `docs(changelog): add v0.N.0 release notes`
+4. Push ke GitHub
+5. Deploy via [DEPLOY.md](./DEPLOY.md)
 
 ### Jika TIDAK - Tidak Ada Perubahan
 
-Langsung deploy tanpa update changelog.
+Tetap rilis dengan patch bump dan entry:
+```
+changes: { improved: ['No significant changes this week'] }
+```
 
 ---
 
