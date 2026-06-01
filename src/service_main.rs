@@ -213,6 +213,8 @@ mod audit;
 #[cfg(target_os = "windows")]
 mod config_watcher;
 #[cfg(target_os = "windows")]
+mod crash_reporter;
+#[cfg(target_os = "windows")]
 mod handlers;
 #[cfg(target_os = "windows")]
 mod rate_limit;
