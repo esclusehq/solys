@@ -102,7 +102,7 @@ impl<R: TemplateRepository + ?Sized> UpdateTemplateUseCase<R> {
         Self { repository }
     }
 
-    pub async fn execute(&self, user_id: Uuid, id: Uuid, req: UpdateTemplateRequest) -> Result<Template> {
+    pub async fn execute(&self, user_id: Uuid, id: Uuid, req: UpdateTemplateRequest, is_admin: bool) -> Result<Template> {
         // Fetch existing template
         let existing: Template = self.repository
             .get_template_by_id(id)
@@ -110,13 +110,13 @@ impl<R: TemplateRepository + ?Sized> UpdateTemplateUseCase<R> {
             .map_err(|e| anyhow::anyhow!("{}", e))?
             .ok_or_else(|| anyhow!("Template not found: {}", id))?;
 
-        // Ownership check
-        if existing.user_id != Some(user_id) {
+        // Ownership check (admin/owner can edit any template)
+        if !is_admin && existing.user_id != Some(user_id) {
             return Err(anyhow!("Forbidden"));
         }
 
         // Built-in templates cannot be updated by non-admin users
-        if existing.is_builtin {
+        if !is_admin && existing.is_builtin {
             return Err(anyhow!("Cannot update built-in template"));
         }
 
@@ -127,6 +127,7 @@ impl<R: TemplateRepository + ?Sized> UpdateTemplateUseCase<R> {
             config: req.config.unwrap_or(existing.config),
             visibility: req.visibility.unwrap_or(existing.visibility),
             category: req.category.unwrap_or(existing.category),
+            is_active: req.is_active.unwrap_or(existing.is_active),
             ..existing
         };
 
@@ -149,20 +150,20 @@ impl<R: TemplateRepository + ?Sized> DeleteTemplateUseCase<R> {
         Self { repository }
     }
 
-    pub async fn execute(&self, user_id: Uuid, id: Uuid) -> Result<()> {
+    pub async fn execute(&self, user_id: Uuid, id: Uuid, is_admin: bool) -> Result<()> {
         let template: Template = self.repository
             .get_template_by_id(id)
             .await
             .map_err(|e| anyhow::anyhow!("{}", e))?
             .ok_or_else(|| anyhow!("Template not found: {}", id))?;
 
-        // Ownership check
-        if template.user_id != Some(user_id) {
+        // Ownership check (admin/owner can delete any template)
+        if !is_admin && template.user_id != Some(user_id) {
             return Err(anyhow!("Forbidden"));
         }
 
-        // Built-in templates cannot be deleted
-        if template.is_builtin {
+        // Built-in templates cannot be deleted by non-admin users
+        if !is_admin && template.is_builtin {
             return Err(anyhow!("Cannot delete built-in template"));
         }
 

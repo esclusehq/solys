@@ -120,6 +120,7 @@ export default function App() {
                     <Route path="/settings" element={<SettingsPage />} />
                     <Route path="/templates" element={<TemplateLibraryPage />} />
                     <Route path="/templates/create" element={<TemplateCreatePage />} />
+                    <Route path="/templates/:id/edit" element={<TemplateCreatePage />} />
                     <Route path="/mods" element={<ModBrowserPage />} />
                   </Routes>
                 </main>

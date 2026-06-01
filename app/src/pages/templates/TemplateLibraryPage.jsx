@@ -1,10 +1,12 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { templatesApi } from '../../api/templatesApi'
+import { useAuthStore } from '../../store/authStore'
 import TemplateCard from '../../components/TemplateCard'
 import { EscluseSpinner } from '../../components/SkeletonLoader'
 
 export default function TemplateLibraryPage() {
+  const { user } = useAuthStore()
   const [templates, setTemplates] = useState([])
   const [loading, setLoading] = useState(true)
   const [gameFilter, setGameFilter] = useState('all')
@@ -87,7 +89,7 @@ export default function TemplateLibraryPage() {
           <h3 className="text-lg font-bold text-white mb-3">Featured Templates</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {featured.map(t => (
-              <TemplateCard key={t.id} template={t} onDelete={handleDelete} />
+              <TemplateCard key={t.id} template={t} user={user} onDelete={handleDelete} />
             ))}
           </div>
         </section>
@@ -99,7 +101,7 @@ export default function TemplateLibraryPage() {
           <h3 className="text-lg font-bold text-white mb-3">Your Templates</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {userTemplates.map(t => (
-              <TemplateCard key={t.id} template={t} onDelete={handleDelete} />
+              <TemplateCard key={t.id} template={t} user={user} onDelete={handleDelete} />
             ))}
           </div>
         </section>

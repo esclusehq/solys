@@ -18,6 +18,7 @@ pub struct UpdateTemplateRequest {
     pub config: Option<serde_json::Value>,
     pub visibility: Option<String>,
     pub category: Option<String>,
+    pub is_active: Option<bool>,
 }
 
 #[derive(Debug, Serialize)]
@@ -31,6 +32,7 @@ pub struct TemplateResponse {
     pub visibility: String,
     pub user_id: Option<Uuid>,
     pub is_builtin: bool,
+    pub is_active: bool,
     pub created_at: chrono::NaiveDateTime,
     pub updated_at: chrono::NaiveDateTime,
 }
@@ -59,6 +61,7 @@ impl From<crate::domain::server::template::Template> for TemplateResponse {
             visibility: t.visibility,
             user_id: t.user_id,
             is_builtin: t.is_builtin,
+            is_active: t.is_active,
             created_at: t.created_at,
             updated_at: t.updated_at,
         }

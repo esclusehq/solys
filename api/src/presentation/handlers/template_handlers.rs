@@ -87,7 +87,7 @@ pub async fn update_template(
     let repository = Arc::new(SqlxTemplateRepository::new(state.pool.clone())) as Arc<dyn TemplateRepository>;
     let use_case = UpdateTemplateUseCase::new(repository);
     let template = use_case
-        .execute(auth_user.user_id, id, payload)
+        .execute(auth_user.user_id, id, payload, auth_user.is_admin())
         .await
         .map_err(|e| {
             let msg = e.to_string();
@@ -114,7 +114,7 @@ pub async fn delete_template(
     let repository = Arc::new(SqlxTemplateRepository::new(state.pool.clone())) as Arc<dyn TemplateRepository>;
     let use_case = DeleteTemplateUseCase::new(repository);
     use_case
-        .execute(auth_user.user_id, id)
+        .execute(auth_user.user_id, id, auth_user.is_admin())
         .await
         .map_err(|e| {
             let msg = e.to_string();

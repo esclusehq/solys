@@ -1,12 +1,17 @@
-import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useState, useEffect } from 'react'
+import { useNavigate, useParams } from 'react-router-dom'
 import { templatesApi } from '../../api/templatesApi'
 import { useUIStore } from '../../store/uiStore'
+import { EscluseSpinner } from '../../components/SkeletonLoader'
 
 export default function TemplateCreatePage() {
+  const { id } = useParams()
+  const isEdit = Boolean(id)
   const { addToast } = useUIStore()
   const navigate = useNavigate()
+  const [loading, setLoading] = useState(isEdit)
   const [saving, setSaving] = useState(false)
+  const [active, setActive] = useState(true)
   const [form, setForm] = useState({
     game_type: 'minecraft',
     category: 'vanilla',
@@ -19,6 +24,33 @@ export default function TemplateCreatePage() {
       env: { MAX_PLAYERS: '20' },
     },
   })
+
+  useEffect(() => {
+    if (!id) return
+    ;(async () => {
+      try {
+        const data = await templatesApi.get(id)
+        setForm({
+          game_type: data.game_type || 'minecraft',
+          category: data.category || '',
+          display_name: data.display_name || '',
+          description: data.description || '',
+          visibility: data.visibility || 'private',
+          config: data.config || {
+            docker_image: 'itzg/minecraft-server:latest',
+            default_port: 25565,
+            env: {},
+          },
+        })
+        setActive(data.is_active !== false)
+      } catch (err) {
+        addToast({ type: 'error', message: 'Failed to load template' })
+        navigate('/templates')
+      } finally {
+        setLoading(false)
+      }
+    })()
+  }, [id])
 
   const updateField = (field, value) => {
     setForm(prev => ({ ...prev, [field]: value }))
@@ -42,8 +74,14 @@ export default function TemplateCreatePage() {
     e.preventDefault()
     setSaving(true)
     try {
-      await templatesApi.create(form)
-      addToast({ type: 'success', message: 'Template created!' })
+      const payload = { ...form, is_active: active }
+      if (isEdit) {
+        await templatesApi.update(id, payload)
+        addToast({ type: 'success', message: 'Template updated!' })
+      } else {
+        await templatesApi.create(payload)
+        addToast({ type: 'success', message: 'Template created!' })
+      }
       navigate('/templates')
     } catch (err) {
       addToast({ type: 'error', message: err.message })
@@ -52,12 +90,14 @@ export default function TemplateCreatePage() {
     }
   }
 
+  if (loading) return <div className="p-6"><EscluseSpinner /></div>
+
   return (
     <div className="p-6 max-w-3xl mx-auto">
       <div className="flex items-center gap-3 mb-6">
         <button onClick={() => navigate('/templates')}
                 className="text-gray-400 hover:text-white text-sm">&larr; Back</button>
-        <h2 className="text-2xl font-bold text-white">Create Template</h2>
+        <h2 className="text-2xl font-bold text-white">{isEdit ? 'Edit Template' : 'Create Template'}</h2>
       </div>
 
       <form onSubmit={handleSave}>
@@ -92,11 +132,19 @@ export default function TemplateCreatePage() {
 
             <div>
               <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-2">Category</label>
-              <input type="text" value={form.category}
-                     onChange={e => updateField('category', e.target.value)} required
-                     placeholder="e.g. vanilla, paper, forge"
-                     className="w-full px-4 py-2.5 rounded-lg text-sm bg-[var(--color-cosmic-card)]/60
-                                border border-[var(--color-cosmic-border)] text-white" />
+              <select value={form.category} onChange={e => updateField('category', e.target.value)} required
+                      className="w-full px-4 py-2.5 rounded-lg text-sm bg-[var(--color-cosmic-card)]/60
+                                 border border-[var(--color-cosmic-border)] text-white">
+                {({
+                  minecraft: ['vanilla', 'paper', 'spigot', 'purpur', 'forge', 'fabric', 'quilt', 'neoforge'],
+                  bedrock: ['vanilla', 'pocketmine', 'nukkit', 'powernukkitx'],
+                  palworld: ['vanilla'],
+                  rust: ['vanilla'],
+                  valheim: ['vanilla'],
+                }[form.game_type] || ['vanilla']).map(cat => (
+                  <option key={cat} value={cat}>{cat.charAt(0).toUpperCase() + cat.slice(1)}</option>
+                ))}
+              </select>
             </div>
 
             <div>
@@ -117,6 +165,22 @@ export default function TemplateCreatePage() {
                       className="w-full px-4 py-2.5 rounded-lg text-sm bg-[var(--color-cosmic-card)]/60
                                  border border-[var(--color-cosmic-border)] text-white" />
           </div>
+
+          {isEdit && (
+            <div className="mt-5 pt-4 border-t border-[var(--color-cosmic-border)]">
+              <label className="flex items-center gap-3 cursor-pointer">
+                <input type="checkbox" checked={active}
+                       onChange={e => setActive(e.target.checked)}
+                       className="w-4 h-4 rounded accent-cyan-500" />
+                <div>
+                  <span className="text-sm font-bold text-white">Active</span>
+                  <p className="text-xs text-[var(--color-text-muted)]">
+                    Uncheck to mark template as <span className="text-yellow-400">Coming Soon</span>
+                  </p>
+                </div>
+              </label>
+            </div>
+          )}
         </section>
 
         {/* Configuration Section */}
@@ -164,7 +228,7 @@ export default function TemplateCreatePage() {
                            bg-[var(--color-cosmic-cyan)]/10 text-[var(--color-cosmic-cyan)]
                            hover:bg-[var(--color-cosmic-cyan)]/20 border border-[var(--color-cosmic-cyan)]/30
                            disabled:opacity-50 transition-all">
-          {saving ? 'Saving...' : 'Create Template'}
+          {saving ? 'Saving...' : isEdit ? 'Update Template' : 'Create Template'}
         </button>
       </form>
     </div>

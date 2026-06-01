@@ -672,7 +672,7 @@ export default function SettingsPage() {
               <thead>
                 <tr className="text-gray-400 border-b border-gray-700">
                   <th className="text-left py-2 font-normal">Timestamp</th>
-                  <th className="text-left py-2 font-normal">IP Address</th>
+                  <th className="text-left py-2 font-normal">Network</th>
                   <th className="text-left py-2 font-normal">Device/Browser</th>
                   <th className="text-left py-2 font-normal">Provider</th>
                   <th className="text-left py-2 font-normal">Session ID</th>
@@ -682,7 +682,7 @@ export default function SettingsPage() {
                 {loginHistory.map((entry) => (
                   <tr key={entry.id} className="border-b border-gray-700 hover:bg-[rgba(255,255,255,0.03)]">
                     <td className="py-2">{new Date(entry.created_at).toLocaleString()}</td>
-                    <td className="py-2 font-mono text-xs">{entry.ip_address || '-'}</td>
+                    <td className="py-2 text-xs text-green-400">Protected</td>
                     <td className="py-2">{[entry.device_info, entry.browser_info].filter(Boolean).join(' / ') || entry.user_agent?.substring(0, 50) || '-'}</td>
                     <td className="py-2">{entry.oauth_provider || 'Email/Password'}</td>
                     <td className="py-2 font-mono text-xs text-gray-500">{entry.session_id?.substring(0, 8) || '-'}...</td>
