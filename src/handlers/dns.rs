@@ -183,7 +183,7 @@ pub async fn handle_status(_task: Task) -> Result<serde_json::Value, anyhow::Err
     Ok(status)
 }
 
-async fn create_dns_record(api_token: &str, zone_id: &str, name: &str, ip: &str) -> Result<String, anyhow::Error> {
+pub(crate) async fn create_dns_record(api_token: &str, zone_id: &str, name: &str, ip: &str) -> Result<String, anyhow::Error> {
     let client = reqwest::Client::new();
     let url = format!("{}/zones/{}/dns_records", CLOUDFLARE_API_BASE, zone_id);
 
@@ -227,7 +227,7 @@ async fn create_dns_record(api_token: &str, zone_id: &str, name: &str, ip: &str)
     Ok(record_id)
 }
 
-async fn update_dns_record(api_token: &str, zone_id: &str, record_id: &str, name: &str, ip: &str) -> Result<(), anyhow::Error> {
+pub(crate) async fn update_dns_record(api_token: &str, zone_id: &str, record_id: &str, name: &str, ip: &str) -> Result<(), anyhow::Error> {
     let client = reqwest::Client::new();
     let url = format!("{}/zones/{}/dns_records/{}", CLOUDFLARE_API_BASE, zone_id, record_id);
 
@@ -275,7 +275,7 @@ async fn delete_dns_record(api_token: &str, zone_id: &str, record_id: &str) -> R
     Ok(())
 }
 
-async fn find_dns_record(api_token: &str, zone_id: &str, name: &str) -> Result<Option<(String, String)>, anyhow::Error> {
+pub(crate) async fn find_dns_record(api_token: &str, zone_id: &str, name: &str) -> Result<Option<(String, String)>, anyhow::Error> {
     let client = reqwest::Client::new();
     let url = format!("{}/zones/{}/dns_records?type=A&name={}", CLOUDFLARE_API_BASE, zone_id, name);
 

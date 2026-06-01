@@ -26,7 +26,7 @@ use sysinfo::System;
 
 #[derive(Debug, Clone, serde::Serialize)]
 #[serde(tag = "type")]
-enum AgentMessage {
+pub(crate) enum AgentMessage {
     #[serde(rename = "register")]
     Register {
         id: Option<Uuid>,
@@ -368,10 +368,10 @@ pub async fn run(
                         use bollard::system::EventsOptions;
                         use futures_util::StreamExt;
 
-                        let mut events_stream = docker_clone.system_events::<&str>(None);
+                        let mut events_stream = docker_clone.events::<&str>(None);
 
                         while let Some(Ok(event)) = events_stream.next().await {
-                            if event.typ.as_deref() == Some("container")
+                            if event.typ == Some(bollard::models::EventMessageTypeEnum::CONTAINER)
                                 && event.action.as_deref() == Some("die")
                             {
                                 if let Some(ref actor) = event.actor {
@@ -389,9 +389,9 @@ pub async fn run(
 
                                         if let Some(sid) = server_id {
                                             if let Ok((exit_code, log_excerpt)) =
-                                                crash_reporter::capture_crash_data(&docker_clone, container_id).await
+                                                crate::crash_reporter::capture_crash_data(&docker_clone, container_id).await
                                             {
-                                                let report = crash_reporter::build_crash_report(
+                                                let report = crate::crash_reporter::build_crash_report(
                                                     sid, exit_code, log_excerpt,
                                                 );
                                                 let _ = crash_tx_clone.send(report);
@@ -406,9 +406,9 @@ pub async fn run(
 
                                                 if let Some(sid) = server_id {
                                                     if let Ok((exit_code, log_excerpt)) =
-                                                        crash_reporter::capture_crash_data(&docker_clone, container_id).await
+                                                        crate::crash_reporter::capture_crash_data(&docker_clone, container_id).await
                                                     {
-                                                        let report = crash_reporter::build_crash_report(
+                                                        let report = crate::crash_reporter::build_crash_report(
                                                             sid, exit_code, log_excerpt,
                                                         );
                                                         let _ = crash_tx_clone.send(report);

@@ -33,7 +33,7 @@ pub async fn capture_crash_data(
     let log_options = LogsOptions::<String> {
         stdout: true,
         stderr: true,
-        tail: 10,
+        tail: String::from("10"),
         ..Default::default()
     };
 
@@ -53,7 +53,7 @@ pub async fn capture_crash_data(
         log_excerpt
     };
 
-    Ok((exit_code, log_excerpt))
+    Ok((exit_code as i32, log_excerpt))
 }
 
 /// Build a CrashReport AgentMessage from raw crash data.
