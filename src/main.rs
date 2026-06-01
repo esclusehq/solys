@@ -44,6 +44,7 @@ async fn main() -> Result<()> {
         println!("  --help, -h       Prints help information");
         println!("  --version, -V    Prints version information");
         println!("  --service, -s    Run as Windows service (Windows only)");
+        println!("  --quiet, -q      Log to file only, no terminal output");
         println!();
         println!("CONFIGURATION:");
         println!("  Config file: ~/.config/escluse-agent/config.toml");
@@ -97,6 +98,7 @@ async fn main() -> Result<()> {
 async fn run_agent_core(config: agent_config::AgentConfig) -> Result<()> {
     // 1. Setup logging (D-06, D-07, D-08)
     let log_level = config.log_level.parse().unwrap_or(tracing::Level::INFO);
+    let quiet = std::env::args().any(|a| a == "--quiet" || a == "-q");
 
     // D-18: Set up panic handler for production - log error instead of panic
     std::panic::set_hook(Box::new(|panic_info| {
@@ -120,15 +122,30 @@ async fn run_agent_core(config: agent_config::AgentConfig) -> Result<()> {
         std::process::exit(1);
     }));
 
-    // Try to setup file logging with rotation
+    // Setup logging
+    // Default: log to both stdout AND file (terminal for interactivity, file for persistence)
+    // --quiet / -q: log to file only (headless/daemon)
+    use tracing_subscriber::{Registry, layer::SubscriberExt, Layer, filter::LevelFilter};
+
+    let mut layers: Vec<Box<dyn Layer<Registry> + Send + Sync>> = Vec::new();
+
+    // Stdout layer (default: on; disable with --quiet)
+    if !quiet {
+        layers.push(Box::new(
+            tracing_subscriber::fmt::layer()
+                .with_writer(std::io::stdout)
+                .with_ansi(false)
+                .with_filter(LevelFilter::from_level(log_level)),
+        ));
+    }
+
+    // Try file logging
     // Primary: /var/log/escluse-agent/ (D-06)
     // Fallback: ~/.local/share/escluse-agent/logs/ (D-07)
-    // Last fallback: stdout (D-08)
     let log_dir = if PathBuf::from("/var/log/escluse-agent").exists()
         || std::fs::create_dir_all("/var/log/escluse-agent").is_ok()
     {
         let d = PathBuf::from("/var/log/escluse-agent");
-        // Verify writability — dir may exist but be owned by root
         if std::fs::File::create(d.join(".writable")).is_ok() {
             let _ = std::fs::remove_file(d.join(".writable"));
             Some(d)
@@ -143,31 +160,32 @@ async fn run_agent_core(config: agent_config::AgentConfig) -> Result<()> {
         dirs::data_local_dir().map(|d| d.join("escluse-agent").join("logs"))
     });
 
+    let mut _file_guard: Option<std::mem::ManuallyDrop<_>> = None;
+
     if let Some(ref dir) = log_dir {
         if std::fs::create_dir_all(dir).is_ok() {
             let file_appender = tracing_appender::rolling::daily(dir, "agent.log");
             let (non_blocking, guard) = tracing_appender::non_blocking(file_appender);
 
-            tracing_subscriber::fmt()
-                .with_max_level(log_level)
-                .with_target(false)
-                .with_writer(non_blocking)
-                .with_ansi(false)
-                .try_init()
-                .ok();
+            layers.push(Box::new(
+                tracing_subscriber::fmt::layer()
+                    .with_writer(non_blocking)
+                    .with_ansi(false)
+                    .with_filter(LevelFilter::from_level(log_level)),
+            ));
 
-            std::mem::forget(guard);
-
-            info!("File logging initialized: {:?}", dir);
+            _file_guard = Some(std::mem::ManuallyDrop::new(guard));
         }
-    } else {
-        // D-08: Fallback to stdout for containers
-        tracing_subscriber::fmt()
-            .with_max_level(log_level)
-            .with_target(false)
-            .init();
+    }
 
-        info!("stdout logging (container mode)");
+    let subscriber = Registry::default().with(layers);
+    let _ = tracing::subscriber::set_global_default(subscriber);
+
+    if !quiet {
+        info!("stdout logging enabled (use --quiet for headless mode)");
+    }
+    if log_dir.is_some() {
+        info!("File logging initialized");
     }
 
     info!(
