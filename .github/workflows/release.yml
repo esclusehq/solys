@@ -212,8 +212,9 @@ jobs:
             --exclude ".git/*" \
             --cache-control "public, max-age=300"
           # Sync to latest/
-          aws s3 sync "s3://${R2_BUCKET}/v${VERSION}/" "s3://${R2_BUCKET}/latest/" \
+          aws s3 cp "s3://${R2_BUCKET}/v${VERSION}/" "s3://${R2_BUCKET}/latest/" \
             --endpoint-url "${R2_ENDPOINT}" \
+            --recursive \
             --no-progress
       - name: Purge Cloudflare cache
         run: |
