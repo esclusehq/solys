@@ -122,7 +122,8 @@ async fn check_and_update() -> Result<()> {
         }
         None => {
             let rid = dns::create_dns_record(&config.api_token, &config.zone_id, &full_name, &current_ip).await?;
-        info!("DNS record created via auto-refresh: {} -> {} (id: {})", full_name, current_ip, rid);
+            info!("DNS record created via auto-refresh: {} -> {} (id: {})", full_name, current_ip, rid);
+        }
     }
 
     Ok(())

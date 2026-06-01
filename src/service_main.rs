@@ -22,9 +22,12 @@ use std::sync::Arc;
 #[cfg(target_os = "windows")]
 use std::time::Duration;
 
-// Service name
+// Service name (Windows only)
+#[cfg(target_os = "windows")]
 const SERVICE_NAME: &str = "escluse-agent";
+#[cfg(target_os = "windows")]
 const SERVICE_DISPLAY_NAME: &str = "Escluse Agent";
+#[cfg(target_os = "windows")]
 const SERVICE_DESCRIPTION: &str = "Background agent for managing Escluse game servers";
 
 #[cfg(target_os = "windows")]
