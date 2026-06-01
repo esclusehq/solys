@@ -167,6 +167,7 @@ jobs:
         with:
           name: release
           path: .
+          compression-level: 0
 
   sign:
     needs: [assemble]
@@ -191,6 +192,7 @@ jobs:
           name: release-signed
           path: .
           include-hidden-files: true
+          compression-level: 0
 
   upload:
     needs: [sign, validate]
