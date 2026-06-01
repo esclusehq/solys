@@ -1,8 +1,8 @@
 [package]
-name    = "escluse-agent"
+name    = "solys"
 version = "0.3.0"
 edition = "2021"
-authors = ["Escluse Team <team@escluse.com>"]
+authors = ["Founder <founder.escluse@gmail.com>"]
 license = "MIT"
 description = "Escluse Agent - Background service for managing game servers"
 repository = "https://github.com/esclusehq/solys"
