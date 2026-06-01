@@ -287,7 +287,10 @@ pub async fn run(
                 let cpu_cores = Some(sys.cpus().len() as i32);
                 let agent_version = Some(env!("CARGO_PKG_VERSION").to_string());
 
-                let ip = "127.0.0.1".to_string();
+                let ip = match crate::handlers::dns_watch::detect_public_ip().await {
+                    Ok(ip) => ip,
+                    Err(_) => "127.0.0.1".to_string(),
+                };
                 let register = AgentMessage::Register {
                     id: config.agent_id,
                     name: agent_name.clone(),
