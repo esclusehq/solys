@@ -224,7 +224,7 @@ impl TemplateRepository for SqlxTemplateRepository {
                    visibility, user_id, is_builtin, is_active,
                    created_at, updated_at
             FROM templates
-            WHERE is_active = true AND (visibility = 'public' OR is_builtin = true)
+            WHERE visibility = 'public' OR is_builtin = true
             ORDER BY is_builtin DESC, game_type, category
             "#
         )

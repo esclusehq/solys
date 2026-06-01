@@ -35,6 +35,12 @@ Changelog sementara untuk release **v0.4.0** (Minggu depan).
 - [api] `get_template_by_id` filtered by `is_active = true` (couldn't fetch inactive template to re-enable)
 - [api] `list_templates_by_user` excluded inactive templates (Coming Soon cards invisible to admin)
 - [api] Node `ip_address` not updated on re-registration (stuck at original value)
+- [api] Server deploy_config used hardcoded `version: "LATEST"` instead of reading `config.minecraft_version`
+- [api] Server deploy_config used hardcoded `ram_mb: 2048` instead of reading `config.ram_mb`
+- [api] Agent command timeout 30s → 120s (Docker image pulls exceeded old limit)
+- [api] Server status stayed "pending" after container started (WS handler required `MC_READY` in output, which agent never sends)
+- [solys] Agent DeployConfig field `env` didn't match backend's `env_vars` (env vars silently dropped)
+- [api] Missing `MEMORY` env var in deploy_config (itzg image defaulted to 1G regardless of ram_mb setting)
 
 ---
 

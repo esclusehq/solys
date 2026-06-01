@@ -409,7 +409,7 @@ async fn create_server(
     let cpu_cores = payload.resources
         .as_ref()
         .and_then(|r| r.get("cpu").and_then(|c| c.as_i64()))
-        .unwrap_or(2) as i32;
+        .unwrap_or(1) as i32;
     let disk_gb = payload.resources
         .as_ref()
         .and_then(|r| r.get("disk").and_then(|d| {
@@ -419,7 +419,7 @@ async fn create_server(
                 d.as_i64().map(|n| n as i32)
             }
         }))
-        .unwrap_or(10);
+        .unwrap_or(5);
     
     tracing::info!("[create_server] After extract: ram_mb={}, cpu={}, disk={}", ram_mb, cpu_cores, disk_gb);
     tracing::info!("[create_server] Creating QuotaService...");
@@ -459,6 +459,9 @@ async fn create_server(
     
     // Set additional fields for agent executor
     server.status = "pending".to_string();
+    
+    // Set port from payload
+    server.port = payload.port;
     
     // Build config from UI fields
     let mut config = serde_json::json!({});
@@ -766,15 +769,27 @@ async fn start_server(
             ..Default::default()
         };
         
+        let mc_version = server.config
+            .get("minecraft_version")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string())
+            .unwrap_or_else(|| "LATEST".to_string());
+        let ram_mb = server.config
+            .get("ram_mb")
+            .and_then(|v| v.as_i64())
+            .map(|v| v as u32)
+            .unwrap_or(2048);
+        
         let mut env_vars = std::collections::HashMap::new();
         env_vars.insert("EULA".to_string(), "TRUE".to_string());
+        env_vars.insert("MEMORY".to_string(), format!("{}M", ram_mb));
         
         let deploy_config = crate::presentation::ws::node_protocol::DeployConfig {
             image: server.image.clone(),
             game_port: Some(server.port.unwrap_or(25565) as u16),
             rcon_port: Some((server.port.unwrap_or(25565) + 10) as u16),
-            ram_mb: Some(2048),
-            version: Some("LATEST".to_string()),
+            ram_mb: Some(ram_mb),
+            version: Some(mc_version),
             loader: Some("PAPER".to_string()),
             env_vars,
             volume_path: Some("/data".to_string()),
@@ -1231,15 +1246,27 @@ async fn wake_server(
             ..Default::default()
         };
 
+        let mc_version = server.config
+            .get("minecraft_version")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string())
+            .unwrap_or_else(|| "LATEST".to_string());
+        let ram_mb_val = server.config
+            .get("ram_mb")
+            .and_then(|v| v.as_i64())
+            .map(|v| v as u32)
+            .unwrap_or(2048);
+
         let mut env_vars = std::collections::HashMap::new();
         env_vars.insert("EULA".to_string(), "TRUE".to_string());
+        env_vars.insert("MEMORY".to_string(), format!("{}M", ram_mb_val));
 
         let deploy_config = crate::presentation::ws::node_protocol::DeployConfig {
             image: server.image.clone(),
             game_port: Some(server.port.unwrap_or(25565) as u16),
             rcon_port: Some((server.port.unwrap_or(25565) + 10) as u16),
-            ram_mb: Some(2048),
-            version: Some("LATEST".to_string()),
+            ram_mb: Some(ram_mb_val),
+            version: Some(mc_version),
             loader: Some("PAPER".to_string()),
             env_vars,
             volume_path: Some("/data".to_string()),

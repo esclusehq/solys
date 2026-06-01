@@ -63,3 +63,4 @@ packages/
 migration/tools/db-schema-gen/target/
 API_KEY_EMAIL
 ERROR_DATABASE_EC2
+manifest.json
