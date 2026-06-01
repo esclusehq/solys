@@ -81,14 +81,26 @@ Release harus diurutkan dari yang terbaru ke yang tertua (numerik, bukan tanggal
   date: '2026-06-01',
   type: 'minor',  // 'minor' (mingguan) | 'patch' (hotfix)
   changes: {
-    added: ['Fitur baru 1', 'Fitur baru 2'],
-    improved: ['Perbaikan 1'],
-    fixed: ['Bug fix 1'],
-    removed: ['Fitur yang dihapus'],
-    security: ['Security fix']
+    added: ['[app] Fitur baru 1', '[solys] Fitur baru 2'],
+    improved: ['[app] Perbaikan 1'],
+    fixed: ['[solys] Bug fix 1', '[app] Bug fix 2'],
+    removed: ['[app] Fitur yang dihapus'],
+    security: ['[app] Security fix']
   }
 }
 ```
+
+### Component Tags
+
+Setiap item di changelog WAJIB diberi tag komponen:
+
+| Tag | Komponen | Repo |
+|-----|----------|------|
+| `[app]` | Dashboard frontend | esclusehq/escluse-dashboard |
+| `[solys]` | Agent (instalasi, binary, CI) | esclusehq/solys |
+| `[landing]` | Landing page & marketing | esclusehq/escluse-landing-page |
+| `[api]` | Backend API & worker | esclusehq/escluse-cloud |
+| `[docs]` | Dokumentasi | esclusehq/escluse-docs |
 
 ### Urutan Changelog
 
