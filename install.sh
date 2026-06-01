@@ -244,8 +244,7 @@ verify_cosign() {
 # --- Extract and install binary ---
 install_binary() {
     info "Extracting archive..."
-    gzip -dc "${TMPDIR}/${ARCHIVE}" | tar xf - -C "$TMPDIR" || \
-        fail "Failed to extract ${ARCHIVE}"
+    gzip -dc "${TMPDIR}/${ARCHIVE}" | tar xf - -C "$TMPDIR" || true
 
     if [ ! -f "${TMPDIR}/${BINARY}" ]; then
         fail "Binary ${BINARY} not found in extracted archive."
