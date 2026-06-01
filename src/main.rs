@@ -122,27 +122,44 @@ async fn run_agent_core(config: agent_config::AgentConfig) -> Result<()> {
 
     // Try to setup file logging with rotation
     // Primary: /var/log/escluse-agent/ (D-06)
-    // Fallback: stdout for containers (D-08)
-    let log_dir = PathBuf::from("/var/log/escluse-agent");
+    // Fallback: ~/.local/share/escluse-agent/logs/ (D-07)
+    // Last fallback: stdout (D-08)
+    let log_dir = if PathBuf::from("/var/log/escluse-agent").exists()
+        || std::fs::create_dir_all("/var/log/escluse-agent").is_ok()
+    {
+        let d = PathBuf::from("/var/log/escluse-agent");
+        // Verify writability — dir may exist but be owned by root
+        if std::fs::File::create(d.join(".writable")).is_ok() {
+            let _ = std::fs::remove_file(d.join(".writable"));
+            Some(d)
+        } else {
+            None
+        }
+    } else {
+        None
+    };
 
-    if log_dir.exists() || std::fs::create_dir_all(&log_dir).is_ok() {
-        // File logging with daily rotation (D-09: daily rotation)
-        // Note: tracing_appender handles rotation automatically
-        let file_appender = tracing_appender::rolling::daily(&log_dir, "agent.log");
-        let (non_blocking, guard) = tracing_appender::non_blocking(file_appender);
+    let log_dir = log_dir.or_else(|| {
+        dirs::data_local_dir().map(|d| d.join("escluse-agent").join("logs"))
+    });
 
-        tracing_subscriber::fmt()
-            .with_max_level(log_level)
-            .with_target(false)
-            .with_writer(non_blocking)
-            .with_ansi(false) // No ANSI codes in log files
-            .try_init()
-            .ok();
+    if let Some(ref dir) = log_dir {
+        if std::fs::create_dir_all(dir).is_ok() {
+            let file_appender = tracing_appender::rolling::daily(dir, "agent.log");
+            let (non_blocking, guard) = tracing_appender::non_blocking(file_appender);
 
-        // Keep guard alive for program duration (D-09: 5 files kept by appender)
-        std::mem::forget(guard);
+            tracing_subscriber::fmt()
+                .with_max_level(log_level)
+                .with_target(false)
+                .with_writer(non_blocking)
+                .with_ansi(false)
+                .try_init()
+                .ok();
 
-        info!("File logging initialized: /var/log/escluse-agent/");
+            std::mem::forget(guard);
+
+            info!("File logging initialized: {:?}", dir);
+        }
     } else {
         // D-08: Fallback to stdout for containers
         tracing_subscriber::fmt()
