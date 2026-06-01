@@ -201,7 +201,7 @@ impl Default for DeployConfig {
     }
 }
 
-fn prepare_ws_url(backend_url: &str) -> String {
+fn prepare_ws_url(backend_url: &str, api_key: Option<&str>) -> String {
     let ws_url = if backend_url.starts_with("ws://") || backend_url.starts_with("wss://") {
         backend_url.trim_end_matches('/').to_string()
     } else if backend_url.starts_with("http://") {
@@ -212,10 +212,27 @@ fn prepare_ws_url(backend_url: &str) -> String {
         format!("ws://{}", backend_url)
     };
     
-    if !ws_url.contains("/api/ws/node") {
-        return format!("{}/api/ws/node", ws_url.trim_end_matches('/'));
+    let base = if !ws_url.contains("/api/ws/node") {
+        format!("{}/api/ws/node", ws_url.trim_end_matches('/'))
+    } else {
+        ws_url.trim_end_matches('/').to_string()
+    };
+
+    if let Some(key) = api_key {
+        if !key.is_empty() {
+            return format!("{}?api_key={}", base, urlencode(key));
+        }
     }
-    ws_url.trim_end_matches('/').to_string()
+    base
+}
+
+fn urlencode(s: &str) -> String {
+    s.chars()
+        .map(|c| match c {
+            'A'..='Z' | 'a'..='z' | '0'..='9' | '-' | '_' | '.' | '~' => c.to_string(),
+            _ => format!("%{:02X}", c as u8),
+        })
+        .collect()
 }
 
 pub async fn run(
@@ -227,7 +244,8 @@ pub async fn run(
     let agent_name = config.agent_name.clone();
     let capabilities_list = capabilities.to_string_list();
     
-    let ws_url = prepare_ws_url(&config.backend_url);
+    let api_key_str = config.api_key.expose_secret().to_string();
+    let ws_url = prepare_ws_url(&config.backend_url, Some(&api_key_str));
     
     // Create data directory for buffering
     let data_dir = config.data_dir.clone();

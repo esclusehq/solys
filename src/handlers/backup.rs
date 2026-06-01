@@ -14,6 +14,9 @@ use tracing::{info, warn};
 
 use crate::task_state::TASK_STATE_TRACKER;
 
+use agent_backup::{create_container_backup, calculate_checksum, CompressionFormat};
+use agent_backup::upload::{upload_to_s3_with_config, upload_to_local};
+
 #[derive(Debug, Deserialize)]
 pub struct BackupCreatePayload {
     pub server_id: uuid::Uuid,
@@ -167,6 +170,143 @@ pub async fn handle_create(task: Task) -> Result<serde_json::Value> {
         backup_id = %output.backup_id,
         size_bytes = output.size_bytes,
         "Backup created successfully"
+    );
+
+    Ok(serde_json::to_value(output)?)
+}
+
+// --- backup.start handler (canonical agent-side backup per D-10, D-11) ---
+
+#[derive(Debug, Deserialize)]
+pub struct BackupStartPayload {
+    pub server_id: uuid::Uuid,
+    pub container_name: Option<String>,
+    pub container_id: Option<String>,
+    pub backup_id: uuid::Uuid,
+    pub file_name: String,
+    pub provider: String, // "local" or "s3"
+    pub s3_endpoint: Option<String>,
+    pub s3_bucket: Option<String>,
+    pub s3_region: Option<String>,
+    pub s3_access_key: Option<String>,
+    pub s3_secret_key: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct BackupStartOutput {
+    pub backup_id: uuid::Uuid,
+    pub size_bytes: u64,
+    pub checksum: String,
+    pub storage_path: String,
+}
+
+/// Handle backup.start command — archive container data and upload directly to storage.
+///
+/// Architecture per D-10/D-11:
+///   1. Agent creates tar+zstd archive using agent-backup crate
+///   2. Agent uploads directly to S3 or local storage (no proxy through Worker/API)
+///   3. Agent reports result (backup_id, size_bytes, checksum, storage_path) via TaskResult
+pub async fn handle_start(task: Task) -> anyhow::Result<serde_json::Value> {
+    let payload: BackupStartPayload = serde_json::from_value(task.payload)?;
+    let started_at = std::time::Instant::now();
+
+    tracing::info!(
+        server_id = %payload.server_id,
+        backup_id = %payload.backup_id,
+        "Starting agent-side backup"
+    );
+
+    TASK_STATE_TRACKER.update(task.id, |s: &mut crate::task_state::TaskState| {
+        s.update_progress(5.0, "Starting backup...")
+    }).await;
+    crate::task_state::send_progress(task.id, "running", 5.0, "Starting backup...").await;
+
+    // Resolve container identifier
+    let container_id = payload.container_id.as_deref()
+        .or(payload.container_name.as_deref())
+        .ok_or_else(|| anyhow::anyhow!("Either container_id or container_name must be provided"))?;
+
+    // 1. Create archive from container data directory
+    let backup_dir = std::path::PathBuf::from("/var/lib/escluse-agent/backups")
+        .join(payload.server_id.to_string());
+    tokio::fs::create_dir_all(&backup_dir).await?;
+
+    let archive_path = backup_dir.join(&payload.file_name);
+
+    TASK_STATE_TRACKER.update(task.id, |s: &mut crate::task_state::TaskState| {
+        s.update_progress(20.0, "Creating archive...")
+    }).await;
+    crate::task_state::send_progress(task.id, "running", 20.0, "Creating archive...").await;
+
+    let (archive_size, archive_checksum) = create_container_backup(
+        container_id,
+        "/data",
+        &archive_path,
+        CompressionFormat::Zstd(3),
+    ).await?;
+
+    // 2. Calculate checksum
+    let checksum = if archive_checksum.is_empty() {
+        calculate_checksum(&archive_path).await?
+    } else {
+        archive_checksum
+    };
+
+    // 3. Upload directly to storage (D-11 — no proxy)
+    TASK_STATE_TRACKER.update(task.id, |s: &mut crate::task_state::TaskState| {
+        s.update_progress(60.0, "Uploading backup...")
+    }).await;
+    crate::task_state::send_progress(task.id, "running", 60.0, "Uploading backup...").await;
+
+    let storage_path = match payload.provider.as_str() {
+        "s3" => {
+            let endpoint = payload.s3_endpoint
+                .ok_or_else(|| anyhow::anyhow!("S3 endpoint required for s3 provider"))?;
+            let bucket = payload.s3_bucket
+                .ok_or_else(|| anyhow::anyhow!("S3 bucket required for s3 provider"))?;
+            let access_key = payload.s3_access_key
+                .ok_or_else(|| anyhow::anyhow!("S3 access key required for s3 provider"))?;
+            let secret_key = payload.s3_secret_key
+                .ok_or_else(|| anyhow::anyhow!("S3 secret key required for s3 provider"))?;
+
+            upload_to_s3_with_config(
+                &endpoint,
+                &bucket,
+                &payload.s3_region.unwrap_or_default(),
+                &access_key,
+                &secret_key,
+                &payload.server_id.to_string(),
+                &payload.file_name,
+                &archive_path,
+            ).await?
+        }
+        _ => {
+            upload_to_local(
+                &archive_path,
+                &std::path::PathBuf::from("/var/lib/escluse-agent/backups"),
+                &payload.server_id.to_string(),
+                &payload.file_name,
+            ).await?
+        }
+    };
+
+    TASK_STATE_TRACKER.update(task.id, |s: &mut crate::task_state::TaskState| {
+        s.update_progress(100.0, "Backup complete")
+    }).await;
+    crate::task_state::send_progress(task.id, "completed", 100.0, "Backup complete").await;
+
+    let output = BackupStartOutput {
+        backup_id: payload.backup_id,
+        size_bytes: archive_size,
+        checksum,
+        storage_path,
+    };
+
+    tracing::info!(
+        backup_id = %output.backup_id,
+        size_bytes = output.size_bytes,
+        duration_ms = %started_at.elapsed().as_millis(),
+        "Backup completed successfully"
     );
 
     Ok(serde_json::to_value(output)?)

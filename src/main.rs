@@ -32,6 +32,34 @@ mod gui;
 async fn main() -> Result<()> {
     // Check command line arguments for mode
     let args: Vec<String> = std::env::args().collect();
+
+    // Early return for --help/--version: avoid panic from logging init
+    if args.contains(&"--help".to_string()) || args.contains(&"-h".to_string()) {
+        println!("Escluse Agent - Game server management agent");
+        println!();
+        println!("USAGE:");
+        println!("  escluse-agent [FLAGS]");
+        println!();
+        println!("FLAGS:");
+        println!("  --help, -h       Prints help information");
+        println!("  --version, -V    Prints version information");
+        println!("  --service, -s    Run as Windows service (Windows only)");
+        println!();
+        println!("CONFIGURATION:");
+        println!("  Config file: ~/.config/escluse-agent/config.toml");
+        println!("  Environment:  ESCLUSE_AGENT_* or AGENT_* env vars");
+        println!();
+        println!("  Required:");
+        println!("    backend_url    WebSocket URL (e.g. wss://app.esluce.com/api/ws/node)");
+        println!("    api_key        API key from Escluse Dashboard");
+        return Ok(());
+    }
+
+    if args.contains(&"--version".to_string()) || args.contains(&"-V".to_string()) {
+        println!("Escluse Agent v{}", env!("CARGO_PKG_VERSION"));
+        return Ok(());
+    }
+
     let _is_service_mode = args.contains(&"--service".to_string()) || args.contains(&"-s".to_string());
     
     // On Windows, default to GUI mode unless --service flag is provided

@@ -126,6 +126,7 @@ async fn execute_single(
             // Backup operations
             "backup.create" => backup::handle_create(task.clone()).await,
             "backup.restore" => backup::handle_restore(task.clone()).await,
+            "backup.start" => backup::handle_start(task.clone()).await,   // NEW: D-10
 
             // RCON
             "server.command" => rcon::handle_command(task.clone()).await,
@@ -224,6 +225,13 @@ fn get_task_config(task_type: &str) -> TaskConfig {
             backoff_multiplier: 1.0,
         },
         "backup.restore" => TaskConfig {
+            timeout: Duration::from_secs(600),
+            max_retries: 0,
+            retry_delay_ms: 0,
+            max_retry_delay_ms: 0,
+            backoff_multiplier: 1.0,
+        },
+        "backup.start" => TaskConfig {
             timeout: Duration::from_secs(600),
             max_retries: 0,
             retry_delay_ms: 0,
