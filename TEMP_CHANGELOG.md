@@ -18,6 +18,9 @@ Changelog sementara untuk release **v0.4.0** (Minggu depan).
 - [solys] Agent logs to stdout by default (interactive mode); `--quiet` flag for headless/daemon
 - [solys] Agent detects public IP on registration instead of hardcoded `127.0.0.1`
 - [api] Default heartbeat interval increased from 10s to 30s (matches agent interval)
+- [api] Degraded threshold raised from 50% to 90% of interval (reduces false degraded)
+- [api] Node IP now updates on re-registration (was stuck at `0.0.0.0`)
+- [app] Template `is_active` toggle now works — `update_template` includes `is_active` in SQL
 
 ### Fixed
 - [solys] Interactive prompt hidden by `2>/dev/null` on `read -p` in install.sh
@@ -28,6 +31,10 @@ Changelog sementara untuk release **v0.4.0** (Minggu depan).
 - [solys] Agent panic when `/var/log/escluse-agent/` exists but not writable by non-root user
 - [solys] Agent registered with IP `127.0.0.1` instead of actual public IP
 - [api] Node always marked 'degraded' due to heartbeat interval mismatch (10s default vs 30s agent)
+- [api] Template `update_template` ignored `is_active` field (Coming Soon toggle never persisted)
+- [api] `get_template_by_id` filtered by `is_active = true` (couldn't fetch inactive template to re-enable)
+- [api] `list_templates_by_user` excluded inactive templates (Coming Soon cards invisible to admin)
+- [api] Node `ip_address` not updated on re-registration (stuck at original value)
 
 ---
 
@@ -39,9 +46,9 @@ Changelog sementara untuk release **v0.4.0** (Minggu depan).
   date: '2026-06-08',
   type: 'minor',
   changes: {
-    added: ['[api] Founder role with admin-level permissions'],
-    improved: ['[solys] Agent logs to stdout by default (interactive mode)'],
-    fixed: ['[solys] Interactive prompt hidden by 2>/dev/null'],
+    added: ['[api] Founder role with admin-level permissions', '[api] Built-in template edit by admin/owner', '[api] is_active toggle for built-in templates'],
+    improved: ['[solys] Agent logs to stdout by default (interactive mode)', '[solys] Agent detects public IP on registration', '[api] Default heartbeat interval 10s→30s', '[api] Degraded threshold 50%→90% of interval', '[api] Node IP updates on re-registration'],
+    fixed: ['[solys] read -p hidden by 2>/dev/null', '[solys] TOML missing [server] section', '[solys] XDG config path', '[solys] gzip CRC no abort', '[solys] Agent panic on log dir not writable', '[solys] IP 127.0.0.1 on registration', '[api] Node always degraded (heartbeat mismatch)', '[api] Template is_active never persisted', '[api] get_template_by_id filtered by is_active', '[api] list_templates_by_user excluded inactive', '[api] Node ip_address not updated on re-register'],
     removed: [],
     security: []
   }

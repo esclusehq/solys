@@ -109,7 +109,7 @@ impl TemplateRepository for SqlxTemplateRepository {
                    visibility, user_id, is_builtin, is_active,
                    created_at, updated_at
             FROM templates
-            WHERE id = $1 AND is_active = true
+            WHERE id = $1
             "#
         )
         .bind(id)
@@ -150,15 +150,14 @@ impl TemplateRepository for SqlxTemplateRepository {
         Ok(result)
     }
 
-    /// Update an existing template. Updates display_name, description, config, category, visibility.
-    /// Does NOT update id, game_type, user_id, is_builtin, is_active, created_at.
+    /// Update an existing template.
     async fn update_template(&self, template: &Template) -> Result<Template, Box<dyn std::error::Error + Send + Sync>> {
         let result = sqlx::query_as::<_, Template>(
             r#"
             UPDATE templates
             SET display_name = $1, description = $2, config = $3, category = $4,
-                visibility = $5, updated_at = NOW()
-            WHERE id = $6
+                visibility = $5, is_active = $6, updated_at = NOW()
+            WHERE id = $7
             RETURNING id, game_type, category, display_name, description, config,
                       visibility, user_id, is_builtin, is_active,
                       created_at, updated_at
@@ -169,6 +168,7 @@ impl TemplateRepository for SqlxTemplateRepository {
         .bind(&template.config)
         .bind(&template.category)
         .bind(&template.visibility)
+        .bind(template.is_active)
         .bind(template.id)
         .fetch_optional(&self.pool)
         .await?;
@@ -203,8 +203,8 @@ impl TemplateRepository for SqlxTemplateRepository {
                    visibility, user_id, is_builtin, is_active,
                    created_at, updated_at
             FROM templates
-            WHERE user_id = $1 AND is_active = true
-            ORDER BY created_at DESC
+            WHERE user_id = $1
+            ORDER BY is_active DESC, created_at DESC
             "#
         )
         .bind(user_id)
