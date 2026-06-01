@@ -211,11 +211,12 @@ jobs:
             --recursive \
             --exclude ".git/*" \
             --cache-control "public, max-age=300"
-          # Sync to latest/
-          aws s3 cp "s3://${R2_BUCKET}/v${VERSION}/" "s3://${R2_BUCKET}/latest/" \
+          # Upload same files to latest/ (local copy to avoid R2 GetObjectTagging issue)
+          aws s3 cp . "s3://${R2_BUCKET}/latest/" \
             --endpoint-url "${R2_ENDPOINT}" \
             --recursive \
-            --no-progress
+            --exclude ".git/*" \
+            --cache-control "public, max-age=300"
       - name: Purge Cloudflare cache
         run: |
           curl -fsSL -X POST "https://api.cloudflare.com/client/v4/zones/${{ secrets.CLOUDFLARE_ZONE_ID }}/purge_cache" \
