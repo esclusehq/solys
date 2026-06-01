@@ -267,9 +267,9 @@ install_binary() {
 _prompt() {
     local label="$1" var_name="$2" default_val="${3:-}"
     if [ -t 0 ]; then
-        read -r -p "$label" "$var_name" 2>/dev/null || true
+        read -r -p "$label" "$var_name" || true
     elif [ -c /dev/tty ]; then
-        read -r -p "$label" "$var_name" </dev/tty 2>/dev/null || true
+        read -r -p "$label" "$var_name" </dev/tty || true
     fi
 }
 
@@ -280,7 +280,8 @@ generate_config() {
 
     local bk_url="" ak_val=""
     info "Configuring Escluse agent..."
-    _prompt "Backend URL (e.g., https://api.esluce.com): " bk_url
+    _prompt "Backend URL [https://api.esluce.com]: " bk_url "https://api.esluce.com"
+    [ -z "$bk_url" ] && bk_url="https://api.esluce.com"
     _prompt "API Key: " ak_val
 
     cat > "${CONFIG_DIR}/config.toml" <<-CONFIGEOF
