@@ -68,6 +68,7 @@ jobs:
         with:
           name: binary-${{ matrix.target }}
           path: staging/
+          compression-level: 0
 
   package:
     needs: [build, validate]
@@ -139,6 +140,7 @@ jobs:
         with:
           name: packages-${{ matrix.runner }}
           path: release/
+          compression-level: 0
 
   assemble:
     needs: [package, validate]
