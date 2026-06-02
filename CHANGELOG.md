@@ -7,10 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v0.4.0] - 2026-06-02
+
 ### Added
 
 - **File operations** — 7 new handlers for container file management: list_dir, read_file, write_file, delete, mkdir, rename, copy
 - **File task routing** — WebSocket command mapping for file ops in agent_connection.rs
+- **Trigger canary+CI on master branch** — workflow now runs on push to `master` too
 - **CI/CD release pipeline** — GitHub Actions workflow with 6 jobs: validate, build (3-platform matrix), package, sign (cosign), upload to R2, update versions.json
 - **Canary builds** — push-to-main triggers build + upload to `canary/` R2 path
 - **PR checks** — CI workflow with 3-platform build matrix, no upload
