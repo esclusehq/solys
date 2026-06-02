@@ -10,6 +10,7 @@ pub mod ssh;
 pub mod sftp;
 pub mod dns;
 pub mod dns_watch;
+pub mod files;
 
 use std::time::Duration;
 
@@ -149,6 +150,15 @@ async fn execute_single(
             "dns.update_record" => dns::handle_update_record(task.clone()).await,
             "dns.delete_record" => dns::handle_delete_record(task.clone()).await,
             "dns.status" => dns::handle_status(task.clone()).await,
+
+            // File operations
+            "file.list_dir" => files::handle_list_dir(task.clone()).await,
+            "file.read_file" => files::handle_read_file(task.clone()).await,
+            "file.write_file" => files::handle_write_file(task.clone()).await,
+            "file.delete" => files::handle_delete(task.clone()).await,
+            "file.mkdir" => files::handle_mkdir(task.clone()).await,
+            "file.rename" => files::handle_rename(task.clone()).await,
+            "file.copy" => files::handle_copy(task.clone()).await,
 
             // Unknown
             _ => Err(anyhow::anyhow!("Unknown task type: {}", task_type)),

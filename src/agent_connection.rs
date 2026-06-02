@@ -508,14 +508,24 @@ pub async fn run(
                                                     "command" => "server.command",
                                                     "backup.start" => "backup.start",
                                                     "backup.restore" => "backup.restore",
+                                                    "list_dir" => "file.list_dir",
+                                                    "read_file" => "file.read_file",
+                                                    "write_file" => "file.write_file",
+                                                    "delete_path" => "file.delete",
+                                                    "mkdir" => "file.mkdir",
+                                                    "rename_path" => "file.rename",
+                                                    "copy_path" => "file.copy",
                                                     _ => "unknown",
                                                 };
                                                 
-                                                 let container_name = params.as_ref().and_then(|p| p.container_name.clone());
-                                                  let container_id = params.as_ref().and_then(|p| p.container_id.clone());
-                                                  let path = params.as_ref().and_then(|p| p.path.clone());
-                                                  let follow = params.as_ref().and_then(|p| p.follow);
-                                                  let tail = params.as_ref().and_then(|p| p.tail);
+                                                  let container_name = params.as_ref().and_then(|p| p.container_name.clone());
+                                                   let container_id = params.as_ref().and_then(|p| p.container_id.clone());
+                                                   let path = params.as_ref().and_then(|p| p.path.clone());
+                                                   let content = params.as_ref().and_then(|p| p.content.clone());
+                                                   let source_path = params.as_ref().and_then(|p| p.source_path.clone());
+                                                   let dest_path = params.as_ref().and_then(|p| p.dest_path.clone());
+                                                   let follow = params.as_ref().and_then(|p| p.follow);
+                                                   let tail = params.as_ref().and_then(|p| p.tail);
                                                   
                                                   let mut payload = serde_json::json!({
                                                       "server_id": server_id,
@@ -527,15 +537,24 @@ pub async fn run(
                                                   if let Some(id) = container_id {
                                                       payload["container_id"] = serde_json::json!(id);
                                                   }
-                                                  if let Some(p) = path {
-                                                      payload["path"] = serde_json::json!(p);
-                                                  }
-                                                  if let Some(f) = follow {
-                                                      payload["follow"] = serde_json::json!(f);
-                                                  }
-                                                  if let Some(t) = tail {
-                                                      payload["tail"] = serde_json::json!(t);
-                                                  }
+                                                   if let Some(p) = path {
+                                                       payload["path"] = serde_json::json!(p);
+                                                   }
+                                                   if let Some(c) = content {
+                                                       payload["content"] = serde_json::json!(c);
+                                                   }
+                                                   if let Some(s) = source_path {
+                                                       payload["source_path"] = serde_json::json!(s);
+                                                   }
+                                                   if let Some(d) = dest_path {
+                                                       payload["dest_path"] = serde_json::json!(d);
+                                                   }
+                                                   if let Some(f) = follow {
+                                                       payload["follow"] = serde_json::json!(f);
+                                                   }
+                                                   if let Some(t) = tail {
+                                                       payload["tail"] = serde_json::json!(t);
+                                                   }
                                                 
                                                 if let Some(config) = deploy_config {
                                                     payload["image"] = serde_json::json!(config.image);
