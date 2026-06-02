@@ -43,7 +43,19 @@ Minggu N: 0.N.0
 
 Patch bump (0.0.x) hanya untuk hotfix darurat di tengah minggu. Jika ada hotfix, tetap merge ke entry mingguan berikutnya.
 
-### 4. Versi Tidak Boleh Minus
+### 4. Hotfix di Tengah Minggu
+
+Jika deploy dilakukan di luar jadwal Minggu (hotfix/patch), bump PATCH pada versi saat ini:
+
+```
+Minggu:  0.4.0  (release mingguan)
+Selasa:  0.4.1  (hotfix — deploy darurat)
+Minggu:  0.5.0  (next release, merge semua hotfix)
+```
+
+Hotfix tetap dicatat di changelog dan akan digabung ke entry mingguan berikutnya.
+
+### 5. Versi Tidak Boleh Minus
 
 Tidak pernah ada versi negatif. Selalu naik:
 
@@ -52,7 +64,7 @@ Tidak pernah ada versi negatif. Selalu naik:
 0.2.0 → 0.2.1 (hotfix) → 0.3.0
 ```
 
-### 5. Urutan Release
+### 6. Urutan Release
 
 Release harus diurutkan dari yang terbaru ke yang tertua (numerik, bukan tanggal):
 

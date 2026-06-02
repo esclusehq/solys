@@ -10,6 +10,7 @@ use serde_json::json;
 
 use crate::domain::auth::middleware::VerifiedUser;
 use crate::shared::errors::app_error::AppError;
+use crate::presentation::ws::node_protocol::CommandParams;
 use crate::domain::audit::service::AuditService;
 use crate::domain::server::model::{CreateServerRequest, Server, UpdateServerRequest};
 use crate::domain::server::sqlx_repository::SqlxServerRepository;
@@ -36,12 +37,42 @@ pub async fn get_server_properties(
     Path(server_id): Path<Uuid>,
     State(container): State<ApiState>,
 ) -> Result<impl IntoResponse, AppError> {
-    let _server = container.get_server_use_case.execute(server_id).await
+    let server = container.get_server_use_case.execute(server_id).await
         .map_err(|_| AppError::NotFound)?;
 
+    // Agent-mode servers: route through agent WebSocket to read properties on remote node
+    if server.executor_type == "agent" {
+        let node_id = server.node_id
+            .ok_or_else(|| AppError::BadRequest("Server has no node assigned".into()))?;
+        let container_name = server.container_name
+            .clone()
+            .unwrap_or_else(|| format!("mc-{}", server_id));
+
+        let params = CommandParams {
+            container_name: Some(container_name),
+            path: Some("/data/server.properties".to_string()),
+            ..Default::default()
+        };
+
+        let response = container.node_client.send_command(
+            node_id,
+            server_id,
+            "read_file",
+            params,
+        ).await.map_err(|e| AppError::InternalError(anyhow::anyhow!("Agent communication failed: {}", e)))?;
+
+        if !response.success {
+            return Err(AppError::InternalError(anyhow::anyhow!("Agent failed to read properties: {}", response.output)));
+        }
+
+        let raw = serde_json::from_str::<String>(&response.output).unwrap_or(response.output);
+        let properties = parse_server_properties(&raw);
+        return Ok(ApiResponse::success(properties));
+    }
+
+    // Direct docker exec on EC2 backend (legacy mode)
     let container_name = format!("mc-{}", server_id);
 
-    // Execute cat command inside container to read server.properties
     let output = tokio::process::Command::new("docker")
         .args(["exec", &container_name, "cat", "/data/server.properties"])
         .output()
@@ -68,10 +99,43 @@ pub async fn update_server_properties(
     let server = container.get_server_use_case.execute(server_id).await
         .map_err(|_| AppError::NotFound)?;
 
-    let container_name = format!("mc-{}", server_id);
-
     // Build the complete server.properties content
     let properties_content = build_server_properties(&properties);
+
+    // Agent-mode servers: route through agent WebSocket to write properties on remote node
+    if server.executor_type == "agent" {
+        let node_id = server.node_id
+            .ok_or_else(|| AppError::BadRequest("Server has no node assigned".into()))?;
+        let container_name = server.container_name
+            .clone()
+            .unwrap_or_else(|| format!("mc-{}", server_id));
+
+        let params = CommandParams {
+            container_name: Some(container_name),
+            path: Some("/data/server.properties".to_string()),
+            content: Some(properties_content),
+            ..Default::default()
+        };
+
+        let response = container.node_client.send_command(
+            node_id,
+            server_id,
+            "write_file",
+            params,
+        ).await.map_err(|e| AppError::InternalError(anyhow::anyhow!("Agent communication failed: {}", e)))?;
+
+        if !response.success {
+            return Err(AppError::InternalError(anyhow::anyhow!("Agent failed to write properties: {}", response.output)));
+        }
+
+        return Ok(ApiResponse::success(json!({
+            "message": "Properties updated successfully",
+            "server_id": server_id,
+        })));
+    }
+
+    // Direct docker exec on EC2 backend (legacy mode)
+    let container_name = format!("mc-{}", server_id);
 
     // Write to temp file then move to target location
     let temp_file = "/tmp/server.properties.new";
