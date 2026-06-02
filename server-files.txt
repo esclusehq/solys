@@ -1,0 +1,99 @@
+- generic [ref=e3]:
+  - complementary [ref=e4]:
+    - generic [ref=e5]:
+      - img "Escluse" [ref=e6]
+      - generic [ref=e7]: Escluse
+      - button "☰" [ref=e8]
+    - navigation [ref=e9]:
+      - link "Dashboard" [ref=e10] [cursor=pointer]:
+        - /url: /
+      - link "Servers" [ref=e11] [cursor=pointer]:
+        - /url: /servers
+      - link "Nodes" [ref=e12] [cursor=pointer]:
+        - /url: /nodes
+      - link "Templates" [ref=e13] [cursor=pointer]:
+        - /url: /templates
+      - link "Mod Browser" [ref=e14] [cursor=pointer]:
+        - /url: /mods
+      - link "Billing" [ref=e15] [cursor=pointer]:
+        - /url: /billing
+      - link "Settings" [ref=e16] [cursor=pointer]:
+        - /url: /settings
+  - main [ref=e17]:
+    - generic [ref=e18]:
+      - generic [ref=e19]:
+        - heading "Escluse Dashboard" [level=1] [ref=e20]
+        - generic [ref=e21]: Alpha
+      - generic [ref=e22]:
+        - button "☀️" [ref=e23] [cursor=pointer]
+        - button [ref=e25]:
+          - img [ref=e26]
+        - button "Logout" [ref=e28]
+    - generic [ref=e107]:
+      - generic [ref=e108]:
+        - link "← Back" [ref=e109] [cursor=pointer]:
+          - /url: /servers
+        - heading "testing-server" [level=1] [ref=e110]
+        - generic [ref=e111]: running
+      - generic [ref=e112]:
+        - generic [ref=e113]:
+          - heading "Address" [level=3] [ref=e114]
+          - paragraph [ref=e115]: minecraft:26.2
+        - generic [ref=e116]:
+          - heading "Game" [level=3] [ref=e117]
+          - paragraph [ref=e118]: minecraft
+        - generic [ref=e119]:
+          - heading "Node" [level=3] [ref=e120]
+          - paragraph [ref=e121]: e9bbe63c...
+      - generic [ref=e122]:
+        - generic [ref=e123]:
+          - heading "Image" [level=3] [ref=e124]
+          - paragraph [ref=e125]: itzg/minecraft-server:latest
+        - generic [ref=e126]:
+          - heading "RAM" [level=3] [ref=e127]
+          - paragraph [ref=e128]: 2048MB
+        - generic [ref=e129]:
+          - heading "Version" [level=3] [ref=e130]
+          - paragraph [ref=e131]: "26.2"
+      - generic [ref=e132]:
+        - button "Stop Server" [ref=e243]
+        - button "Restart" [ref=e134]
+        - button "Delete" [ref=e135]
+        - button "Settings" [ref=e136]
+        - link "Scheduled Tasks" [ref=e137] [cursor=pointer]:
+          - /url: /servers/229eaa37-5f1f-4d8f-acca-609d10621a60/tasks
+      - generic [ref=e138]:
+        - button "📊Overview" [ref=e139]
+        - button "📁Files" [active] [ref=e140]
+        - button "📦Datapacks" [ref=e141]
+        - button "📋Logs" [ref=e142]
+        - button "⚙️Settings" [ref=e143]
+      - generic [ref=e245]:
+        - generic [ref=e246]:
+          - button "~ (root)" [ref=e248]
+          - generic [ref=e249]:
+            - button "🌲 Tree" [ref=e250]:
+              - generic [ref=e251]: 🌲
+              - text: Tree
+            - button "📄 New File" [ref=e252]:
+              - generic [ref=e253]: 📄
+              - text: New File
+            - button "📁 New Folder" [ref=e254]:
+              - generic [ref=e255]: 📁
+              - text: New Folder
+            - button "⬆ Upload" [ref=e256]:
+              - generic [ref=e257]: ⬆
+              - text: Upload
+        - generic [ref=e258]: Internal Server Error
+        - table [ref=e260]:
+          - rowgroup [ref=e261]:
+            - row "Name Size Modified Actions" [ref=e262]:
+              - columnheader [ref=e263]:
+                - checkbox [ref=e264] [cursor=pointer]
+              - columnheader "Name" [ref=e265]
+              - columnheader "Size" [ref=e266]
+              - columnheader "Modified" [ref=e267]
+              - columnheader "Actions" [ref=e268]
+          - rowgroup [ref=e269]:
+            - row "This directory is empty." [ref=e270]:
+              - cell "This directory is empty." [ref=e271]

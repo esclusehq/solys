@@ -1,0 +1,139 @@
+- generic [ref=e3]:
+  - complementary [ref=e4]:
+    - generic [ref=e5]:
+      - img "Escluse" [ref=e6]
+      - generic [ref=e7]: Escluse
+      - button "☰" [ref=e8]
+    - navigation [ref=e9]:
+      - link "Dashboard" [ref=e10] [cursor=pointer]:
+        - /url: /
+      - link "Servers" [ref=e11] [cursor=pointer]:
+        - /url: /servers
+      - link "Nodes" [ref=e12] [cursor=pointer]:
+        - /url: /nodes
+      - link "Templates" [ref=e13] [cursor=pointer]:
+        - /url: /templates
+      - link "Mod Browser" [ref=e14] [cursor=pointer]:
+        - /url: /mods
+      - link "Billing" [ref=e15] [cursor=pointer]:
+        - /url: /billing
+      - link "Settings" [ref=e16] [cursor=pointer]:
+        - /url: /settings
+  - main [ref=e17]:
+    - generic [ref=e18]:
+      - generic [ref=e19]:
+        - heading "Escluse Dashboard" [level=1] [ref=e20]
+        - generic [ref=e21]: Alpha
+      - generic [ref=e22]:
+        - button "☀️" [ref=e23] [cursor=pointer]
+        - button [ref=e25]:
+          - img [ref=e26]
+        - button "Logout" [ref=e28]
+    - generic [ref=e107]:
+      - generic [ref=e108]:
+        - link "← Back" [ref=e109] [cursor=pointer]:
+          - /url: /servers
+        - heading "testing-server" [level=1] [ref=e110]
+        - generic [ref=e111]: running
+      - generic [ref=e112]:
+        - generic [ref=e113]:
+          - heading "Address" [level=3] [ref=e114]
+          - paragraph [ref=e115]: minecraft:26.2
+        - generic [ref=e116]:
+          - heading "Game" [level=3] [ref=e117]
+          - paragraph [ref=e118]: minecraft
+        - generic [ref=e119]:
+          - heading "Node" [level=3] [ref=e120]
+          - paragraph [ref=e121]: e9bbe63c...
+      - generic [ref=e122]:
+        - generic [ref=e123]:
+          - heading "Image" [level=3] [ref=e124]
+          - paragraph [ref=e125]: itzg/minecraft-server:latest
+        - generic [ref=e126]:
+          - heading "RAM" [level=3] [ref=e127]
+          - paragraph [ref=e128]: 2048MB
+        - generic [ref=e129]:
+          - heading "Version" [level=3] [ref=e130]
+          - paragraph [ref=e131]: "26.2"
+      - generic [ref=e132]:
+        - button "Stop Server" [ref=e243]
+        - button "Restart" [ref=e134]
+        - button "Delete" [ref=e135]
+        - button "Settings" [ref=e136]
+        - link "Scheduled Tasks" [ref=e137] [cursor=pointer]:
+          - /url: /servers/229eaa37-5f1f-4d8f-acca-609d10621a60/tasks
+      - generic [ref=e138]:
+        - button "📊Overview" [ref=e139]
+        - button "📁Files" [ref=e140]
+        - button "📦Datapacks" [ref=e141]
+        - button "📋Logs" [ref=e142]
+        - button "⚙️Settings" [active] [ref=e143]
+      - generic [ref=e272]:
+        - heading "Server Settings" [level=3] [ref=e273]
+        - generic [ref=e274]:
+          - heading "Discord Webhook URL" [level=4] [ref=e275]
+          - generic [ref=e276]:
+            - textbox "https://discord.com/api/webhooks/..." [ref=e277]
+            - button "Save" [ref=e278]
+          - paragraph [ref=e279]: Receive notifications for server events
+        - generic [ref=e280]:
+          - heading "Server Properties" [level=4] [ref=e281]
+          - paragraph [ref=e283]: Failed to load server properties
+          - generic [ref=e284]:
+            - generic [ref=e285]:
+              - generic [ref=e286]: MOTD
+              - textbox "A Minecraft Server" [ref=e287]
+            - generic [ref=e288]:
+              - generic [ref=e289]: Max Players (1-1000)
+              - spinbutton [ref=e290]: "20"
+            - generic [ref=e291]:
+              - generic [ref=e292]: Gamemode
+              - combobox [ref=e293]:
+                - option "Survival" [selected]
+                - option "Creative"
+                - option "Adventure"
+                - option "Spectator"
+            - generic [ref=e294]:
+              - generic [ref=e295]: Difficulty
+              - combobox [ref=e296]:
+                - option "Peaceful"
+                - option "Easy"
+                - option "Normal" [selected]
+                - option "Hard"
+            - generic [ref=e297]:
+              - generic [ref=e298]: Level Seed
+              - textbox "Leave empty for random" [ref=e299]
+            - generic [ref=e300]:
+              - generic [ref=e301]: View Distance
+              - spinbutton [ref=e302]: "10"
+            - generic [ref=e303]:
+              - generic [ref=e304]: Simulation Distance
+              - spinbutton [ref=e305]: "16"
+            - button "Save Properties" [ref=e306]
+        - generic [ref=e307]:
+          - heading "Server Information" [level=4] [ref=e308]
+          - generic [ref=e309]:
+            - generic [ref=e310]:
+              - text: Server ID
+              - paragraph [ref=e311]: 229eaa37-5f1f-4d8f-acca-609d10621a60
+            - generic [ref=e312]:
+              - text: Node ID
+              - paragraph [ref=e313]: e9bbe63c-4e41-4f62-a4eb-6469c0838815
+            - generic [ref=e314]:
+              - text: Image
+              - paragraph [ref=e315]: itzg/minecraft-server:latest
+            - generic [ref=e316]:
+              - text: RAM
+              - paragraph [ref=e317]: 2048MB
+        - generic [ref=e318]:
+          - heading "Connection" [level=4] [ref=e319]
+          - generic [ref=e320]:
+            - generic [ref=e321]:
+              - text: Address
+              - paragraph [ref=e322]: N/A
+            - generic [ref=e323]:
+              - text: Ports
+              - paragraph [ref=e324]: Default
+        - generic [ref=e325]:
+          - heading "Danger Zone" [level=4] [ref=e326]
+          - button "Delete Server" [ref=e327]

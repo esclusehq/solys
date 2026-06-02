@@ -7,6 +7,26 @@ Changelog sementara untuk release **v0.4.0** (Minggu depan).
 
 ---
 
+## v0.3.1 (2026-06-01) — Patch (Hotfix Deploy)
+
+Hotfix deploy di tengah minggu. Semua fix akan merge ke v0.4.0 (Minggu).
+
+### Fixed
+- [api] Server deploy_config used hardcoded `version: "LATEST"` instead of reading `config.minecraft_version`
+- [api] Server deploy_config used hardcoded `ram_mb: 2048` instead of reading `config.ram_mb`
+- [api] Agent command timeout 30s → 120s (Docker image pulls exceeded old limit)
+- [api] Server status stayed "pending" after container started (WS handler required `MC_READY` in output, which agent never sends)
+- [solys] Agent DeployConfig field `env` didn't match backend's `env_vars` (env vars silently dropped)
+- [api] Missing `MEMORY` env var in deploy_config (itzg image defaulted to 1G regardless of ram_mb setting)
+- [api] Files tab, Server Properties, Address N/A now work for agent-mode servers (docker exec routed through agent WebSocket instead of EC2)
+- [gateway] WebSocket at `wss://app.esluce.com/ws*` now routes to backend (was falling through to frontend SPA → HTTP 200)
+- [app] Settings > Connection Address shows same fallback as Overview (`game_type:version`) instead of bare `N/A` when `endpoints` array is empty
+- [solys] Agent had no file operation handlers (`list_dir`, `read_file`, `write_file` all mapped to `"unknown"` task type and returned error)
+- [solys] Added `file.list_dir`, `file.read_file`, `file.write_file`, `file.delete`, `file.mkdir`, `file.rename`, `file.copy` handlers to agent
+- [api] Agent command response `success` was hardcoded to `true` in `agent_client.rs` — errors silently swallowed; now propagates actual success from agent
+
+---
+
 ## v0.4.0 (2026-06-08) — Minor
 
 ### Added
@@ -35,16 +55,24 @@ Changelog sementara untuk release **v0.4.0** (Minggu depan).
 - [api] `get_template_by_id` filtered by `is_active = true` (couldn't fetch inactive template to re-enable)
 - [api] `list_templates_by_user` excluded inactive templates (Coming Soon cards invisible to admin)
 - [api] Node `ip_address` not updated on re-registration (stuck at original value)
-- [api] Server deploy_config used hardcoded `version: "LATEST"` instead of reading `config.minecraft_version`
-- [api] Server deploy_config used hardcoded `ram_mb: 2048` instead of reading `config.ram_mb`
-- [api] Agent command timeout 30s → 120s (Docker image pulls exceeded old limit)
-- [api] Server status stayed "pending" after container started (WS handler required `MC_READY` in output, which agent never sends)
-- [solys] Agent DeployConfig field `env` didn't match backend's `env_vars` (env vars silently dropped)
-- [api] Missing `MEMORY` env var in deploy_config (itzg image defaulted to 1G regardless of ram_mb setting)
 
 ---
 
 ## Referensi Format
+
+```typescript
+{
+  version: '0.3.1',
+  date: '2026-06-01',
+  type: 'patch',
+  changes: {
+    added: [],
+    improved: [],
+    fixed: ['[api] Server deploy_config uses config.minecraft_version (not hardcoded LATEST)', '[api] Server deploy_config uses config.ram_mb (not hardcoded 2048)', '[api] Agent command timeout 30s→120s (Docker pull timeouts)', '[api] Server status updates on any start/restart (not just MC_READY)', '[solys] DeployConfig field env → env_vars (env vars no longer dropped)', '[api] MEMORY env var in deploy_config (itzg no longer defaults to 1G)', '[api] Files/Properties/Address route through agent WS for agent-mode servers', '[gateway] Caddy routes /ws* to backend (fixes WebSocket 101 upgrade)', '[app] Settings > Connection Address shows fallback (not bare N/A)', '[solys] Added file handlers (list_dir, read_file, write_file, delete, mkdir, rename, copy)', '[api] Agent success not hardcoded to true (propagates actual response)'],
+    removed: [],
+    security: []
+  }
+}
 
 ```typescript
 {
