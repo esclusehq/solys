@@ -25,9 +25,9 @@
 
 ### File Management (FILE-01 to FILE-03)
 
-- [ ] **FILE-01**: User can browse server files via SFTP
-- [ ] **FILE-02**: User can upload files to server
-- [ ] **FILE-03**: User can download files from server
+- [x] **FILE-01**: User can browse server files via SFTP
+- [x] **FILE-02**: User can upload files to server
+- [x] **FILE-03**: User can download files from server
 
 ### Authentication (AUTH-01)
 
