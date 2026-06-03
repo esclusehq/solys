@@ -158,6 +158,12 @@ pub struct CommandParams {
     pub follow: Option<bool>,
     #[serde(default)]
     pub tail: Option<u32>,
+    #[serde(default)]
+    pub connection_key: Option<String>,
+    #[serde(default)]
+    pub local_path: Option<String>,
+    #[serde(default)]
+    pub remote_path: Option<String>,
 }
 
 #[derive(Debug, Clone, serde::Deserialize)]
@@ -515,6 +521,8 @@ pub async fn run(
                                                     "mkdir" => "file.mkdir",
                                                     "rename_path" => "file.rename",
                                                     "copy_path" => "file.copy",
+                                                    "sftp_upload" => "sftp.upload",
+                                                    "sftp_download" => "sftp.download",
                                                     _ => "unknown",
                                                 };
                                                 
@@ -552,11 +560,20 @@ pub async fn run(
                                                    if let Some(f) = follow {
                                                        payload["follow"] = serde_json::json!(f);
                                                    }
-                                                   if let Some(t) = tail {
-                                                       payload["tail"] = serde_json::json!(t);
-                                                   }
-                                                
-                                                if let Some(config) = deploy_config {
+                                                    if let Some(t) = tail {
+                                                        payload["tail"] = serde_json::json!(t);
+                                                    }
+                                                    if let Some(ck) = params.as_ref().and_then(|p| p.connection_key.clone()) {
+                                                        payload["connection_key"] = serde_json::json!(ck);
+                                                    }
+                                                    if let Some(lp) = params.as_ref().and_then(|p| p.local_path.clone()) {
+                                                        payload["local_path"] = serde_json::json!(lp);
+                                                    }
+                                                    if let Some(rp) = params.as_ref().and_then(|p| p.remote_path.clone()) {
+                                                        payload["remote_path"] = serde_json::json!(rp);
+                                                    }
+
+                                                 if let Some(config) = deploy_config {
                                                     payload["image"] = serde_json::json!(config.image);
                                                     if let Some(port) = config.game_port {
                                                         payload["ports"] = serde_json::json!({ "25565": [port.to_string()] });
