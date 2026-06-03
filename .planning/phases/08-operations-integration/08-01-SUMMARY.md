@@ -1,97 +1,123 @@
 ---
 phase: 08-operations-integration
-plan: "01-05"
-subsystem: operations
-tags:
-  - rcon
-  - terminal
-  - file-browser
-  - upload
-  - websocket
-dependency_graph:
-  requires: []
-  provides:
-    - RCON command execution via REST API and WebSocket
-    - Command history in Redis for session continuity
-    - File browser with tree view toggle
-    - Chunked upload with resume support
-    - Path security verification
-  affects:
-    - api/src/presentation/handlers/terminal_handlers.rs
-    - api/src/presentation/handlers/file_handlers.rs
-    - app/src/components/FileManager.jsx
-    - app/src/components/IDE/TerminalPanel.jsx
+plan: 01
+subsystem: ui
+tags: rcon, console, xterm, websocket, terminal, react-router
 
-tech_stack:
-  added:
-    - Redis for terminal history storage
-    - Base64 decode for chunked upload
+# Dependency graph
+requires:
+  - phase: 37
+    provides: Terminal.jsx xterm.js WebSocket component
+provides:
+  - /console route registered in App.jsx
+  - Console.jsx integrated with Terminal.jsx (xterm.js) and server selector
+affects:
+  - 08-02 (SFTP file browser)
+  - 08-03 (SFTP wiring)
+
+# Tech tracking
+tech-stack:
+  added: []
   patterns:
-    - Lazy-loaded tree view for file browser
-    - Chunked upload with session ID for resume
-    - Command history navigation in terminal
+    - Console page using Terminal.jsx (xterm.js) for real-time server interaction
+    - Server selector dropdown with connection status indicator
+    - Glass panel cosmic theme with CSS variable references
 
-key_files:
-  created:
-    - (none - all enhancements)
+key-files:
+  created: []
   modified:
-    - api/src/bootstrap/container.rs (Redis pool)
-    - api/src/presentation/handlers/terminal_handlers.rs (history)
-    - api/src/presentation/handlers/file_handlers.rs (chunked upload)
-    - api/src/presentation/routes/server_routes.rs (new endpoints)
-    - app/src/components/FileManager.jsx (tree view, chunked upload)
-    - app/src/components/IDE/TerminalPanel.jsx (history support)
+    - app/src/app/App.jsx — Added /console route import and Route definition
+    - app/src/pages/Console.jsx — Rewritten from REST/Docker log WS to xterm.js Terminal integration
 
-decisions:
-  - Used Redis for terminal command history (24h TTL, 50 commands max)
-  - Tree view lazy-loads children on expand
-  - Chunked upload uses 1MB chunks, base64 encoded
-  - Resume endpoint returns received chunks list
+key-decisions:
+  - "Console.jsx rewritten to use existing Terminal.jsx (xterm.js) component instead of REST sendCommand + Docker log streaming"
+  - "Server selector, connection status indicator, and empty state follow UI-SPEC design contract exactly"
 
-metrics:
-  duration: ~2 min
-  completed_date: "2026-04-09"
-  files_modified: 6
+patterns-established:
+  - "Console page follows existing page layout pattern (glass panels, cosmic theme CSS variables)"
+  - "Route registration follows alphabetical ordering within protected Routes block"
+  - "Inline server selector with dropdown using useServers hook"
+
+requirements-completed:
+  - RCON-01
+  - RCON-02
+
+# Metrics
+duration: 1 min
+completed: 2026-06-03
 ---
 
-# Phase 8: Operations Integration Summary
+# Phase 08: Operations Integration — Plan 01 Summary
 
-## One-Liner
+**Console page with /console route, Terminal.jsx (xterm.js) integration, server selector dropdown, and connection status indicator matching UI-SPEC design contract**
 
-RCON command execution with Redis-backed terminal history, file browser tree view, and chunked upload with resume support.
+## Performance
 
-## Overview
+- **Duration:** 1 min
+- **Started:** 2026-06-03T18:51:14Z
+- **Completed:** 2026-06-03T18:52:16Z
+- **Tasks:** 2
+- **Files modified:** 2
 
-This phase implements enhanced operations integration for game server management:
+## Accomplishments
 
-1. **RCON Command Execution (08-01)**: Verified existing send_command_use_case and terminal handlers. Added Redis-backed command history.
+- Registered `/console` route in App.jsx with lazy import of ConsolePage, placed alphabetically between `/billing` and `/settings` inside the protected Routes block
+- Rewrote Console.jsx (175 → 54 lines) to use Terminal.jsx (xterm.js) instead of REST sendCommand + Docker log WebSocket streaming
+- Server selector dropdown populated from useServers hook with `— Select Server —` placeholder
+- Connection status indicator (green pulse dot when server selected, red dot when disconnected) with "Connected" / "Disconnected" label
+- Empty state message "Select a server to open its console" shown when no server is selected
+- All UI-SPEC copywriting contract strings used exactly as specified
+- Removed all old implementation artifacts: `sendCommand`, `dockerWsRef`, `useWebSocket`, `colorMap`, `logs` rendering, event bus processing
 
-2. **File Browser with Tree View (08-02)**: Added tree view toggle to FileManager.jsx with lazy-loading of folder children.
+## Task Commits
 
-3. **Chunked Upload with Resume (08-03)**: Added /upload/chunked and /upload/status endpoints for large file uploads with resume capability.
+Each task was committed atomically:
 
-4. **Path Security Verification (08-04)**: Verified get_secure_path implementation blocks path traversal and validates user ownership.
+1. **Task 1: Add /console route to App.jsx** — `5d674f4` (feat)
+2. **Task 2: Rewrite Console.jsx to use Terminal.jsx (xterm.js) with server selector** — `dc5f2eb` (feat)
 
-5. **WebSocket Terminal Integration (08-05)**: Added command history from Redis to TerminalPanel.jsx via WebSocket message type.
+**Plan metadata:** (to be committed)
 
-## Changes Made
+## Files Created/Modified
 
-### Backend (Rust)
+- `app/src/app/App.jsx` — Added `import ConsolePage from '../pages/Console'` and `<Route path="/console" element={<ConsolePage />} />` 
+- `app/src/pages/Console.jsx` — Complete rewrite: 54 lines using xterm.js Terminal component with server selector dropdown, connection status indicator, and cosmic theme styling
 
-- **container.rs**: Added RedisPool to AppContainer for terminal history and caching
-- **terminal_handlers.rs**: Added store_command_history and get_command_history functions using Redis
-- **file_handlers.rs**: Added upload_chunk, get_upload_status, and base64_decode functions
-- **server_routes.rs**: Added routes for chunked upload endpoints
+## Decisions Made
 
-### Frontend (React)
-
-- **FileManager.jsx**: Added tree view with expandedFolders state, viewMode toggle, lazy loading, and chunked upload for large files
-- **TerminalPanel.jsx**: Added handling for 'history' WebSocket message type
+- **Rewrote Console.jsx from scratch** — The original 175-line implementation used REST sendCommand + Docker log WebSocket streaming + event bus processing. The rewrite uses the existing Terminal.jsx (xterm.js) component that already handles WebSocket connection to `/ws/terminal/:serverId`, command history, Tab autocomplete, and cosmic dark theme.
+- **UI-SPEC compliance** — Exact copywriting strings used for page title ("Console"), empty state ("Select a server to open its console"), and dropdown placeholder ("— Select Server —").
+- **Minimal state** — Only `selectedId` state needed; Terminal.jsx manages its own connection lifecycle internally.
 
 ## Deviations from Plan
 
-None - all plans executed as written.
+None — plan executed exactly as written.
 
-## Known Stubs
+## Issues Encountered
 
 None.
+
+## User Setup Required
+
+None — no external service configuration required.
+
+## Next Phase Readiness
+
+- /console route registered and accessible
+- Console page renders xterm.js terminal via Terminal.jsx when a server is selected
+- Server dropdown populated from useServers hook
+- Ready for Plan 08-02 (SFTP file browser) and 08-03 (SFTP wiring)
+
+## Self-Check: PASSED
+
+- ✅ SUMMARY.md exists at `.planning/phases/08-operations-integration/08-01-SUMMARY.md`
+- ✅ App.jsx modified with ConsolePage import and /console route
+- ✅ Console.jsx rewritten with Terminal.jsx integration
+- ✅ Task 1 commit `5d674f4` found in git log
+- ✅ Task 2 commit `dc5f2eb` found in git log
+- ✅ All acceptance criteria pass (imports, routes, copy strings, component wiring)
+
+---
+
+*Phase: 08-operations-integration*
+*Completed: 2026-06-03*
