@@ -24,6 +24,7 @@ import ServerDetailsPage from '../pages/servers/ServerDetailsPage'
 import ScheduledTasksPage from '../features/scheduling/ScheduledTasksPage'
 import BillingPage from '../pages/billing/BillingPage'
 import SettingsPage from '../pages/settings/SettingsPage'
+import ConsolePage from '../pages/Console'
 
 import TemplateLibraryPage from '../pages/templates/TemplateLibraryPage'
 import TemplateCreatePage from '../pages/templates/TemplateCreatePage'
@@ -117,6 +118,7 @@ export default function App() {
                     <Route path="/servers/:id" element={<ServerDetailsPage />} />
                     <Route path="/servers/:id/tasks" element={<ScheduledTasksPage />} />
                     <Route path="/billing" element={<VerifiedRoute><BillingPage /></VerifiedRoute>} />
+                    <Route path="/console" element={<ConsolePage />} />
                     <Route path="/settings" element={<SettingsPage />} />
                     <Route path="/templates" element={<TemplateLibraryPage />} />
                     <Route path="/templates/create" element={<TemplateCreatePage />} />
