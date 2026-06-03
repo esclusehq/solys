@@ -33,6 +33,12 @@ Hotfix deploy di tengah minggu. Semua fix akan merge ke v0.4.0 (Minggu).
 - [api] Founder role with admin-level permissions (bypass RBAC)
 - [api] Built-in template edit by admin/owner
 - [api] `is_active` toggle for built-in templates (Coming Soon)
+- [api] SFTP upload/download API handlers (`/api/servers/:id/sftp/upload`, `/api/servers/:id/sftp/download`)
+- [api] `send_rcon_command` WebSocket handler for terminal console
+- [app] `/console` route with Terminal.jsx (xterm.js) — interactive RCON terminal with command history, autocomplete, reconnect
+- [app] FileManager.jsx — SFTP file browser with upload/download, pagination
+- [app] `useServers.js` — RCON API client (`sendRconCommand`)
+- [app] Server details page with operation tabs (Console, Files, Overview)
 
 ### Improved
 - [solys] Agent logs to stdout by default (interactive mode); `--quiet` flag for headless/daemon
@@ -41,6 +47,7 @@ Hotfix deploy di tengah minggu. Semua fix akan merge ke v0.4.0 (Minggu).
 - [api] Degraded threshold raised from 50% to 90% of interval (reduces false degraded)
 - [api] Node IP now updates on re-registration (was stuck at `0.0.0.0`)
 - [app] Template `is_active` toggle now works — `update_template` includes `is_active` in SQL
+- [app] Server details page restructured with tabs for better navigation
 
 ### Fixed
 - [solys] Interactive prompt hidden by `2>/dev/null` on `read -p` in install.sh
@@ -80,9 +87,9 @@ Hotfix deploy di tengah minggu. Semua fix akan merge ke v0.4.0 (Minggu).
   date: '2026-06-08',
   type: 'minor',
   changes: {
-    added: ['[api] Founder role with admin-level permissions', '[api] Built-in template edit by admin/owner', '[api] is_active toggle for built-in templates'],
-    improved: ['[solys] Agent logs to stdout by default (interactive mode)', '[solys] Agent detects public IP on registration', '[api] Default heartbeat interval 10s→30s', '[api] Degraded threshold 50%→90% of interval', '[api] Node IP updates on re-registration'],
-    fixed: ['[solys] read -p hidden by 2>/dev/null', '[solys] TOML missing [server] section', '[solys] XDG config path', '[solys] gzip CRC no abort', '[solys] Agent panic on log dir not writable', '[solys] IP 127.0.0.1 on registration', '[api] Node always degraded (heartbeat mismatch)', '[api] Template is_active never persisted', '[api] get_template_by_id filtered by is_active', '[api] list_templates_by_user excluded inactive', '[api] Node ip_address not updated on re-register'],
+    added: ['[api] Founder role with admin-level permissions', '[api] Built-in template edit by admin/owner', '[api] is_active toggle for built-in templates', '[api] SFTP upload/download API handlers', '[api] send_rcon_command WebSocket handler', '[app] /console route with xterm.js terminal', '[app] FileManager.jsx SFTP browser', '[app] useServers.js RCON client', '[app] Server details operation tabs'],
+    improved: ['[solys] Agent logs to stdout by default (interactive mode)', '[solys] Agent detects public IP on registration', '[api] Default heartbeat interval 10s→30s', '[api] Degraded threshold 50%→90% of interval', '[api] Node IP updates on re-registration', '[app] Server details page tabs'],
+    fixed: ['[solys] read -p hidden by 2>/dev/null', '[solys] TOML missing [server] section', '[solys] XDG config path', '[solys] gzip CRC no abort', '[solys] Agent panic on log dir not writable', '[solys] IP 127.0.0.1 on registration', '[api] Node always degraded (heartbeat mismatch)', '[api] Template is_active never persisted', '[api] get_template_by_id filtered by is_active', '[api] list_templates_by_user excluded inactive', '[api] Node ip_address not updated on re-register', '[app] Terminal component name collision with @xterm/xterm', '[api] SFTP download borrow error in file_handlers.rs'],
     removed: [],
     security: []
   }
