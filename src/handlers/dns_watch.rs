@@ -1,0 +1,159 @@
+use std::sync::Arc;
+use std::time::Duration;
+
+use anyhow::Result;
+use tokio::sync::RwLock;
+use tokio::time::interval;
+use tracing::{error, info, warn};
+
+use super::dns::{self, CloudflareDnsConfig};
+
+static IP_CHECK_URLS: &[&str] = &[
+    "https://api.ipify.org",
+    "https://checkip.amazonaws.com",
+    "https://icanhazip.com",
+    "https://ifconfig.me/ip",
+];
+
+pub struct DnsWatcher {
+    running: Arc<RwLock<bool>>,
+    check_interval: Arc<RwLock<Duration>>,
+}
+
+impl DnsWatcher {
+    pub fn new() -> Self {
+        Self {
+            running: Arc::new(RwLock::new(false)),
+            check_interval: Arc::new(RwLock::new(Duration::from_secs(300))),
+        }
+    }
+
+    pub async fn start(&self) {
+        let mut guard = self.running.write().await;
+        if *guard {
+            info!("DnsWatcher already running");
+            return;
+        }
+        *guard = true;
+        drop(guard);
+
+        let running = self.running.clone();
+        let check_interval = self.check_interval.clone();
+
+        tokio::spawn(async move {
+            info!("DnsWatcher started — monitoring public IP every {:?}", *check_interval.read().await);
+
+            // Immediate first check
+            if let Err(e) = check_and_update().await {
+                error!("DnsWatcher initial check failed: {}", e);
+            }
+
+            let mut ticker = interval(*check_interval.read().await);
+            loop {
+                ticker.tick().await;
+
+                if !*running.read().await {
+                    info!("DnsWatcher stopped");
+                    break;
+                }
+
+                if let Err(e) = check_and_update().await {
+                    error!("DnsWatcher IP check failed: {}", e);
+                }
+            }
+        });
+    }
+
+    pub async fn stop(&self) {
+        let mut guard = self.running.write().await;
+        *guard = false;
+    }
+
+    pub async fn set_interval(&self, secs: u64) {
+        let mut guard = self.check_interval.write().await;
+        *guard = Duration::from_secs(secs);
+    }
+
+    pub async fn trigger_check(&self) -> Result<()> {
+        check_and_update().await
+    }
+}
+
+async fn check_and_update() -> Result<()> {
+    let current_ip = detect_public_ip().await?;
+
+    {
+        let mut ip_guard = dns::CURRENT_IP.write().await;
+        if *ip_guard == current_ip {
+            return Ok(());
+        }
+        let old_ip = ip_guard.clone();
+        *ip_guard = current_ip.clone();
+        drop(ip_guard);
+
+        info!("Public IP changed: {} -> {}", old_ip, current_ip);
+    }
+
+    let config_guard = dns::DNS_CONFIG.read().await;
+    let config = match config_guard.as_ref() {
+        Some(cfg) => cfg.clone(),
+        None => {
+            info!("DNS not configured yet, skipping DNS record update");
+            return Ok(());
+        }
+    };
+    drop(config_guard);
+
+    if !config.auto_refresh {
+        info!("Auto-refresh disabled, skipping DNS record update");
+        return Ok(());
+    }
+
+    let subdomain = config.subdomain.clone()
+        .unwrap_or_else(|| config.zone_name.split('.').next().unwrap_or("node").to_string());
+    let full_name = format!("{}.{}", subdomain, config.wildcard_domain);
+
+    let existing = dns::find_dns_record(&config.api_token, &config.zone_id, &full_name).await?;
+
+    match existing {
+        Some((record_id, _)) => {
+            dns::update_dns_record(&config.api_token, &config.zone_id, &record_id, &full_name, &current_ip).await?;
+            info!("DNS record updated via auto-refresh: {} -> {}", full_name, current_ip);
+        }
+        None => {
+            let rid = dns::create_dns_record(&config.api_token, &config.zone_id, &full_name, &current_ip).await?;
+            info!("DNS record created via auto-refresh: {} -> {} (id: {})", full_name, current_ip, rid);
+        }
+    }
+
+    Ok(())
+}
+
+pub async fn detect_public_ip() -> Result<String> {
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(10))
+        .build()?;
+
+    for url in IP_CHECK_URLS {
+        match client.get(*url).send().await {
+            Ok(resp) => {
+                if let Ok(text) = resp.text().await {
+                    let ip = text.trim().to_string();
+                    if !ip.is_empty() && is_valid_ip(&ip) {
+                        return Ok(ip);
+                    }
+                }
+            }
+            Err(e) => {
+                warn!("IP check failed for {}: {}", url, e);
+                continue;
+            }
+        }
+    }
+
+    Err(anyhow::anyhow!("Failed to detect public IP from all sources"))
+}
+
+fn is_valid_ip(ip: &str) -> bool {
+    ip.parse::<std::net::IpAddr>().is_ok()
+}

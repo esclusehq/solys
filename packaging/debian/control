@@ -1,0 +1,10 @@
+Package: escluse-agent
+Version: 0.1.0
+Section: utils
+Priority: optional
+Architecture: amd64
+Maintainer: Escluse Team <team@escluse.com>
+Description: Escluse Agent - Background service for managing game servers
+ Escluse Agent connects your server to the Escluse platform, enabling
+ game server management through a web control panel. Supports Minecraft
+ (Java & Bedrock), Valheim, Palworld, and more.

@@ -34,10 +34,8 @@ yarn-error.log*
 
 # Environment
 .env
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
+.env.*
+config.json
 
 # Misc
 *.tar
@@ -47,6 +45,8 @@ skills-lock.json
 # Rust build artifacts
 worker/target/
 tools/db-schema-gen/target/
+data/
+target/
 
 # Backup files
 *.bak

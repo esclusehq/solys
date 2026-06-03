@@ -1,0 +1,9 @@
+target/
+*.log
+.env
+.env.example
+temp.rs
+compose/
+docker/
+packaging/
+.git/
