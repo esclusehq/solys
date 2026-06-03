@@ -57,11 +57,15 @@ Hotfix deploy di tengah minggu. Semua fix akan merge ke v0.4.0 (Minggu).
 - [solys] gzip CRC errors from GitHub Actions no longer abort install
 - [solys] Agent panic when `/var/log/escluse-agent/` exists but not writable by non-root user
 - [solys] Agent registered with IP `127.0.0.1` instead of actual public IP
+- [solys] Container DNS set to `8.8.8.8`, `1.1.1.1` on create/start (was using host DNS, causing resolution failures)
 - [api] Node always marked 'degraded' due to heartbeat interval mismatch (10s default vs 30s agent)
 - [api] Template `update_template` ignored `is_active` field (Coming Soon toggle never persisted)
 - [api] `get_template_by_id` filtered by `is_active = true` (couldn't fetch inactive template to re-enable)
 - [api] `list_templates_by_user` excluded inactive templates (Coming Soon cards invisible to admin)
 - [api] Node `ip_address` not updated on re-registration (stuck at original value)
+- [api] SFTP download borrow error in `file_handlers.rs` (Rust E0505 — `payload.remote_path` moved while borrowed)
+- [app] Terminal.jsx component name `Terminal` collided with `@xterm/xterm` import (esbuild refused to build)
+- [app] Node Created dialog showed `bash <(curl ...)` which fails without root; updated to `sudo bash -c "$(curl ...)"`
 
 ---
 
@@ -89,7 +93,7 @@ Hotfix deploy di tengah minggu. Semua fix akan merge ke v0.4.0 (Minggu).
   changes: {
     added: ['[api] Founder role with admin-level permissions', '[api] Built-in template edit by admin/owner', '[api] is_active toggle for built-in templates', '[api] SFTP upload/download API handlers', '[api] send_rcon_command WebSocket handler', '[app] /console route with xterm.js terminal', '[app] FileManager.jsx SFTP browser', '[app] useServers.js RCON client', '[app] Server details operation tabs'],
     improved: ['[solys] Agent logs to stdout by default (interactive mode)', '[solys] Agent detects public IP on registration', '[api] Default heartbeat interval 10s→30s', '[api] Degraded threshold 50%→90% of interval', '[api] Node IP updates on re-registration', '[app] Server details page tabs'],
-    fixed: ['[solys] read -p hidden by 2>/dev/null', '[solys] TOML missing [server] section', '[solys] XDG config path', '[solys] gzip CRC no abort', '[solys] Agent panic on log dir not writable', '[solys] IP 127.0.0.1 on registration', '[api] Node always degraded (heartbeat mismatch)', '[api] Template is_active never persisted', '[api] get_template_by_id filtered by is_active', '[api] list_templates_by_user excluded inactive', '[api] Node ip_address not updated on re-register', '[app] Terminal component name collision with @xterm/xterm', '[api] SFTP download borrow error in file_handlers.rs'],
+    fixed: ['[solys] read -p hidden by 2>/dev/null', '[solys] TOML missing [server] section', '[solys] XDG config path', '[solys] gzip CRC no abort', '[solys] Agent panic on log dir not writable', '[solys] IP 127.0.0.1 on registration', '[solys] Container DNS set to 8.8.8.8, 1.1.1.1', '[api] Node always degraded (heartbeat mismatch)', '[api] Template is_active never persisted', '[api] get_template_by_id filtered by is_active', '[api] list_templates_by_user excluded inactive', '[api] Node ip_address not updated on re-register', '[api] SFTP download borrow error in file_handlers.rs', '[app] Terminal component name collision with @xterm/xterm', '[app] Node Created dialog sudo install command'],
     removed: [],
     security: []
   }
