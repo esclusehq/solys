@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v0.4.1] - 2026-06-03
+
+### Fixed
+
+- **DNS resolution in Docker containers** — Agent now passes `8.8.8.8` and `1.1.1.1` as explicit DNS servers when creating and starting containers, fixing Minecraft server startup failures caused by Tailscale search domain overriding DNS lookups.
+
 ## [v0.4.0] - 2026-06-02
 
 ### Added
