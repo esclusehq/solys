@@ -1,0 +1,251 @@
+name: Release
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+  BINARY_NAME: escluse-agent
+  R2_BUCKET: solys-release
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: version
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: [validate]
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+            ext: ""
+            pkg_arch_rpm: x86_64
+            pkg_arch_deb: amd64
+          - target: aarch64-unknown-linux-gnu
+            os: ubuntu-24.04-arm
+            ext: ""
+            pkg_arch_rpm: aarch64
+            pkg_arch_deb: arm64
+          - target: x86_64-pc-windows-gnu
+            os: ubuntu-latest
+            ext: ".exe"
+            pkg_arch_rpm: ""
+            pkg_arch_deb: ""
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - name: Install cross-compilation tools
+        uses: taiki-e/setup-cross-toolchain-action@v1
+        with:
+          target: ${{ matrix.target }}
+      - name: Build
+        run: |
+          cargo build --release --manifest-path Cargo.toml \
+            --target ${{ matrix.target }}
+      - name: Stage binary
+        run: |
+          mkdir -p staging
+          SRC="target/${{ matrix.target }}/release/${{ env.BINARY_NAME }}${{ matrix.ext }}"
+          cp "$SRC" "staging/${{ env.BINARY_NAME }}${{ matrix.ext }}"
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: binary-${{ matrix.target }}
+          path: staging/
+          compression-level: 0
+
+  package:
+    needs: [build, validate]
+    strategy:
+      matrix:
+        runner: [ubuntu-latest, ubuntu-24.04-arm]
+      fail-fast: false
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: binary-*
+          merge-multiple: false
+      - name: Install packaging tools
+        run: |
+          sudo apt-get update && sudo apt-get install -y rpm
+      - name: Create archives
+        run: |
+          mkdir -p release
+          if [ -d "binary-x86_64-unknown-linux-gnu" ]; then
+            tar czf release/solys-linux-x86_64.tar.gz \
+              -C binary-x86_64-unknown-linux-gnu escluse-agent
+          fi
+          if [ -d "binary-aarch64-unknown-linux-gnu" ]; then
+            tar czf release/solys-linux-aarch64.tar.gz \
+              -C binary-aarch64-unknown-linux-gnu escluse-agent
+          fi
+          if [ -d "binary-x86_64-pc-windows-gnu" ]; then
+            cd binary-x86_64-pc-windows-gnu
+            zip ../release/solys-windows-x86_64.zip escluse-agent.exe
+            cd ..
+          fi
+      - name: Build Debian packages
+        run: |
+          if [ -d "binary-x86_64-unknown-linux-gnu" ]; then
+            bash .github/scripts/package-deb.sh \
+              binary-x86_64-unknown-linux-gnu escluse-agent amd64 \
+              "${{ needs.validate.outputs.version }}" release
+          fi
+          if [ -d "binary-aarch64-unknown-linux-gnu" ]; then
+            bash .github/scripts/package-deb.sh \
+              binary-aarch64-unknown-linux-gnu escluse-agent arm64 \
+              "${{ needs.validate.outputs.version }}" release
+          fi
+      - name: Build RPM packages
+        run: |
+          if [ -d "binary-x86_64-unknown-linux-gnu" ]; then
+            bash .github/scripts/package-rpm.sh \
+              binary-x86_64-unknown-linux-gnu escluse-agent x86_64 \
+              "${{ needs.validate.outputs.version }}" release
+          fi
+          if [ -d "binary-aarch64-unknown-linux-gnu" ]; then
+            bash .github/scripts/package-rpm.sh \
+              binary-aarch64-unknown-linux-gnu escluse-agent aarch64 \
+              "${{ needs.validate.outputs.version }}" release
+          fi
+      - name: Build NSIS installer
+        run: |
+          if [ -d "binary-x86_64-pc-windows-gnu" ]; then
+            sudo apt-get install -y nsis
+            mkdir -p release/package
+            cp binary-x86_64-pc-windows-gnu/escluse-agent.exe release/package/
+            cd installer && makensis escluse-agent.nsi && cd ..
+            cp release/package/escluse-agent-setup.exe release/ 2>/dev/null || true
+          fi
+      - name: Upload package artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: packages-${{ matrix.runner }}
+          path: release/
+          compression-level: 0
+
+  assemble:
+    needs: [package, validate]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: repo
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: packages-*
+          merge-multiple: true
+      - name: Stage install scripts
+        run: |
+          cp repo/install.sh repo/install.ps1 . 2>/dev/null || true
+      - name: Generate SHA256 checksums
+        run: |
+          for f in *; do
+            [ -f "$f" ] && sha256sum "$f"
+          done > SHA256SUMS.tmp
+          mv SHA256SUMS.tmp SHA256SUMS.txt
+      - name: Upload release artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: release
+          path: .
+          compression-level: 0
+
+  sign:
+    needs: [assemble]
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: release
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v4.1.0
+      - name: Sign checksums with cosign
+        env:
+          COSIGN_EXPERIMENTAL: 1
+        run: |
+          cosign sign-blob SHA256SUMS.txt \
+            --bundle SHA256SUMS.txt.bundle
+      - name: Upload signed artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-signed
+          path: .
+          include-hidden-files: true
+          compression-level: 0
+
+  upload:
+    needs: [sign, validate]
+    runs-on: ubuntu-latest
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+      AWS_DEFAULT_REGION: auto
+      R2_ENDPOINT: https://${{ secrets.CLOUDFLARE_ACCOUNT_ID }}.r2.cloudflarestorage.com
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-signed
+      - name: Upload to R2
+        run: |
+          VERSION="${{ needs.validate.outputs.version }}"
+          # Upload to versioned path
+          aws s3 cp . "s3://${R2_BUCKET}/v${VERSION}/" \
+            --endpoint-url "${R2_ENDPOINT}" \
+            --recursive \
+            --exclude ".git/*" \
+            --cache-control "public, max-age=300"
+          # Upload same files to latest/ (local copy to avoid R2 GetObjectTagging issue)
+          aws s3 cp . "s3://${R2_BUCKET}/latest/" \
+            --endpoint-url "${R2_ENDPOINT}" \
+            --recursive \
+            --exclude ".git/*" \
+            --cache-control "public, max-age=300"
+      - name: Purge Cloudflare cache
+        run: |
+          curl -fsSL -X POST "https://api.cloudflare.com/client/v4/zones/${{ secrets.CLOUDFLARE_ZONE_ID }}/purge_cache" \
+            -H "Authorization: Bearer ${{ secrets.CLOUDFLARE_API_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            -d '{"prefixes":["get.esluce.com/"]}'
+
+  manifest:
+    needs: [upload, validate]
+    runs-on: ubuntu-latest
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+      AWS_DEFAULT_REGION: auto
+      R2_ENDPOINT: https://${{ secrets.CLOUDFLARE_ACCOUNT_ID }}.r2.cloudflarestorage.com
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-signed
+      - name: Update manifest
+        run: |
+          bash .github/scripts/update-manifest.sh "${{ needs.validate.outputs.version }}" "."
+      - name: Upload manifest to R2
+        run: |
+          aws s3 cp versions.json "s3://${R2_BUCKET}/versions.json" \
+            --endpoint-url "${R2_ENDPOINT}" \
+            --cache-control "public, max-age=300"

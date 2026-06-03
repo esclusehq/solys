@@ -1,0 +1,28 @@
+services:
+  web-agent:
+    build:
+      context: ../.
+      dockerfile: web-agent/docker/Dockerfile
+    image: escluse/web-agent:latest
+    container_name: web-agent
+    restart: unless-stopped
+    environment:
+      - AGENT_BACKEND_URL=${AGENT_BACKEND_URL:-ws://127.0.0.1:3000/api/ws/node}
+      - AGENT_API_KEY=${AGENT_API_KEY}
+      - AGENT_NAME=${AGENT_NAME:-game-node-1}
+      - AGENT_ID=${AGENT_ID}
+      - AGENT_RUNTIME=${AGENT_RUNTIME:-auto}
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - LOG_FORMAT=${LOG_FORMAT:-json}
+      - AGENT_HEARTBEAT_INTERVAL=${AGENT_HEARTBEAT_INTERVAL:-30}
+      - AGENT_RECONNECT_INITIAL=${AGENT_RECONNECT_INITIAL:-2}
+      - AGENT_RECONNECT_MAX=${AGENT_RECONNECT_MAX:-120}
+      - AGENT_MAX_CONCURRENT=${AGENT_MAX_CONCURRENT:-10}
+      - AGENT_TASK_TIMEOUT=${AGENT_TASK_TIMEOUT:-300}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - agent-data:/var/lib/escluse-agent
+    network_mode: host
+
+volumes:
+  agent-data:
