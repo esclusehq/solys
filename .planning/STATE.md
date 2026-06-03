@@ -4,14 +4,14 @@ milestone: v1.0
 milestone_name: milestone
 status: executing
 stopped_at: Phase 08 UI-SPEC approved, continuing to plan-phase
-last_updated: "2026-06-03T18:05:00.278Z"
-last_activity: 2026-06-03 -- Phase 08 planning complete
+last_updated: "2026-06-03T18:57:44.550Z"
+last_activity: 2026-06-03
 progress:
   total_phases: 21
   completed_phases: 20
   total_plans: 67
-  completed_plans: 64
-  percent: 96
+  completed_plans: 65
+  percent: 97
 ---
 
 # Project State: Esluce
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-09)
 
 **Core value:** Users can deploy game servers to cloud nodes with minimal configuration and manage them via a web control panel.
-**Current focus:** Phase 66 — integrasikan-umami-analitycs-dashboard-dengan-rds-di-project
+**Current focus:** Phase 08 — operations-integration
 
 ## Current Position
 
-Phase: 66 (integrasikan-umami-analitycs-dashboard-dengan-rds-di-project) — EXECUTING
-Plan: 2 of 2
+Phase: 08 (operations-integration) — EXECUTING
+Plan: 2 of 3
 Status: Ready to execute
-Last activity: 2026-06-03 -- Phase 08 planning complete
+Last activity: 2026-06-03
 
-Progress: [██████████] 98%
+Progress: [██████████] 97%
 
 ## Performance Metrics
 
@@ -106,6 +106,7 @@ Progress: [██████████] 98%
 | Phase 60-crash-detection P03 | 20 min | - tasks | - files |
 | Phase 62-contributing-md P01 | 3 min | 3 tasks | 3 files |
 | Phase 66 P01 | 2 min | 3 tasks | 4 files |
+| Phase 08-operations-integration P01 | 1 min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -370,6 +371,8 @@ completed: 2026-05-31
 # Phase 66: Integrasikan Umami Analytics Dashboard — Plan 1 Summary
 
 **Umami Docker stack (v3.1.0 + Caddy 2) with RDS PostgreSQL deployment configuration and step-by-step manual deployment guide for analytics.esluce.com**
+
+- [Phase 08-operations-integration]: Console.jsx rewritten to use existing Terminal.jsx (xterm.js) component instead of REST sendCommand + Docker log streaming — Console.jsx rewritten to use existing Terminal.jsx (xterm.js) component instead of REST sendCommand + Docker log streaming
 
 ## Performance
 
@@ -643,6 +646,6 @@ None yet.
 
 Last activity: 2026-05-31 — Phase 62 Plan 01 complete
 
-Last session: 2026-06-03T17:27:43.776Z
+Last session: 2026-06-03T18:57:33.862Z
 Stopped at: Phase 08 UI-SPEC approved, continuing to plan-phase
-Resume file: .planning/phases/08-operations-integration/08-PLAN.md
+Resume file: None
