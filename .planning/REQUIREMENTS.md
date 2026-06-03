@@ -20,8 +20,8 @@
 
 ### RCON Access (RCON-01 to RCON-02)
 
-- [ ] **RCON-01**: User can connect to server via RCON protocol
-- [ ] **RCON-02**: User can execute console commands via RCON
+- [x] **RCON-01**: User can connect to server via RCON protocol
+- [x] **RCON-02**: User can execute console commands via RCON
 
 ### File Management (FILE-01 to FILE-03)
 
