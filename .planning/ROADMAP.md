@@ -1,3 +1,14 @@
+### Phase 08: Operations Integration
+
+**Goal:** RCON console and SFTP file management for server administration — establish the console interface, file browser, transfer behavior, and security model
+**Requirements**: RCON-01, RCON-02, FILE-01, FILE-02, FILE-03
+**Depends on:** Phase 07
+**Plans:** 2 plans
+
+**Wave 1**
+- [ ] 08-01-PLAN.md — Console page: add /console route + xterm.js Terminal integration with server selector
+- [ ] 08-02-PLAN.md — RCON API client + file route and path security verification
+
 ### Phase 47: Docs Website
 
 **Goal:** Create a documentation website for Esluce in the docs/ folder
