@@ -33,7 +33,7 @@ impl SqlxTemplateRepository {
 
 #[async_trait]
 impl TemplateRepository for SqlxTemplateRepository {
-    /// List all templates from database, with fallback to hardcoded templates if empty.
+    /// List all templates from database, with fallback to hardcoded templates if empty or table missing.
     async fn list_templates(&self) -> Result<Vec<Template>, Box<dyn std::error::Error + Send + Sync>> {
         let result = sqlx::query_as::<_, Template>(
             r#"
@@ -46,7 +46,18 @@ impl TemplateRepository for SqlxTemplateRepository {
             "#
         )
         .fetch_all(&self.pool)
-        .await?;
+        .await;
+
+        let result = match result {
+            Ok(rows) => rows,
+            Err(e) => {
+                // Defensive: if the `templates` table is missing (e.g. seed migration
+                // never applied on this deployment), return hardcoded fallback so the
+                // UI still has something to render instead of 500 INTERNAL_ERROR.
+                tracing::warn!("templates query failed ({}), using fallback templates", e);
+                return Ok(Template::fallback());
+            }
+        };
 
         // If no templates in DB, return fallback templates
         if result.is_empty() {
@@ -57,7 +68,7 @@ impl TemplateRepository for SqlxTemplateRepository {
         Ok(result)
     }
 
-    /// List templates filtered by game type, with fallback to hardcoded templates if empty.
+    /// List templates filtered by game type, with fallback to hardcoded templates if empty or table missing.
     async fn list_templates_by_game(&self, game_type: &str) -> Result<Vec<Template>, Box<dyn std::error::Error + Send + Sync>> {
         let result = sqlx::query_as::<_, Template>(
             r#"
@@ -71,7 +82,17 @@ impl TemplateRepository for SqlxTemplateRepository {
         )
         .bind(game_type)
         .fetch_all(&self.pool)
-        .await?;
+        .await;
+
+        let result = match result {
+            Ok(rows) => rows,
+            Err(e) => {
+                // Defensive: if the `templates` table is missing, return hardcoded
+                // fallback scoped to the requested game type.
+                tracing::warn!("templates query failed for game_type={} ({}), using fallback", game_type, e);
+                return Ok(Template::fallback_by_game_type(game_type));
+            }
+        };
 
         // If no templates in DB for this game type, return fallback
         if result.is_empty() {
@@ -217,6 +238,11 @@ impl TemplateRepository for SqlxTemplateRepository {
 
     /// List public templates and built-in templates (visibility = 'public' OR is_builtin = true).
     /// Built-in templates appear first in the result.
+    ///
+    /// Defensive: if the `templates` table is missing (e.g. seed migration never
+    /// applied on this deployment), return hardcoded fallback templates instead of
+    /// letting the SQL error propagate as 500 INTERNAL_ERROR. This mirrors the
+    /// fallback used by `SqlxPluginTemplateRepository::list_plugin_templates`.
     async fn list_public_templates(&self) -> Result<Vec<Template>, Box<dyn std::error::Error + Send + Sync>> {
         let result = sqlx::query_as::<_, Template>(
             r#"
@@ -229,7 +255,15 @@ impl TemplateRepository for SqlxTemplateRepository {
             "#
         )
         .fetch_all(&self.pool)
-        .await?;
+        .await;
+
+        let result = match result {
+            Ok(rows) => rows,
+            Err(e) => {
+                tracing::warn!("templates query failed ({}), using fallback templates", e);
+                return Ok(Template::fallback());
+            }
+        };
 
         // If no templates in DB, return fallback templates
         if result.is_empty() {

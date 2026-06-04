@@ -532,7 +532,8 @@ export default function ServerDetails() {
                         <PluginManager
                             serverId={id}
                             serverVersion={server?.mc_version}
-                            serverLoader={server?.loader_type}
+                            serverLoader={server?.mc_loader || server?.loader_type}
+                            serverGameType={server?.game || server?.executor_type}
                             mode={['PAPER', 'SPIGOT', 'BUKKIT', 'PURPUR', 'FORGE', 'FABRIC', 'NEOFORGE'].includes(server?.mc_loader?.toUpperCase()) ? 'plugin' : 'datapack'}
                         />
                     </div>
