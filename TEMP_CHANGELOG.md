@@ -66,6 +66,9 @@ Hotfix deploy di tengah minggu. Semua fix akan merge ke v0.4.0 (Minggu).
 - [api] SFTP download borrow error in `file_handlers.rs` (Rust E0505 — `payload.remote_path` moved while borrowed)
 - [app] Terminal.jsx component name `Terminal` collided with `@xterm/xterm` import (esbuild refused to build)
 - [app] Node Created dialog showed `bash <(curl ...)` which fails without root; updated to `sudo bash -c "$(curl ...)"`
+- [api] `plugin_templates` table was missing from DB — repository returned 500 INTERNAL_ERROR; added migration `20260604000001_create_plugin_templates.sql` (table + 9 seed rows) and made repository fall back to hardcoded templates when table is missing
+- [app] Templates tab was locked behind Hobby+ plan check in `PluginManager.jsx`; removed lock icon and always show the tab (content/upgrade notice still gated by `isHobbyPlus`)
+- [app] PluginManager called `plugin-templates` API with `server.loader_type` (e.g. `paper`) instead of `server.game` (e.g. `minecraft`); added `serverGameType` prop and filter by variant on frontend
 
 ---
 
@@ -93,7 +96,7 @@ Hotfix deploy di tengah minggu. Semua fix akan merge ke v0.4.0 (Minggu).
   changes: {
     added: ['[api] Founder role with admin-level permissions', '[api] Built-in template edit by admin/owner', '[api] is_active toggle for built-in templates', '[api] SFTP upload/download API handlers', '[api] send_rcon_command WebSocket handler', '[app] /console route with xterm.js terminal', '[app] FileManager.jsx SFTP browser', '[app] useServers.js RCON client', '[app] Server details operation tabs'],
     improved: ['[solys] Agent logs to stdout by default (interactive mode)', '[solys] Agent detects public IP on registration', '[api] Default heartbeat interval 10s→30s', '[api] Degraded threshold 50%→90% of interval', '[api] Node IP updates on re-registration', '[app] Server details page tabs'],
-    fixed: ['[solys] read -p hidden by 2>/dev/null', '[solys] TOML missing [server] section', '[solys] XDG config path', '[solys] gzip CRC no abort', '[solys] Agent panic on log dir not writable', '[solys] IP 127.0.0.1 on registration', '[solys] Container DNS set to 8.8.8.8, 1.1.1.1', '[api] Node always degraded (heartbeat mismatch)', '[api] Template is_active never persisted', '[api] get_template_by_id filtered by is_active', '[api] list_templates_by_user excluded inactive', '[api] Node ip_address not updated on re-register', '[api] SFTP download borrow error in file_handlers.rs', '[app] Terminal component name collision with @xterm/xterm', '[app] Node Created dialog sudo install command'],
+    fixed: ['[solys] read -p hidden by 2>/dev/null', '[solys] TOML missing [server] section', '[solys] XDG config path', '[solys] gzip CRC no abort', '[solys] Agent panic on log dir not writable', '[solys] IP 127.0.0.1 on registration', '[solys] Container DNS set to 8.8.8.8, 1.1.1.1', '[api] Node always degraded (heartbeat mismatch)', '[api] Template is_active never persisted', '[api] get_template_by_id filtered by is_active', '[api] list_templates_by_user excluded inactive', '[api] Node ip_address not updated on re-register', '[api] SFTP download borrow error in file_handlers.rs', '[api] plugin_templates table missing (500 INTERNAL_ERROR); migration + repository fallback', '[app] Terminal component name collision with @xterm/xterm', '[app] Node Created dialog sudo install command', '[app] Templates tab locked behind Hobby+ plan', '[app] plugin-templates API called with loader_type instead of game'],
     removed: [],
     security: []
   }
