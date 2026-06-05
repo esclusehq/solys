@@ -37,6 +37,7 @@ Hotfix deploy di hari yang sama dengan v0.4.2 (Jumat) — fokus ke display bugs 
 
 ### Fixed (lintas-komponen)
 - [app] PluginManager component Load More button + Empty State render di luar Search tab — closing tags salah tempat di end-of-file (setelah Templates dan Installed tabs). Fix: move closing JSX + Load More + Empty State ke dalam Search tab scope. Tiap tab sekarang self-contained
+- [app] `PluginManager` mode-detection di Server Details page membaca `server?.game || server?.executor_type` (flat fields yang tidak exist) — default ke `'datapack'` mode untuk semua server, sembunyikan Paper/Spigot/Fabric plugins. Fix: read `server?.config?.game_type` (nested, yang actual di-store dari create-server form), fallback ke `server?.game`
 - [landing] `escluse-landing:latest` ECR image (yang di-serve oleh `escluse_landing` container) accidentally ke-overwrite dengan dashboard bundle waktu deploy v0.4.3 — bikin `esluce.com` serve dashboard instead of landing page. Rebuild dari `landing-page-escluse/dist` via `Dockerfile.landing`, push ke ECR (manifest digest `76cc938804ad1fa7bee33f8487298538d4d04b57b0dbdaba271a93d158ea05fd`), redeploy container
 - [gateway] `gateway/Caddyfile.prod` routing restored ke original intent: `esluce.com` → `landing:80` (real landing page), `app.esluce.com` → `frontend:80` (dashboard). Dulu `esluce.com` route pernah di-tweak ke `frontend:80` waktu investigasi Caddy mislabeling, tapi karena image content udah benar sekarang, original routing udah cukup
 
@@ -158,6 +159,7 @@ Hotfix deploy di tengah minggu. Semua fix akan merge ke v0.4.0 (Minggu).
       '[app] Server Details page: cyan "⌨ Open Console" button links to /console?serverId=<id>',
       '[app] Console page reads ?serverId= from URL and auto-connects to that server\'s RCON terminal — no manual select needed',
       '[app] PluginManager: Load More button + Empty State were rendering outside Search tab due to misplaced closing tags; moved into Search tab scope',
+      '[app] PluginManager mode-detection (plugin vs datapack) was reading server.game / server.executor_type (flat fields that don\'t exist) and falling back to "datapack" for every server; now reads server.config.game_type (nested, actually populated by create-server form) — Paper/Spigot/Fabric plugins now show up in the Search tab',
       '[landing] escluse-landing:latest ECR image had been overwritten with the dashboard bundle (accidental); rebuilt from landing-page-escluse/dist via Dockerfile.landing and pushed',
       '[gateway] Caddyfile routing restored: esluce.com → landing:80 (landing page), app.esluce.com → frontend:80 (dashboard)',
     ],
