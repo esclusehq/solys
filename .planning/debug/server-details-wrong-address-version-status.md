@@ -177,7 +177,7 @@ Full fix shipped 2026-06-05 23:28 UTC:
 3. **Redeployed `escluse_landing` container** on EC2 — `docker compose pull landing && docker compose up -d landing`.
 4. **Reverted the temporary `esluce.com` → `frontend:80` change** in `gateway/Caddyfile.prod` — now routes back to `landing:80` (the real landing page). The earlier Caddyfile change was wrong: I had changed the routing to "fix" the mislabel, when the real problem was the image content. With the image now correct, the original Caddyfile routing is also correct.
 5. **Restarted caddy** to pick up the reverted Caddyfile.
-6. **Kept the new `landing.esluce.com` route** (placeholder for when an external landing subdomain is desired — not currently routed via DNS).
+6. **Removed** the temporary `landing.esluce.com` route that had been added as a placeholder — user requested no external landing subdomain. Caddy now manages TLS for 4 domains only: `app.esluce.com, esluce.com, docs.esluce.com, www.esluce.com`.
 
 Verified post-deploy:
 
@@ -185,7 +185,7 @@ Verified post-deploy:
 |---|---|---|---|
 | `https://esluce.com` | "Escluse - Distributed Infrastructure Platform" | `index-Djcdz0ZK.js` (704KB) | landing page (`landing-page-escluse/dist/`) |
 | `https://app.esluce.com` | "Escluse — Server Control Platform" | `index-DsxEaHex.js` (1.4MB) | dashboard (`app/dist/` with v0.4.3 fix) |
-| `https://landing.esluce.com` | — | — | NXDOMAIN (no DNS A record yet; caddy logs show Let's Encrypt + ZeroSSL cert acquisition failing on http-01 challenge) |
+| (none — `landing.esluce.com` was proposed as a placeholder but rejected) | — | — | — |
 
 User-facing impact: any bookmarks/links to `esluce.com/servers/{id}` or other dashboard paths will now show the landing page instead. The dashboard is at `https://app.esluce.com`. Users need to update their bookmarks.
 
