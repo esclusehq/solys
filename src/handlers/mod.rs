@@ -130,7 +130,7 @@ async fn execute_single(
             "backup.start" => backup::handle_start(task.clone()).await,   // NEW: D-10
 
             // RCON
-            "server.command" => rcon::handle_command(task.clone()).await,
+            "server.command" => rcon::handle_command(task.clone(), runtime).await,
 
             // Metrics
             "metrics.report" => metrics::handle_report(task.clone()).await,

@@ -170,6 +170,8 @@ pub struct CommandParams {
     pub rcon_port: Option<u16>,
     #[serde(default)]
     pub rcon_password: Option<String>,
+    #[serde(default)]
+    pub host: Option<String>,
 }
 
 #[derive(Debug, Clone, serde::Deserialize)]
@@ -592,6 +594,9 @@ pub async fn run(
                                                      }
                                                      if let Some(bp) = params.as_ref().and_then(|p| p.backup_path.clone()) {
                                                          payload["backup_path"] = serde_json::json!(bp);
+                                                     }
+                                                     if let Some(h) = params.as_ref().and_then(|p| p.host.clone()) {
+                                                         payload["host"] = serde_json::json!(h);
                                                      }
 
                                                  if let Some(config) = deploy_config {
