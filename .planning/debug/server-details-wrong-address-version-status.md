@@ -164,6 +164,23 @@ The frontend v0.4.3 already deployed (commit `d2a5f71`, deployed 2026-06-05) imp
 
 When picked up: start with Option A (30 min, surfaces the empty values so the JSON shape is correct and the dashboard fallback chain works fully). Then in a follow-up session, do Option B (real agent inspection) and possibly C (Tailscale).
 
+## Caddyfile mislabeling — partial fix shipped 2026-06-05
+
+Separately from the dashboard data bug, the `gateway/Caddyfile.prod` was misconfigured: it routed `esluce.com` to `landing:80` but the `escluse_landing` container was actually serving a dashboard build (the same React app as `escluse_frontend`). The `escluse-landing:latest` ECR image had been a dashboard build for weeks; the actual landing page (`landing-page-escluse/`, built via `Dockerfile.landing`) was never deployed.
+
+Partial fix shipped: `gateway/Caddyfile.prod` updated and rsynced to EC2 at 2026-06-05 23:17 UTC. Caddy restarted, new config loaded. Changes:
+
+- `esluce.com` route: `reverse_proxy landing:80` → `reverse_proxy frontend:80` (the actual dashboard container). Also added `@ws path /ws*` → `reverse_proxy @ws escluse_backend:3000` so the WebSocket-based terminal at `esluce.com/console` works (the old routing had no @ws matcher, which meant WebSocket requests would have been served by nginx static-file config and failed the upgrade — unless they actually go through `app.esluce.com` instead).
+- New `landing.esluce.com` route: `reverse_proxy landing:80` — placeholder for the future landing page. Caddy attempts Let's Encrypt cert for `landing.esluce.com` but fails with NXDOMAIN because the DNS record doesn't exist yet. Add a Cloudflare A record pointing to the EC2 origin (same as `esluce.com`) when the landing is ready to deploy.
+
+What's still wrong: the `escluse-landing:latest` ECR image is still a dashboard build, not the real landing page. Visiting `https://landing.esluce.com` (after DNS is added) will show the dashboard, not a landing page. The full fix needs:
+1. Build `landing-page-escluse/` source (`cd landing-page-escluse && npm run build`).
+2. `docker build -f Dockerfile.landing -t escluse-landing:latest .`
+3. `docker tag` and `docker push` to ECR.
+4. `docker compose pull && up -d landing` on EC2.
+
+User chose to defer this; tracking as a follow-up.
+
 ## Related
 - `TEMP_CHANGELOG.md` v0.4.3 — describes the frontend Address/Version/Console fix
 - `app/src/pages/servers/ServerDetailsPage.jsx:110-116, 135, 158, 199-204` — the display logic
