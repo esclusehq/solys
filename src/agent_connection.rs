@@ -616,7 +616,13 @@ pub async fn run(
                                                     command,
                                                     server_id,
                                                     success: result.status == TaskStatus::Completed,
-                                                    output: serde_json::to_string(&result.output).unwrap_or_default(),
+                                                    output: match &result.output {
+                                                        Some(v) => serde_json::to_string(v).unwrap_or_default(),
+                                                        None => match &result.error {
+                                                            Some(e) => format!("{}: {}", e.code, e.message),
+                                                            None => "null".to_string(),
+                                                        },
+                                                    },
                                                     duration_ms: Some(duration_ms),
                                                 };
                                                 if let Ok(msg) = serde_json::to_string(&response) {
@@ -656,7 +662,13 @@ pub async fn run(
                                                     command: "get_metrics".to_string(),
                                                     server_id: Uuid::nil(),
                                                     success: result.status == TaskStatus::Completed,
-                                                    output: serde_json::to_string(&result.output).unwrap_or_default(),
+                                                    output: match &result.output {
+                                                        Some(v) => serde_json::to_string(v).unwrap_or_default(),
+                                                        None => match &result.error {
+                                                            Some(e) => format!("{}: {}", e.code, e.message),
+                                                            None => "null".to_string(),
+                                                        },
+                                                    },
                                                     duration_ms: Some(duration_ms),
                                                 };
                                                 if let Ok(msg) = serde_json::to_string(&response) {
