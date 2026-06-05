@@ -9,8 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Agent rejects all `file.*` commands with "Unknown task type: unknown"** — The WebSocket command → task_type mapping in `src/agent_connection.rs` only recognized the short form of command names (e.g. `read_file`), but the dashboard sends the long form (`file.read_file`) and the previously added `sftp.upload` / `sftp.download` aliases. Every file op (and therefore every terminal session that needs `server.properties` to read the RCON port/password) fell through to the `_ => "unknown"` arm, which in turn caused the in-app terminal to reconnect in a tight loop while trying to fetch the RCON config. Added long-form aliases for all 7 file operations and for `server.*` to keep the mapping symmetric. Terminal "Disconnected - Reconnecting..." loop on Minecraft servers is now resolved.
 - **Templates empty in CreateServerModal when DB migration not applied** — `SqlxTemplateRepository` (`list_templates`, `list_templates_by_game`, `list_public_templates`) now catches SQL errors and returns the hardcoded `Template::fallback()` set instead of 500 INTERNAL_ERROR, mirroring the prior fix for `plugin_templates`. The `templates` table seed migration (`20260531_create_templates_table.sql`) is missing from the `migration/` directory on some deployments, so the table doesn't exist and users saw the Game Type dropdown fall back to "Minecraft" + 3 disabled "Coming Soon" options regardless of plan/role. Fix: defensive fallback at the repository layer. (session: `templates-server-details-empty`)
 - **CreateServerModal Variant dropdown broken** — Was reading `t.variant` (undefined) and `template.default_port` (undefined) from the regular templates DTO, which exposes `category` and nests `default_port` inside `config`. Replaced with `t.category` and `template.config?.default_port` so the Variant dropdown renders the actual built-in variants (vanilla/paper/spigot/forge/fabric) and auto-fills the default port.
+
+### Changed
+
+- **CI workflow hardened** — `ci.yml` now runs `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings`, `cargo test --all`, and `rustsec/audit-check` in addition to the matrix build. Added `Swatinem/rust-cache` and `timeout-minutes` to all build jobs. Added `concurrency` group so PRs cancel superseded runs.
+- **Canary & Release workflows hardened** — Added `Swatinem/rust-cache` to all build jobs, `timeout-minutes` per job, and a `concurrency` group. Canary artifact upload now uses `compression-level: 0` to match the release pipeline (prevents the OOM-on-upload class of failures that previously bit canary).
 
 ## [v0.4.1] - 2026-06-03
 
