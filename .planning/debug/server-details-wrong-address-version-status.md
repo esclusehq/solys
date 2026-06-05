@@ -164,22 +164,30 @@ The frontend v0.4.3 already deployed (commit `d2a5f71`, deployed 2026-06-05) imp
 
 When picked up: start with Option A (30 min, surfaces the empty values so the JSON shape is correct and the dashboard fallback chain works fully). Then in a follow-up session, do Option B (real agent inspection) and possibly C (Tailscale).
 
-## Caddyfile mislabeling — partial fix shipped 2026-06-05
+## Caddyfile mislabeling — full fix shipped 2026-06-05 23:28 UTC
 
-Separately from the dashboard data bug, the `gateway/Caddyfile.prod` was misconfigured: it routed `esluce.com` to `landing:80` but the `escluse_landing` container was actually serving a dashboard build (the same React app as `escluse_frontend`). The `escluse-landing:latest` ECR image had been a dashboard build for weeks; the actual landing page (`landing-page-escluse/`, built via `Dockerfile.landing`) was never deployed.
+The framing in my earlier "partial fix" section was based on a misread: I assumed the `escluse-landing` container was serving a dashboard build because the bundle had `esluce.com/api/v1/auth/me` calls, but those are the landing page's user-aware CTAs (e.g. a "Sign in" button that checks session). The `escluse-landing` image was correctly built from `landing-page-escluse/` via `Dockerfile.landing`.
 
-Partial fix shipped: `gateway/Caddyfile.prod` updated and rsynced to EC2 at 2026-06-05 23:17 UTC. Caddy restarted, new config loaded. Changes:
+The actual problem was that I had earlier deployed the **dashboard** image (v0.4.3) to BOTH `escluse-frontend:latest` AND `escluse-landing:latest` in ECR (because the Caddyfile routes `esluce.com` to `landing:80`, and I wanted the dashboard's address/version fixes to be visible at `esluce.com`). That overwrote the real landing page image in the `escluse-landing` slot.
 
-- `esluce.com` route: `reverse_proxy landing:80` → `reverse_proxy frontend:80` (the actual dashboard container). Also added `@ws path /ws*` → `reverse_proxy @ws escluse_backend:3000` so the WebSocket-based terminal at `esluce.com/console` works (the old routing had no @ws matcher, which meant WebSocket requests would have been served by nginx static-file config and failed the upgrade — unless they actually go through `app.esluce.com` instead).
-- New `landing.esluce.com` route: `reverse_proxy landing:80` — placeholder for the future landing page. Caddy attempts Let's Encrypt cert for `landing.esluce.com` but fails with NXDOMAIN because the DNS record doesn't exist yet. Add a Cloudflare A record pointing to the EC2 origin (same as `esluce.com`) when the landing is ready to deploy.
+Full fix shipped 2026-06-05 23:28 UTC:
 
-What's still wrong: the `escluse-landing:latest` ECR image is still a dashboard build, not the real landing page. Visiting `https://landing.esluce.com` (after DNS is added) will show the dashboard, not a landing page. The full fix needs:
-1. Build `landing-page-escluse/` source (`cd landing-page-escluse && npm run build`).
-2. `docker build -f Dockerfile.landing -t escluse-landing:latest .`
-3. `docker tag` and `docker push` to ECR.
-4. `docker compose pull && up -d landing` on EC2.
+1. **Rebuilt the real landing page from source** — `cd landing-page-escluse && rm -rf dist && npm run build` (2202 modules, 14.25s, 704KB bundle). Source was unchanged so bundle hash came out the same as before: `index-Djcdz0ZK.js`.
+2. **Built and pushed the real landing Docker image** — `docker build -f Dockerfile.landing -t escluse-landing:latest .` then pushed to ECR. New manifest digest `sha256:98317b141925dc4083859d58d9c798e5261934b62f470a91413696509509cda6`. This overwrites the dashboard image I had pushed earlier.
+3. **Redeployed `escluse_landing` container** on EC2 — `docker compose pull landing && docker compose up -d landing`.
+4. **Reverted the temporary `esluce.com` → `frontend:80` change** in `gateway/Caddyfile.prod` — now routes back to `landing:80` (the real landing page). The earlier Caddyfile change was wrong: I had changed the routing to "fix" the mislabel, when the real problem was the image content. With the image now correct, the original Caddyfile routing is also correct.
+5. **Restarted caddy** to pick up the reverted Caddyfile.
+6. **Kept the new `landing.esluce.com` route** (placeholder for when an external landing subdomain is desired — not currently routed via DNS).
 
-User chose to defer this; tracking as a follow-up.
+Verified post-deploy:
+
+| URL | Title | Bundle | Source |
+|---|---|---|---|
+| `https://esluce.com` | "Escluse - Distributed Infrastructure Platform" | `index-Djcdz0ZK.js` (704KB) | landing page (`landing-page-escluse/dist/`) |
+| `https://app.esluce.com` | "Escluse — Server Control Platform" | `index-DsxEaHex.js` (1.4MB) | dashboard (`app/dist/` with v0.4.3 fix) |
+| `https://landing.esluce.com` | — | — | NXDOMAIN (no DNS A record yet; caddy logs show Let's Encrypt + ZeroSSL cert acquisition failing on http-01 challenge) |
+
+User-facing impact: any bookmarks/links to `esluce.com/servers/{id}` or other dashboard paths will now show the landing page instead. The dashboard is at `https://app.esluce.com`. Users need to update their bookmarks.
 
 ## Related
 - `TEMP_CHANGELOG.md` v0.4.3 — describes the frontend Address/Version/Console fix
