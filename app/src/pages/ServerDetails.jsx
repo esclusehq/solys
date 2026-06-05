@@ -447,7 +447,7 @@ export default function ServerDetails() {
                         {isTransitional ? '⏳' : server.status === 'running' ? (autoWake ? '💤' : '■') : (server.auto_wake ? '💤' : '▶')}
                         {isTransitional ? (server.status === 'container_running' ? 'Starting Minecraft...' : server.status === 'starting' ? 'Starting...' : 'Stopping...') : server.status === 'running' ? (autoWake ? ' Sleep' : ' Stop') : (server.auto_wake ? ' Wake' : ' Start')}
                     </button>
-                    <Link to="/console"
+                    <Link to={`/console?serverId=${id}`}
                         className="px-5 py-2 rounded-xl bg-[rgba(255,255,255,0.03)] border border-[var(--color-cosmic-border)] text-[var(--color-text-main)] font-bold text-sm hover:border-[var(--color-cosmic-cyan)]/50 transition-all flex items-center gap-2">
                         ⌨ Open Console
                     </Link>
@@ -533,7 +533,7 @@ export default function ServerDetails() {
                             serverId={id}
                             serverVersion={server?.mc_version}
                             serverLoader={server?.mc_loader || server?.loader_type}
-                            serverGameType={server?.game || server?.executor_type}
+                            serverGameType={server?.config?.game_type || server?.game}
                             mode={['PAPER', 'SPIGOT', 'BUKKIT', 'PURPUR', 'FORGE', 'FABRIC', 'NEOFORGE'].includes(server?.mc_loader?.toUpperCase()) ? 'plugin' : 'datapack'}
                         />
                     </div>
@@ -1318,7 +1318,7 @@ export default function ServerDetails() {
                                     />
                                 </form>
                                 <div className="p-3">
-                                    <Link to="/console" className="w-full py-2 rounded-lg bg-[rgba(13,223,242,0.1)] border border-[rgba(13,223,242,0.3)] text-[var(--color-cosmic-cyan)] text-xs font-bold hover:bg-[rgba(13,223,242,0.2)] transition-all flex items-center justify-center gap-2">
+                                    <Link to={`/console?serverId=${id}`} className="w-full py-2 rounded-lg bg-[rgba(13,223,242,0.1)] border border-[rgba(13,223,242,0.3)] text-[var(--color-cosmic-cyan)] text-xs font-bold hover:bg-[rgba(13,223,242,0.2)] transition-all flex items-center justify-center gap-2">
                                         Open Full Console ↗
                                     </Link>
                                 </div>
