@@ -164,6 +164,12 @@ pub struct CommandParams {
     pub local_path: Option<String>,
     #[serde(default)]
     pub remote_path: Option<String>,
+    #[serde(default)]
+    pub command: Option<String>,
+    #[serde(default)]
+    pub rcon_port: Option<u16>,
+    #[serde(default)]
+    pub rcon_password: Option<String>,
 }
 
 #[derive(Debug, Clone, serde::Deserialize)]
@@ -569,9 +575,24 @@ pub async fn run(
                                                     if let Some(lp) = params.as_ref().and_then(|p| p.local_path.clone()) {
                                                         payload["local_path"] = serde_json::json!(lp);
                                                     }
-                                                    if let Some(rp) = params.as_ref().and_then(|p| p.remote_path.clone()) {
-                                                        payload["remote_path"] = serde_json::json!(rp);
-                                                    }
+                                                     if let Some(rp) = params.as_ref().and_then(|p| p.remote_path.clone()) {
+                                                         payload["remote_path"] = serde_json::json!(rp);
+                                                     }
+                                                     if let Some(c) = params.as_ref().and_then(|p| p.command.clone()) {
+                                                         payload["command"] = serde_json::json!(c);
+                                                     }
+                                                     if let Some(rp) = params.as_ref().and_then(|p| p.rcon_port) {
+                                                         payload["rcon_port"] = serde_json::json!(rp);
+                                                     }
+                                                     if let Some(pw) = params.as_ref().and_then(|p| p.rcon_password.clone()) {
+                                                         payload["rcon_password"] = serde_json::json!(pw);
+                                                     }
+                                                     if let Some(nn) = params.as_ref().and_then(|p| p.new_name.clone()) {
+                                                         payload["new_name"] = serde_json::json!(nn);
+                                                     }
+                                                     if let Some(bp) = params.as_ref().and_then(|p| p.backup_path.clone()) {
+                                                         payload["backup_path"] = serde_json::json!(bp);
+                                                     }
 
                                                  if let Some(config) = deploy_config {
                                                     payload["image"] = serde_json::json!(config.image);
