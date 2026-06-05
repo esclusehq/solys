@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, Link } from 'react-router-dom';
 import { useServers } from '../hooks/useServers';
 import Terminal from '../components/Terminal';
 
@@ -8,6 +8,7 @@ export default function Console() {
     const [searchParams] = useSearchParams();
     const [selectedId, setSelectedId] = useState('');
     const urlAppliedRef = useRef(false);
+    const contextServerId = searchParams.get('serverId');
 
     useEffect(() => {
         if (urlAppliedRef.current) return;
@@ -22,7 +23,18 @@ export default function Console() {
         <div className="flex-1 flex flex-col overflow-hidden h-full min-h-0">
             {/* Header */}
             <header className="shrink-0 px-8 py-6 border-b border-[var(--color-cosmic-border)] flex items-center justify-between">
-                <h1 className="text-2xl font-bold">Console</h1>
+                <div className="flex items-center gap-4">
+                    {contextServerId && (
+                        <Link
+                            to={`/servers/${contextServerId}`}
+                            className="px-3 py-1.5 rounded-lg bg-[rgba(255,255,255,0.03)] border border-[var(--color-cosmic-border)] text-[var(--color-text-muted)] text-sm hover:border-[var(--color-cosmic-cyan)]/50 hover:text-[var(--color-cosmic-cyan)] transition-all flex items-center gap-1.5"
+                            title="Back to server details"
+                        >
+                            ← Back to Server
+                        </Link>
+                    )}
+                    <h1 className="text-2xl font-bold">Console</h1>
+                </div>
                 <div className="flex items-center gap-4">
                     <select
                         value={selectedId}
