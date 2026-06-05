@@ -285,12 +285,27 @@ pub async fn run(
         return Ok(Uuid::nil());
     }
 
-    loop {
-        info!(url = %ws_url, "Connecting to backend");
+    let mut reconnect_attempt: u32 = 0;
 
-        match connect_async(&ws_url).await {
-            Ok((ws_stream, _)) => {
-                info!("WebSocket connected");
+    loop {
+        reconnect_attempt = reconnect_attempt.saturating_add(1);
+        info!(
+            url = %ws_url,
+            attempt = reconnect_attempt,
+            delay_secs = initial_delay.as_secs(),
+            "Connecting to backend (reconnect loop)"
+        );
+
+        // Wrap connect_async in a timeout so a hung TCP/WS handshake doesn't block forever
+        let connect_result = tokio::time::timeout(
+            std::time::Duration::from_secs(15),
+            connect_async(&ws_url),
+        )
+        .await;
+
+        match connect_result {
+            Ok(Ok((ws_stream, _))) => {
+                info!(attempt = reconnect_attempt, "WebSocket connected");
 
                 let (mut ws_sender, mut ws_receiver) = ws_stream.split();
 
@@ -488,7 +503,36 @@ pub async fn run(
                                         containers: c,
                                     };
                                     if let Ok(msg) = serde_json::to_string(&heartbeat) {
-                                        let _ = ws_sender.send(Message::Text(msg.into())).await;
+                                        // Timeout the send so a dead/silent WebSocket cannot stall
+                                        // the heartbeat branch forever. If the send fails or hangs,
+                                        // break out of the inner loop so the outer reconnect loop
+                                        // can re-establish the connection.
+                                        let send_fut =
+                                            ws_sender.send(Message::Text(msg.into()));
+                                        match tokio::time::timeout(
+                                            std::time::Duration::from_secs(5),
+                                            send_fut,
+                                        )
+                                        .await
+                                        {
+                                            Ok(Ok(_)) => {}
+                                            Ok(Err(e)) => {
+                                                error!(
+                                                    error = %e,
+                                                    "Heartbeat send failed, WS is likely dead; \
+                                                     breaking inner loop to trigger reconnect"
+                                                );
+                                                break;
+                                            }
+                                            Err(_elapsed) => {
+                                                error!(
+                                                    timeout_secs = 5,
+                                                    "Heartbeat send timed out, WS is likely dead; \
+                                                     breaking inner loop to trigger reconnect"
+                                                );
+                                                break;
+                                            }
+                                        }
                                     }
                                 }
                             }
@@ -498,7 +542,14 @@ pub async fn run(
                                 Ok(Message::Ping(p)) => {
                                     let _ = ws_sender.send(Message::Pong(p)).await;
                                 }
-                                Ok(Message::Close(_)) | Ok(Message::Pong(_)) | Ok(Message::Binary(_)) | Ok(Message::Frame(_)) => {}
+                                Ok(Message::Close(close_frame)) => {
+                                    warn!(
+                                        frame = ?close_frame,
+                                        "Received close frame from backend, ending inner loop"
+                                    );
+                                    break;
+                                }
+                                Ok(Message::Pong(_)) | Ok(Message::Binary(_)) | Ok(Message::Frame(_)) => {}
                                 Ok(Message::Text(text)) => {
                                     let text_str = text.to_string();
                                     info!(msg = %text_str, "=== RECEIVED TEXT MESSAGE ===");
@@ -763,12 +814,28 @@ pub async fn run(
                                 }
                             }
                         }
-                        else => break
+                        else => {
+                            warn!("All select branches exhausted, breaking inner loop");
+                            break;
+                        }
                     }
                 }
+
+                warn!("Inner loop exited, will attempt reconnection");
             }
-            Err(e) => {
-                error!(error = %e, "Failed to connect to backend");
+            Ok(Err(e)) => {
+                error!(
+                    error = %e,
+                    attempt = reconnect_attempt,
+                    "Failed to connect to backend (handshake error)"
+                );
+            }
+            Err(_elapsed) => {
+                error!(
+                    attempt = reconnect_attempt,
+                    timeout_secs = 15,
+                    "Connect to backend timed out (handshake hung)"
+                );
             }
         }
 
