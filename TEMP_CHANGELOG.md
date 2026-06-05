@@ -34,6 +34,7 @@ Hotfix deploy di hari yang sama dengan v0.4.2 (Jumat) — fokus ke display bugs 
 - [app] Server Details page "Version" column menampilkan `config.minecraft_version` (user-supplied at create time, bisa stale / default ke LATEST). Sekarang prefer `server.mc_version` (reported by agent from running container) — yang akan accurate 26.1.2 bukan yang user ketik 26.2
 - [app] Server Details page tidak ada link "Open Console" — operator harus guess URL `/console?serverId=<id>`. Tambah cyan button "⌨ Open Console" di header next to "Scheduled Tasks" button
 - [app] "Open Console" link dari Server Details page sekarang auto-connect ke RCON terminal — link pass `?serverId=<id>` ke `/console`, dan `Console.jsx` baca URL param via `useSearchParams` + pre-select server di dropdown + switch status indicator ke "Connected" (green pulse) + render `<Terminal serverId={id}/>` yang auto-connect ke `/ws/terminal/<id>`. Sebelumnya user harus manual pilih server dari dropdown setelah navigate — defeating the purpose of one-click shortcut
+- [app] Console page (when reached via `?serverId=<id>`) sekarang ada `← Back to Server` button di header — link ke `/servers/<id>` (Server Details page). Sebelumnya user stuck di Console tanpa cara balik kecuali pakai browser back atau sidebar nav. Button hidden kalau user datang dari sidebar (`/console` tanpa `?serverId=`) karena no server context
 
 ### Fixed (lintas-komponen)
 - [app] PluginManager component Load More button + Empty State render di luar Search tab — closing tags salah tempat di end-of-file (setelah Templates dan Installed tabs). Fix: move closing JSX + Load More + Empty State ke dalam Search tab scope. Tiap tab sekarang self-contained
@@ -158,6 +159,7 @@ Hotfix deploy di tengah minggu. Semua fix akan merge ke v0.4.0 (Minggu).
       '[app] Server Details Version column: prefer server.mc_version (from running container) over stale config.minecraft_version',
       '[app] Server Details page: cyan "⌨ Open Console" button links to /console?serverId=<id>',
       '[app] Console page reads ?serverId= from URL and auto-connects to that server\'s RCON terminal — no manual select needed',
+      '[app] Console page (with ?serverId= in URL) shows a "← Back to Server" button in the header linking to /servers/<id>; hidden when arriving from sidebar (no server context)',
       '[app] PluginManager: Load More button + Empty State were rendering outside Search tab due to misplaced closing tags; moved into Search tab scope',
       '[app] PluginManager mode-detection (plugin vs datapack) was reading server.game / server.executor_type (flat fields that don\'t exist) and falling back to "datapack" for every server; now reads server.config.game_type (nested, actually populated by create-server form) — Paper/Spigot/Fabric plugins now show up in the Search tab',
       '[landing] escluse-landing:latest ECR image had been overwritten with the dashboard bundle (accidental); rebuilt from landing-page-escluse/dist via Dockerfile.landing and pushed',
