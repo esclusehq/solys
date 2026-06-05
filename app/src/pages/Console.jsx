@@ -1,10 +1,22 @@
 import { useState, useEffect, useRef } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useServers } from '../hooks/useServers';
 import Terminal from '../components/Terminal';
 
 export default function Console() {
     const { servers } = useServers();
+    const [searchParams] = useSearchParams();
     const [selectedId, setSelectedId] = useState('');
+    const urlAppliedRef = useRef(false);
+
+    useEffect(() => {
+        if (urlAppliedRef.current) return;
+        const fromUrl = searchParams.get('serverId');
+        if (fromUrl && servers.some(s => s.id === fromUrl)) {
+            setSelectedId(fromUrl);
+            urlAppliedRef.current = true;
+        }
+    }, [searchParams, servers]);
 
     return (
         <div className="flex-1 flex flex-col overflow-hidden h-full min-h-0">
