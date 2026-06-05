@@ -1,4 +1,5 @@
 name: Canary
+
 on:
   push:
     branches:
@@ -10,6 +11,10 @@ env:
   CARGO_TERM_COLOR: always
   BINARY_NAME: escluse-agent
   R2_BUCKET: solys-release
+
+concurrency:
+  group: canary-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build:
@@ -27,6 +32,7 @@ jobs:
             os: ubuntu-latest
             ext: ".exe"
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
       - name: Install Rust toolchain
@@ -37,6 +43,9 @@ jobs:
         uses: taiki-e/setup-cross-toolchain-action@v1
         with:
           target: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
       - name: Build
         run: |
           cargo build --release --manifest-path Cargo.toml \
@@ -51,10 +60,12 @@ jobs:
         with:
           name: binary-${{ matrix.target }}
           path: staging/
+          compression-level: 0
 
   package:
     needs: [build]
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/download-artifact@v4
         with:
@@ -91,10 +102,12 @@ jobs:
         with:
           name: release
           path: release/
+          compression-level: 0
 
   sign:
     needs: [package]
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       id-token: write
     steps:
@@ -115,10 +128,12 @@ jobs:
           name: release-signed
           path: .
           include-hidden-files: true
+          compression-level: 0
 
   upload:
     needs: [sign]
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     env:
       AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}

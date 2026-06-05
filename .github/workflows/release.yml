@@ -1,4 +1,5 @@
 name: Release
+
 on:
   push:
     tags:
@@ -10,9 +11,14 @@ env:
   BINARY_NAME: escluse-agent
   R2_BUCKET: solys-release
 
+concurrency:
+  group: release-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   validate:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     outputs:
       version: ${{ steps.version.outputs.version }}
     steps:
@@ -44,6 +50,7 @@ jobs:
             ext: ".exe"
             pkg_arch_rpm: ""
             pkg_arch_deb: ""
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
       - name: Install Rust toolchain
@@ -54,6 +61,9 @@ jobs:
         uses: taiki-e/setup-cross-toolchain-action@v1
         with:
           target: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
       - name: Build
         run: |
           cargo build --release --manifest-path Cargo.toml \
@@ -77,6 +87,7 @@ jobs:
         runner: [ubuntu-latest, ubuntu-24.04-arm]
       fail-fast: false
     runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
@@ -145,6 +156,7 @@ jobs:
   assemble:
     needs: [package, validate]
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
         with:
@@ -172,6 +184,7 @@ jobs:
   sign:
     needs: [assemble]
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       id-token: write
     steps:
@@ -197,6 +210,7 @@ jobs:
   upload:
     needs: [sign, validate]
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     env:
       AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
@@ -231,6 +245,7 @@ jobs:
   manifest:
     needs: [upload, validate]
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     env:
       AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
