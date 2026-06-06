@@ -295,3 +295,165 @@ Plans:
 **Wave 1**
 - [x] 66-01-PLAN.md — Create Umami Docker stack (docker-compose.yml, Caddyfile, .env.example) + DEPLOYMENT.md
 - [ ] 66-02-PLAN.md — Inject Umami tracking scripts into landing-page-escluse/index.html and app/index.html
+
+### Phase 67: Agent auto-resolve Minecraft port reachability issues (CGN/firewall/Docker port exposure)
+
+**Goal:** Make the Esluce agent and backend automatically detect and resolve Minecraft game port reachability issues at the agent node via hybrid (backend-probe + agent-diagnostics) detection, 4-mode classification (PORT_NOT_BOUND, HOST_FIREWALL_BLOCKED, CGNAT_DETECTED, UPnP_UNAVAILABLE), and safe-to-fix auto-remediation with per-server audit log.
+**Requirements**: DEPLOY-01..05, RCON-01..02 (lifecycle hooks + audit reuse)
+**Depends on:** Phase 66
+**Plans:** 3 plans
+
+**Wave 1** *(foundational — schema + persistence)*:
+- [ ] 67-01: Schema migrations (servers columns + connectivity_audit_log table) + entity + repository + container wiring + [BLOCKING] sqlx migrate run
+
+**Wave 2** *(agent + backend in parallel, blocked on Wave 1 completion)*:
+- [ ] 67-02: Agent-side connectivity (Cargo deps, diagnostics/firewall/upnp handlers, ConnectivityMonitor background task, IP-change hook in DnsWatcher)
+- [ ] 67-03: Backend-side connectivity (WS NodeMessage extension, ConnectivityService probe/classify/dispatch, REST handlers, routes mount, container wiring)
+
+**Cross-cutting constraints:**
+- Hybrid probe model: backend probes from public internet, agent sends raw local diagnostics (D-01)
+- Auto-fix policy: safe-to-fix gate only — never modify user firewall rules or arbitrary root commands (D-05)
+- Audit log: every auto-fix action logged with exact commands + timestamps, append-only `connectivity_audit_log` table (D-17)
+- Probe triggers: server.start (~5-10s delay) + IP/firewall change events + 5-min periodic fallback (D-02)
+- Per-server connectivity columns on `servers`: `connectivity_status`, `connectivity_mode`, `last_probe_at`
+- Manual "Reachable" button: POST `/api/v1/servers/:id/connectivity/probe` with 30s per-server cooldown in Redis
+
+### Phase 68: Escluse Relay Infrastructure
+
+Objective:
+Implement Esluce Relay as the primary connectivity path for Minecraft servers, with relay-backed stable DNS on *.play.esluce.net and conditional Direct Mode fast-path on *.play.esluce.com.
+
+Architecture:
+
+Player
+↓
+[server-name].play.esluce.net   ← always-on, stable (relay)
+[server-name].play.esluce.com   ← conditional, best-effort (direct)
+↓
+Esluce Relay Gateway (relay.esluce.net)   ← primary path
+OR
+User's public IP (port-forwarded)         ← fast-path when probe-verified
+↓
+Persistent Tunnel (relay) / Direct TCP (direct)
+↓
+Esluce Agent
+↓
+Minecraft Server
+
+Requirements:
+
+1. Relay Gateway Service
+
+* Deploy relay.esluce.net on AWS.
+* Accept persistent outbound tunnel connections from agents.
+* Maintain active tunnel registry indexed by server_id.
+* Support multiple concurrent tunnels.
+* Detect stale/disconnected tunnels via heartbeat timeout (30s default).
+* Handle Minecraft Java TCP traffic.
+* Reject connection requests to server_id with no active tunnel.
+
+2. Agent Tunnel Client
+
+* Agent establishes outbound encrypted tunnel to relay.esluce.net.
+* Automatic reconnect with exponential backoff on disconnect.
+* Heartbeat every 10s; tunnel marked stale after 3 missed heartbeats.
+* Register on connect:
+  * server_id
+  * node_id
+  * agent_version
+  * minecraft_port
+* Report tunnel health (latency, uptime, bytes transferred) periodically.
+
+3. Routing Layer
+
+* Player connection to <server>.play.esluce.net → relay gateway → lookup active tunnel by server_id → forward TCP.
+* Reject (close socket) when no active tunnel exists for requested server_id.
+* Support multiple servers simultaneously.
+* Connection-level isolation: per-tunnel stream multiplexing.
+
+4. DNS Integration (relay-first)
+
+* Relay endpoint (always-on):
+  * `<server>.play.esluce.net` → CNAME/ALIAS → relay.esluce.net → dynamic resolution to active tunnel.
+  * Endpoint remains stable across agent restarts, IP changes, ISP changes.
+  * DNS zone `esluce.net` delegated to relay infrastructure (e.g., Route 53).
+* Direct Mode endpoint (conditional, best-effort):
+  * `<server>.play.esluce.com` → A record → user's public IP, only emitted when Direct Mode is probe-verified working.
+  * Removed when mode flips to Relay or Direct probe fails.
+  * Updated by agent via Cloudflare API on every IP change (existing behavior).
+  * DNS zone `esluce.com` stays on Cloudflare, contains only valid A records.
+* Agent owns DNS lifecycle for both zones based on current mode and probe results.
+* Backward compat: existing `<server>.play.esluce.com` wildcard records for servers predating Phase 68 continue to work.
+
+5. Connectivity Mode Selection (relay-default)
+
+* Relay Mode is the **default and primary** path — works for CGNAT, NAT, port-forward-failed, and non-CGNAT alike.
+* Direct Mode is a **fast-path optimization** for non-CGNAT users with working port forwarding.
+* Mode flip logic:
+  * On agent start: probe Direct Mode reachability (external UDP/TCP probe to A record).
+  * Direct probe success + <50ms latency penalty vs relay → emit `<server>.play.esluce.com`, mode = Direct.
+  * Direct probe failure OR user is CGNAT-detected → skip `<server>.play.esluce.com`, mode = Relay.
+  * Periodic re-probe (every 5 min); flip mode if conditions change.
+* Automatic fallback without player-side software. Player can use either address; agent picks the best one.
+
+6. Dashboard Integration
+
+Add Connectivity section.
+
+Connection Mode: Direct / Relay / Offline
+
+Relay Status: Connected / Connecting / Disconnected
+
+Public Addresses (both shown when applicable):
+* `<server>.play.esluce.net` — always-on, relay-backed
+* `<server>.play.esluce.com` — shown only when Direct Mode is active
+
+Tunnel Health:
+* Latency (relay round-trip)
+* Last Heartbeat
+* Connection Duration
+* Mode (Direct / Relay / Offline)
+* Direct Probe Status (Pass / Fail / Skipped)
+
+7. Security
+
+* Authenticate tunnel sessions via per-agent token issued at agent registration.
+* Validate server_id ownership against backend before tunnel accepted.
+* Prevent unauthorized tunnel registration (replay protection, nonce-based handshake).
+* TLS 1.3+ for all relay-agent communication.
+* Rate limit connection attempts per source IP (100/min default).
+* Rate limit tunnel registration per server_id (1 active tunnel max, replacement on reconnect).
+
+8. Monitoring
+
+* Active tunnels
+* Relay bandwidth (in/out Mbps)
+* Concurrent players per tunnel
+* Tunnel disconnects (reconnect rate)
+* Relay latency (p50, p95, p99)
+* Error rates (handshake failures, timeouts, rejected lookups)
+* Mode distribution (% of servers in Direct vs Relay at any time)
+
+9. Initial Scope
+
+* Minecraft Java TCP support only.
+* Single AWS relay region (single AZ).
+* Single relay gateway deployment (no horizontal scale).
+* No load balancing.
+* No multi-region routing.
+* No UDP support (Minecraft Bedrock deferred).
+
+**Goal:** Implement Esluce Relay as the primary connectivity path on *.play.esluce.net (always-on, stable across restarts and IP changes), with Direct Mode A records on *.play.esluce.com emitted as best-effort fast-path only when probe-verified. Single AWS region, single gateway, Minecraft Java TCP only.
+
+**Depends on:** Phase 67
+**Plans:** 0 plans
+
+**Success Criteria**:
+1. Relay endpoint `<server>.play.esluce.net` is stable across ≥10 agent restarts (DNS lookup returns valid CNAME → active tunnel).
+2. A user behind CGNAT can complete the full flow: install agent → create server → receive `<server>.play.esluce.net` → external player connects successfully.
+3. A non-CGNAT user with working port forwarding has BOTH addresses active; latency via `play.esluce.com` is measurably lower than via `play.esluce.net` (≥20% p50 improvement).
+4. When Direct Mode probe fails, the `play.esluce.com` A record is removed within 60s; no stale records accumulate in the `esluce.com` zone.
+5. Mode flip is automatic: agent re-probes every 5 min and updates DNS state without requiring user action.
+
+Plans:
+- [ ] TBD (run /gsd-plan-phase 68 to break down)
