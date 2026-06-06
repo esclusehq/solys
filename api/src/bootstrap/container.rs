@@ -19,6 +19,7 @@ use crate::infrastructure::{
     repositories::postgres_node_api_key_repository::PostgresNodeApiKeyRepository,
     repositories::postgres_node_registration_token_repository::PostgresNodeRegistrationTokenRepository,
     repositories::postgres_cron_task_repository::PostgresCronTaskRepository,
+    repositories::sqlx_connectivity_audit_log_repository::PostgresConnectivityAuditLogRepository,
     node_client::NodeClient,
     events::event_bus::EventBus,
     factories::simple_executor_factory::SimpleExecutorFactory,
@@ -149,6 +150,8 @@ pub struct AppContainer {
     pub apply_template_use_case: Arc<ApplyTemplateUseCase<dyn TemplateRepository>>,
     // Crash report channel (Phase 60) — agent WS handler sends, MonitoringService drains
     pub crash_report_tx: Option<mpsc::Sender<CrashReportData>>,
+    // Phase 67: Connectivity audit log repository
+    pub connectivity_audit_log_repository: Arc<PostgresConnectivityAuditLogRepository>,
 }
 
 impl AppContainer {
@@ -341,6 +344,11 @@ impl AppContainer {
             Some(crash_report_rx),
         ));
 
+        // Phase 67: Connectivity audit log repository
+        let connectivity_audit_log_repository = Arc::new(
+            PostgresConnectivityAuditLogRepository::new(pool.clone()),
+        );
+
         let billing_service: Arc<dyn BillingService> = if config.lemon_squeezy_api_key.is_some() {
             Arc::new(crate::infrastructure::billing::LemonSqueezyService::new(
                 config.lemon_squeezy_api_key.clone(),
@@ -406,6 +414,7 @@ impl AppContainer {
             delete_template_use_case,
             apply_template_use_case,
             crash_report_tx: Some(crash_report_tx),
+            connectivity_audit_log_repository,
         }
     }
 }

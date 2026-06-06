@@ -74,6 +74,10 @@ sysinfo       = "0.32"
 # Use zlib-ng for cross-compile
 libz-sys = { version = "1", features = ["zlib-ng-no-cmake-experimental-community-maintained"] }
 
+# Network diagnostics for Phase 67 connectivity probe (D-04, D-07)
+upnp-rs          = "0.2"
+local-ip-address = "0.6"
+
 [[bin]]
 name = "escluse-agent"
 path = "src/main.rs"
