@@ -353,8 +353,11 @@ From RESEARCH.md (the standard library choices):
                // Enforce 1:1 subdomain → server_id mapping
                if let Some(existing_server_id) = self.by_subdomain.insert(handle.subdomain.clone(), handle.server_id) {
                    if existing_server_id != handle.server_id {
-                       // Subdomain collision: another server is using this subdomain
-                       self.by_subdomain.insert(handle.subdomain.clone(), handle.server_id);
+                       // Subdomain collision: another server is using this subdomain.
+                       // Rollback: restore the original mapping (existing_server_id) so the
+                       // existing owner is preserved. The new handle is rejected and is not
+                       // inserted into by_subdomain.
+                       self.by_subdomain.insert(handle.subdomain.clone(), existing_server_id);
                        return Err(RegistryError::SubdomainInUse);
                    }
                }
