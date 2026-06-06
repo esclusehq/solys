@@ -135,6 +135,11 @@ enum BackendMessage {
         public_ip: Option<String>,
         #[serde(default)]
         subdomain: Option<String>,
+        /// Per-server subdomains to keep in sync alongside the global one
+        /// (e.g. `["mantap-wou", "server-lain"]` — the watcher prepends
+        /// `<sub>.<global_subdomain>.<wildcard_domain>`).
+        #[serde(default)]
+        extra_subdomains: Vec<String>,
     },
 }
 
@@ -792,7 +797,8 @@ pub async fn run(
                                                 };
                                                 let _ = ws_tx.send(response).await;
                                             }
-                                            BackendMessage::DnsConfig { api_token, zone_id, zone_name, wildcard_domain, auto_refresh, refresh_interval_secs, public_ip, subdomain } => {
+                                            BackendMessage::DnsConfig { api_token, zone_id, zone_name, wildcard_domain, auto_refresh, refresh_interval_secs, public_ip, subdomain, extra_subdomains } => {
+                                                let per_server_count = extra_subdomains.len();
                                                 let config = CloudflareDnsConfig {
                                                     api_token,
                                                     zone_id,
@@ -801,10 +807,12 @@ pub async fn run(
                                                     auto_refresh,
                                                     refresh_interval_secs,
                                                     subdomain,
+                                                    extra_subdomains,
                                                 };
                                                 let mut guard = dns::DNS_CONFIG.write().await;
                                                 *guard = Some(config);
-                                                info!("DNS configuration updated from backend");
+                                                drop(guard);
+                                                info!("DNS configuration updated from backend ({} per-server subdomains)", per_server_count);
                                             }
                                             BackendMessage::Ping => {
                                                 let node_id_value = *node_id.lock().unwrap();
