@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: completed
+status: executing
 stopped_at: Phase 67 context gathered
-last_updated: "2026-06-06T17:09:22.713Z"
-last_activity: 2026-06-03 -- Phase 08 marked complete
+last_updated: "2026-06-06T18:23:01.454Z"
+last_activity: 2026-06-06 -- Phase 67 planning complete
 progress:
-  total_phases: 22
+  total_phases: 23
   completed_phases: 21
-  total_plans: 67
+  total_plans: 70
   completed_plans: 67
-  percent: 100
+  percent: 96
 ---
 
 # Project State: Esluce
@@ -27,8 +27,8 @@ See: .planning/PROJECT.md (updated 2026-04-09)
 
 Phase: 08 — COMPLETE
 Plan: 3 of 3
-Status: Phase 08 complete
-Last activity: 2026-06-03 -- Phase 08 marked complete
+Status: Ready to execute
+Last activity: 2026-06-06 -- Phase 67 planning complete
 
 Progress: [██████████] 100%
 
@@ -164,6 +164,8 @@ Progress: [██████████] 100%
 - Phase 12 added: Fix the logs livestream in frontend
 - Phase 66 added: integrasikan umami analitycs dashboard dengan RDS di project escluse
 - Phase 67 added: Agent auto-resolve Minecraft port reachability issues (CGN/firewall/Docker port exposure)
+- Phase 68 added: Escluse Relay Infrastructure — automatic fallback connectivity path (Relay Gateway on AWS, agent tunnel client, DNS routing via play.esluce.net, dashboard integration).
+- Phase 68 edited: Regenerated to Strategy C (relay-first): *.play.esluce.net is always-on primary, *.play.esluce.com Direct Mode A record is conditional best-effort. Title, Goal, Requirements (1-9), Success Criteria, Security, Monitoring all updated. Depends on Phase 67 preserved.
 
 ### Decisions
 
