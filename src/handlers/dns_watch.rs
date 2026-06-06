@@ -109,22 +109,85 @@ async fn check_and_update() -> Result<()> {
         return Ok(());
     }
 
-    let subdomain = config.subdomain.clone()
+    let global_subdomain = config.subdomain.clone()
         .unwrap_or_else(|| config.zone_name.split('.').next().unwrap_or("node").to_string());
-    let full_name = format!("{}.{}", subdomain, config.wildcard_domain);
 
-    let existing = dns::find_dns_record(&config.api_token, &config.zone_id, &full_name).await?;
-
-    match existing {
-        Some((record_id, _)) => {
-            dns::update_dns_record(&config.api_token, &config.zone_id, &record_id, &full_name, &current_ip).await?;
-            info!("DNS record updated via auto-refresh: {} -> {}", full_name, current_ip);
+    // Build the full list of FQDNs to keep in sync:
+    //   1. The global record: `<global_subdomain>.<wildcard_domain>` (e.g. `play.esluce.com`)
+    //   2. Per-server records: `<server_sub>.<global_subdomain>.<wildcard_domain>`
+    //      (e.g. `mantap-wou.play.esluce.com`) — pulled from config.extra_subdomains
+    let mut fqdns: Vec<String> = Vec::with_capacity(1 + config.extra_subdomains.len());
+    fqdns.push(format!("{}.{}", global_subdomain, config.wildcard_domain));
+    for sub in &config.extra_subdomains {
+        let trimmed = sub.trim();
+        if trimmed.is_empty() {
+            continue;
         }
-        None => {
-            let rid = dns::create_dns_record(&config.api_token, &config.zone_id, &full_name, &current_ip).await?;
-            info!("DNS record created via auto-refresh: {} -> {} (id: {})", full_name, current_ip, rid);
+        fqdns.push(format!("{}.{}.{}", trimmed, global_subdomain, config.wildcard_domain));
+    }
+
+    let mut updated = 0usize;
+    let mut created = 0usize;
+    let mut failed = 0usize;
+    for full_name in &fqdns {
+        match dns::find_dns_record(&config.api_token, &config.zone_id, full_name).await {
+            Ok(Some((record_id, _))) => {
+                match dns::update_dns_record(
+                    &config.api_token,
+                    &config.zone_id,
+                    &record_id,
+                    full_name,
+                    &current_ip,
+                )
+                .await
+                {
+                    Ok(()) => {
+                        info!(
+                            "DNS record updated via auto-refresh: {} -> {}",
+                            full_name, current_ip
+                        );
+                        updated += 1;
+                    }
+                    Err(e) => {
+                        error!("DNS update failed for {}: {}", full_name, e);
+                        failed += 1;
+                    }
+                }
+            }
+            Ok(None) => match dns::create_dns_record(
+                &config.api_token,
+                &config.zone_id,
+                full_name,
+                &current_ip,
+            )
+            .await
+            {
+                Ok(rid) => {
+                    info!(
+                        "DNS record created via auto-refresh: {} -> {} (id: {})",
+                        full_name, current_ip, rid
+                    );
+                    created += 1;
+                }
+                Err(e) => {
+                    error!("DNS create failed for {}: {}", full_name, e);
+                    failed += 1;
+                }
+            },
+            Err(e) => {
+                error!("DNS lookup failed for {}: {}", full_name, e);
+                failed += 1;
+            }
         }
     }
+
+    info!(
+        "DDNS cycle complete: {} updated, {} created, {} failed (of {} total)",
+        updated,
+        created,
+        failed,
+        fqdns.len()
+    );
 
     Ok(())
 }
