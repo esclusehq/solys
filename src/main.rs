@@ -228,6 +228,23 @@ async fn run_agent_core(config: agent_config::AgentConfig) -> Result<()> {
     info!("Runtime: {:?}", runtime.runtime);
     info!("Capabilities: {:?}", capabilities.to_string_list());
 
+    // Phase 67: expose the Docker client as a process-global so the
+    // connectivity diagnostics collector can `inspect_container` the
+    // server's container without going through the agent_connection
+    // task routing.
+    if let Some(docker) = runtime.docker() {
+        crate::state::set_docker_global(Arc::new(docker.clone()));
+    }
+
+    // Phase 67: wire the connectivity orchestrator to the WebSocket outbound.
+    // The actual outbound send lives in `agent_connection.rs`; until that
+    // hook is exposed, the orchestrator's OUTBOUND_TX stays None and reports
+    // are audit-logged only.
+    let tx_handle: Arc<dyn Fn(serde_json::Value) + Send + Sync> = Arc::new(move |payload| {
+        tracing::info!("[OUTBOUND_WIRED] Would send: {}", payload);
+    });
+    crate::handlers::connectivity::set_outbound_sender(tx_handle);
+
     // D-23: Auto-recovery step 1 - Load persisted state
     let initial_state = state::load_state().await;
     if let Some(loaded_state) = &initial_state {
@@ -290,6 +307,21 @@ async fn run_agent_core(config: agent_config::AgentConfig) -> Result<()> {
             tokio::time::sleep(std::time::Duration::from_millis(100)).await;
         }
         watcher_for_shutdown.stop().await;
+    });
+
+    // 9b. Start Connectivity Monitor (Phase 67 D-04 periodic re-collect).
+    //     Mirrors the DnsWatcher shutdown pattern above.
+    use crate::handlers::connectivity::ConnectivityMonitor;
+    let connectivity_monitor = Arc::new(ConnectivityMonitor::new());
+    connectivity_monitor.start().await;
+
+    let monitor_for_shutdown = connectivity_monitor.clone();
+    let shutdown_clone3 = shutdown.clone();
+    tokio::spawn(async move {
+        while !shutdown_clone3.load(Ordering::Relaxed) {
+            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        }
+        monitor_for_shutdown.stop().await;
     });
 
     // 10. Run agent with shutdown handling

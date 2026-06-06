@@ -109,7 +109,7 @@ pub async fn close(task: Task) -> Result<Value, anyhow::Error> {
         .map_err(|e| anyhow!("Invalid firewall.close_port payload: {}", e))?;
     let comment = format!("esluse:{}", p.server_id);
 
-    let (cli, cmd) = pick_cli()
+    let (cli, _cmd) = pick_cli()
         .ok_or_else(|| anyhow!("No host firewall CLI found"))?;
 
     // Enumerate ALL matching rules and delete each (Pitfall 3 — comment-match races).
