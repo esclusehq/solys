@@ -3213,7 +3213,7 @@ dependencies = [
 
 [[package]]
 name = "solys"
-version = "0.4.2"
+version = "0.4.4"
 dependencies = [
  "agent-backup",
  "agent-capability",
@@ -3230,6 +3230,7 @@ dependencies = [
  "anyhow",
  "axum",
  "bollard",
+ "bytes",
  "chrono",
  "dirs",
  "futures-util",

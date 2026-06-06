@@ -16,7 +16,7 @@ use uuid::Uuid;
 use crate::handlers;
 use crate::handlers::metrics;
 use crate::handlers::dns::{self, CloudflareDnsConfig};
-use crate::agent::result_sender::ResultSender;
+use crate::agent::result_sender::{AgentToBackend, ResultSender};
 use crate::task_state;
 use agent_config::AgentConfig;
 use agent_proto::{TaskResult, TaskStatus};
@@ -270,14 +270,11 @@ pub async fn run(
     let multiplier = config.reconnect_multiplier;
 
     let node_id: std::sync::Mutex<Option<Uuid>> = std::sync::Mutex::new(None);
-    
-    // ResultSender for buffering
-    let (ws_tx, _ws_rx) = mpsc::channel(100);
-    let result_sender = ResultSender::new(ws_tx.clone(), data_dir.clone());
+
+    // ResultSender starts with no sender; the inner reconnect loop installs a fresh
+    // sender (and a writer task that drains it into the WebSocket) on every connect.
+    let result_sender = ResultSender::new(None, data_dir.clone());
     result_sender.init().await?;
-    
-    // Set progress sender for task state tracking
-    crate::task_state::set_progress_sender(ws_tx);
 
     // Check shutdown before connecting
     if shutdown.load(Ordering::Relaxed) {
@@ -307,7 +304,7 @@ pub async fn run(
             Ok(Ok((ws_stream, _))) => {
                 info!(attempt = reconnect_attempt, "WebSocket connected");
 
-                let (mut ws_sender, mut ws_receiver) = ws_stream.split();
+                let (ws_sender, mut ws_receiver) = ws_stream.split();
 
                 // Collect system info for node registration
                 let mut sys = System::new_all();
@@ -320,7 +317,53 @@ pub async fn run(
                     Ok(ip) => ip,
                     Err(_) => "127.0.0.1".to_string(),
                 };
-                let register = AgentMessage::Register {
+
+                // Outbound channel: result_sender, task_state, and the inner loop all
+                // push `AgentToBackend` messages here. A single writer task drains the
+                // channel and serialises/writes them to the WebSocket. This is the
+                // fix for "WebSocket channel full, buffering result" — previously no
+                // task consumed the channel at all.
+                let (ws_tx, ws_rx) = mpsc::channel::<crate::agent::result_sender::AgentToBackend>(1000);
+                result_sender.update_sender(Some(ws_tx.clone())).await;
+                crate::task_state::set_progress_sender(ws_tx.clone());
+
+                // Writer task: owns the WebSocket sink and the channel receiver.
+                // Exits when the channel is closed (old sender clones dropped) or
+                // when a WS write fails — either way, the inner loop notices via
+                // the read side and triggers a reconnect.
+                let writer_handle = tokio::spawn(async move {
+                    use crate::agent::result_sender::AgentToBackend;
+                    let mut rx = ws_rx;
+                    let mut sink = ws_sender;
+                    while let Some(msg) = rx.recv().await {
+                        match msg {
+                            AgentToBackend::Pong(payload) => {
+                                if let Err(e) = sink.send(Message::Pong(payload)).await {
+                                    error!(error = %e, "Writer: Pong send failed, exiting");
+                                    return;
+                                }
+                            }
+                            other => {
+                                match serde_json::to_string(&other) {
+                                    Ok(text) => {
+                                        if let Err(e) = sink.send(Message::Text(text.into())).await {
+                                            error!(error = %e, "Writer: Text send failed, exiting");
+                                            return;
+                                        }
+                                    }
+                                    Err(e) => {
+                                        error!(error = %e, "Writer: serialise failed, skipping");
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    info!("Writer exiting: channel closed");
+                });
+
+                // Build the Register message; now send it via the channel so it
+                // gets serialised + written by the same writer task as everything else.
+                let register = AgentToBackend::Register {
                     id: config.agent_id,
                     name: agent_name.clone(),
                     ip: ip.clone(),
@@ -333,7 +376,7 @@ pub async fn run(
                     cpu_cores,
                     agent_version,
                 };
-                ws_sender.send(Message::Text(serde_json::to_string(&register)?.into())).await?;
+                ws_tx.send(register).await?;
 
                 info!("Waiting for register ack...");
                 
@@ -458,16 +501,23 @@ pub async fn run(
                 loop {
                     // Check shutdown signal
                     if shutdown.load(Ordering::Relaxed) {
-                        info!("Shutdown requested, closing connection...");
-                        let _ = ws_sender.close().await;
+                        info!("Shutdown requested, aborting writer to close connection...");
+                        writer_handle.abort();
                         break;
                     }
-                    
+
                     tokio::select! {
                         // Phase 60: Process crash reports from Docker event listener
                         Some(crash_msg) = crash_rx.recv() => {
-                            if let Ok(msg) = serde_json::to_string(&crash_msg) {
-                                let _ = ws_sender.send(Message::Text(msg.into())).await;
+                            // crash_msg is an AgentMessage::CrashReport — route via the
+                            // outbound channel so the writer task serialises + writes it.
+                            if let AgentMessage::CrashReport { server_id, exit_code, log_excerpt, timestamp } = crash_msg {
+                                let _ = ws_tx.send(AgentToBackend::CrashReport {
+                                    server_id,
+                                    exit_code,
+                                    log_excerpt,
+                                    timestamp,
+                                }).await;
                             }
                         }
                         _ = heartbeat_interval.tick() => {
@@ -496,42 +546,36 @@ pub async fn run(
                                         })
                                     }).collect();
                                     
-                                    let heartbeat = AgentMessage::Heartbeat {
+                                    let heartbeat = AgentToBackend::Heartbeat {
                                         node_id: id,
                                         status: "online".to_string(),
                                         metrics: Some(m),
                                         containers: c,
                                     };
-                                    if let Ok(msg) = serde_json::to_string(&heartbeat) {
-                                        // Timeout the send so a dead/silent WebSocket cannot stall
-                                        // the heartbeat branch forever. If the send fails or hangs,
-                                        // break out of the inner loop so the outer reconnect loop
-                                        // can re-establish the connection.
-                                        let send_fut =
-                                            ws_sender.send(Message::Text(msg.into()));
-                                        match tokio::time::timeout(
-                                            std::time::Duration::from_secs(5),
-                                            send_fut,
-                                        )
-                                        .await
-                                        {
-                                            Ok(Ok(_)) => {}
-                                            Ok(Err(e)) => {
-                                                error!(
-                                                    error = %e,
-                                                    "Heartbeat send failed, WS is likely dead; \
-                                                     breaking inner loop to trigger reconnect"
-                                                );
-                                                break;
-                                            }
-                                            Err(_elapsed) => {
-                                                error!(
-                                                    timeout_secs = 5,
-                                                    "Heartbeat send timed out, WS is likely dead; \
-                                                     breaking inner loop to trigger reconnect"
-                                                );
-                                                break;
-                                            }
+                                    // `ws_tx.send` applies backpressure to the channel —
+                                    // if the writer is stuck on a dead WS, the channel fills
+                                    // and this `await` will block. Wrap with a short timeout
+                                    // so a stuck writer doesn't stall heartbeats forever; if
+                                    // it does stall, the writer is probably wedged and we
+                                    // should break out and let the reconnect loop re-establish.
+                                    match tokio::time::timeout(
+                                        std::time::Duration::from_secs(5),
+                                        ws_tx.send(heartbeat),
+                                    )
+                                    .await
+                                    {
+                                        Ok(Ok(_)) => {}
+                                        Ok(Err(_closed)) => {
+                                            error!("Heartbeat channel closed, WS writer likely exited");
+                                            break;
+                                        }
+                                        Err(_elapsed) => {
+                                            error!(
+                                                timeout_secs = 5,
+                                                "Heartbeat channel send timed out, writer is likely wedged; \
+                                                 breaking inner loop to trigger reconnect"
+                                            );
+                                            break;
                                         }
                                     }
                                 }
@@ -540,7 +584,7 @@ pub async fn run(
                         Some(msg_result) = ws_receiver.next() => {
                             match msg_result {
                                 Ok(Message::Ping(p)) => {
-                                    let _ = ws_sender.send(Message::Pong(p)).await;
+                                    let _ = ws_tx.send(AgentToBackend::Pong(p)).await;
                                 }
                                 Ok(Message::Close(close_frame)) => {
                                     warn!(
@@ -688,7 +732,7 @@ pub async fn run(
                                                 };
                                                 result_sender.send(task_result).await;
                                                 
-                                                let response = AgentMessage::CommandResponse {
+                                                let response = AgentToBackend::CommandResponse {
                                                     request_id,
                                                     command,
                                                     server_id,
@@ -702,9 +746,7 @@ pub async fn run(
                                                     },
                                                     duration_ms: Some(duration_ms),
                                                 };
-                                                if let Ok(msg) = serde_json::to_string(&response) {
-                                                    let _ = ws_sender.send(Message::Text(msg.into())).await;
-                                                }
+                                                let _ = ws_tx.send(response).await;
                                             }
                                             BackendMessage::GetMetrics { request_id, container_id } => {
                                                 info!(request_id = %request_id, "Getting metrics");
@@ -734,7 +776,7 @@ pub async fn run(
                                                 };
                                                 result_sender.send(task_result).await;
                                                 
-                                                let response = AgentMessage::CommandResponse {
+                                                let response = AgentToBackend::CommandResponse {
                                                     request_id,
                                                     command: "get_metrics".to_string(),
                                                     server_id: Uuid::nil(),
@@ -748,9 +790,7 @@ pub async fn run(
                                                     },
                                                     duration_ms: Some(duration_ms),
                                                 };
-                                                if let Ok(msg) = serde_json::to_string(&response) {
-                                                    let _ = ws_sender.send(Message::Text(msg.into())).await;
-                                                }
+                                                let _ = ws_tx.send(response).await;
                                             }
                                             BackendMessage::DnsConfig { api_token, zone_id, zone_name, wildcard_domain, auto_refresh, refresh_interval_secs, public_ip, subdomain } => {
                                                 let config = CloudflareDnsConfig {
@@ -792,15 +832,13 @@ pub async fn run(
                                                             })
                                                         }).collect();
                                                         
-                                                        let heartbeat = AgentMessage::Heartbeat {
+                                                        let heartbeat = AgentToBackend::Heartbeat {
                                                             node_id: id,
                                                             status: "online".to_string(),
                                                             metrics: Some(m),
                                                             containers: c,
                                                         };
-                                                        if let Ok(msg) = serde_json::to_string(&heartbeat) {
-                                                            let _ = ws_sender.send(Message::Text(msg.into())).await;
-                                                        }
+                                                        let _ = ws_tx.send(heartbeat).await;
                                                     }
                                                 }
                                             }

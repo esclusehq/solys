@@ -8,6 +8,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
+use bytes::Bytes;
 use tokio::fs;
 use tokio::sync::{mpsc, Mutex};
 use tracing::{error, info, warn};
@@ -19,51 +20,95 @@ const BUFFER_FILE_NAME: &str = "task_results.buffer";
 const MAX_BUFFER_SIZE: usize = 1000;
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(tag = "type")]
 pub enum AgentToBackend {
+    #[serde(rename = "task_result")]
     TaskResult(TaskResult),
-    Heartbeat {
-        node_id: Uuid,
-        status: String,
-        task_count: usize,
-    },
+    #[serde(rename = "register")]
     Register {
         id: Option<Uuid>,
         name: String,
         ip: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        podman_version: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        container_runtime: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        os_info: Option<String>,
         capabilities: Vec<String>,
+        #[serde(default)]
+        containers: Vec<serde_json::Value>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        total_memory: Option<i64>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        cpu_cores: Option<i32>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        agent_version: Option<String>,
     },
-    ContainerEvent {
+    #[serde(rename = "heartbeat")]
+    Heartbeat {
         node_id: Uuid,
-        event: String,
-        container_id: String,
-        container_name: String,
+        status: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        metrics: Option<serde_json::Value>,
+        #[serde(default)]
+        containers: Vec<serde_json::Value>,
     },
+    #[serde(rename = "command_response")]
+    CommandResponse {
+        request_id: Uuid,
+        command: String,
+        server_id: Uuid,
+        success: bool,
+        output: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        duration_ms: Option<u64>,
+    },
+    #[serde(rename = "task_progress")]
     TaskProgress {
         task_id: Uuid,
         status: String,
         progress: f32,
         message: String,
     },
+    #[serde(rename = "log_output")]
     LogOutput {
         server_id: Uuid,
         timestamp: String,
         line: String,
         stream: String,
     },
+    #[serde(rename = "crash_report")]
+    CrashReport {
+        server_id: Uuid,
+        exit_code: i32,
+        log_excerpt: String,
+        timestamp: String,
+    },
+    #[serde(rename = "container_event")]
+    ContainerEvent {
+        node_id: Uuid,
+        event: String,
+        container_id: String,
+        container_name: String,
+    },
+    /// WebSocket control frame — handled by the writer task as Message::Pong, not JSON
+    #[serde(skip)]
+    Pong(Bytes),
 }
 
 #[derive(Clone)]
 pub struct ResultSender {
-    ws_sender: Arc<Mutex<mpsc::Sender<AgentToBackend>>>,
+    ws_sender: Arc<Mutex<Option<mpsc::Sender<AgentToBackend>>>>,
     buffer: Arc<Mutex<VecDeque<TaskResult>>>,
     connected: Arc<AtomicBool>,
     buffer_path: PathBuf,
 }
 
 impl ResultSender {
-    pub fn new(ws_sender: mpsc::Sender<AgentToBackend>, data_dir: PathBuf) -> Self {
+    pub fn new(ws_sender: Option<mpsc::Sender<AgentToBackend>>, data_dir: PathBuf) -> Self {
         let buffer_path = data_dir.join(BUFFER_FILE_NAME);
-        
+
         Self {
             ws_sender: Arc::new(Mutex::new(ws_sender)),
             buffer: Arc::new(Mutex::new(VecDeque::new())),
@@ -72,18 +117,17 @@ impl ResultSender {
         }
     }
 
-    /// Update the sender when reconnecting
-    pub fn update_sender(&self, sender: mpsc::Sender<AgentToBackend>) {
-        // Use try_lock for non-async context
-        if let Ok(mut guard) = self.ws_sender.try_lock() {
-            *guard = sender;
-            info!("WebSocket sender updated");
-        }
+    /// Update the sender when reconnecting. Pass `None` to mark the channel as closed
+    /// (used when the writer task has exited due to a dead WebSocket).
+    pub async fn update_sender(&self, sender: Option<mpsc::Sender<AgentToBackend>>) {
+        let mut guard = self.ws_sender.lock().await;
+        *guard = sender;
+        info!("WebSocket sender updated");
     }
 
-    /// Get sender for sending messages
-    fn get_sender_sync(&self) -> Option<mpsc::Sender<AgentToBackend>> {
-        self.ws_sender.try_lock().ok().map(|guard| guard.clone())
+    /// Get a clone of the current sender, if one is registered.
+    async fn get_sender(&self) -> Option<mpsc::Sender<AgentToBackend>> {
+        self.ws_sender.lock().await.as_ref().cloned()
     }
 
     pub fn set_connected(&self, connected: bool) {
@@ -92,25 +136,24 @@ impl ResultSender {
     }
 
     pub async fn send(&self, result: TaskResult) {
-        // Try to send immediately if connected
+        // Try to send immediately if connected. Use async `send` so the caller
+        // applies backpressure to the channel (and waits for the writer task
+        // to drain it) instead of silently buffering every result to disk.
         if self.connected.load(Ordering::Relaxed) {
-            if let Some(sender) = self.get_sender_sync() {
-                match sender.try_send(AgentToBackend::TaskResult(result.clone())) {
+            if let Some(sender) = self.get_sender().await {
+                match sender.send(AgentToBackend::TaskResult(result.clone())).await {
                     Ok(_) => {
                         info!(task_id = %result.task_id, "Task result sent immediately");
                         return;
                     }
-                    Err(mpsc::error::TrySendError::Full(_)) => {
-                        warn!("WebSocket channel full, buffering result");
-                    }
-                    Err(mpsc::error::TrySendError::Closed(_)) => {
+                    Err(_) => {
                         warn!("WebSocket channel closed, buffering result");
                     }
                 }
             }
         }
 
-        // Buffer the result
+        // Buffer the result for replay on reconnect
         self.buffer_result(result).await;
     }
 
@@ -122,25 +165,21 @@ impl ResultSender {
             progress,
             message: message.to_string(),
         };
-        
-        // Try to send immediately if connected
+
+        // Fire-and-forget — `try_send` so a slow writer never stalls log capture
         if self.connected.load(Ordering::Relaxed) {
-            if let Some(sender) = self.get_sender_sync() {
+            if let Some(sender) = self.get_sender().await {
                 match sender.try_send(progress_msg) {
-                    Ok(_) => {
-                        info!(task_id = %task_id, progress, "Progress sent immediately");
-                        return;
-                    }
+                    Ok(_) => return,
                     Err(mpsc::error::TrySendError::Full(_)) => {
-                        warn!("WebSocket channel full, dropping progress");
+                        warn!(task_id = %task_id, "WebSocket channel full, dropping progress");
                     }
                     Err(mpsc::error::TrySendError::Closed(_)) => {
-                        warn!("WebSocket channel closed, dropping progress");
+                        warn!(task_id = %task_id, "WebSocket channel closed, dropping progress");
                     }
                 }
             }
         }
-        // Progress updates are not buffered - they are fire-and-forget
         info!(task_id = %task_id, "Progress dropped (not connected)");
     }
 
@@ -152,20 +191,17 @@ impl ResultSender {
             line,
             stream,
         };
-        
-        // Try to send immediately if connected
+
+        // Fire-and-forget — `try_send` so a slow writer never stalls log capture
         if self.connected.load(Ordering::Relaxed) {
-            if let Some(sender) = self.get_sender_sync() {
+            if let Some(sender) = self.get_sender().await {
                 match sender.try_send(log_msg) {
-                    Ok(_) => {
-                        info!(server_id = %server_id, "Log output sent immediately");
-                        return;
-                    }
+                    Ok(_) => return,
                     Err(mpsc::error::TrySendError::Full(_)) => {
-                        warn!("WebSocket channel full, dropping log output");
+                        warn!(server_id = %server_id, "WebSocket channel full, dropping log output");
                     }
                     Err(mpsc::error::TrySendError::Closed(_)) => {
-                        warn!("WebSocket channel closed, dropping log output");
+                        warn!(server_id = %server_id, "WebSocket channel closed, dropping log output");
                     }
                 }
             }
@@ -221,7 +257,7 @@ impl ResultSender {
     /// Flush buffered results after reconnection
     pub async fn flush_buffer(&self) {
         let mut buffer = self.buffer.lock().await;
-        
+
         if buffer.is_empty() {
             info!("No buffered results to flush");
             return;
@@ -230,14 +266,16 @@ impl ResultSender {
         let mut flushed = 0;
         let mut failed = VecDeque::new();
 
-        if let Some(sender) = self.get_sender_sync() {
+        if let Some(sender) = self.get_sender().await {
+            // Use `send().await` so the writer task can apply backpressure to us too —
+            // if the channel is full, wait for the writer to drain before pushing more.
             while let Some(result) = buffer.pop_front() {
-                match sender.try_send(AgentToBackend::TaskResult(result.clone())) {
+                match sender.send(AgentToBackend::TaskResult(result.clone())).await {
                     Ok(_) => {
                         flushed += 1;
                     }
                     Err(_) => {
-                        // Re-add to failed and stop flushing
+                        // Channel closed — re-buffer the result and stop
                         failed.push_back(result);
                         break;
                     }
