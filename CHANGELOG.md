@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **"Address: —" in ServerDetailsPage + "minecraft:26.2" in Connection section** — The active `Server` model in `api/src/domain/server/model.rs` (used by `SqlxServerRepository` and `GET /api/v1/servers/:id`) was missing the `public_host` field. The previous v0.4.5 fix added `public_host` to `domain/entities/server.rs` (the duplicate/legacy struct used by some executors), but the actual API request path goes through `domain/server/model.rs::Server`, so the API response never carried the field. Fix: added `pub public_host: Option<String>` with `#[serde(default)]` to `Server`, and added `public_host` to all INSERT/SELECT/UPDATE column lists and `.bind` calls in `SqlxServerRepository` (both the inherent `impl` and the trait `impl` for `create`, `find_by_id`, `find_by_user_id`, `find_by_agent_id`, `find_by_job_id`, `find_all`, `update`). The DB column already existed from v0.4.5; the fix only completes the model + repository wiring. Frontend v0.4.5.3 (already deployed) reads `server.public_host` and now correctly shows `mantap wou.esluce.com:25565` in the top Address card and the Connection section.
+
+## [v0.4.5] - 2026-06-06
+
+### Fixed
+
 - **Templates empty in CreateServerModal when DB migration not applied** — `SqlxTemplateRepository` (`list_templates`, `list_templates_by_game`, `list_public_templates`) now catches SQL errors and returns the hardcoded `Template::fallback()` set instead of 500 INTERNAL_ERROR, mirroring the prior fix for `plugin_templates`. The `templates` table seed migration (`20260531_create_templates_table.sql`) is missing from the `migration/` directory on some deployments, so the table doesn't exist and users saw the Game Type dropdown fall back to "Minecraft" + 3 disabled "Coming Soon" options regardless of plan/role. Fix: defensive fallback at the repository layer. (session: `templates-server-details-empty`)
 - **CreateServerModal Variant dropdown broken** — Was reading `t.variant` (undefined) and `template.default_port` (undefined) from the regular templates DTO, which exposes `category` and nests `default_port` inside `config`. Replaced with `t.category` and `template.config?.default_port` so the Variant dropdown renders the actual built-in variants (vanilla/paper/spigot/forge/fabric) and auto-fills the default port.
 
