@@ -62,7 +62,7 @@ Implement Esluce Relay as the primary connectivity path for Minecraft servers, p
 - **D-19 (Connection keepalive):** **Transparent TCP forwarding, no special keepalive** — Minecraft client sends keepalive packets; yamux + TCP handle the rest. Relay does not inject keepalives or modify TCP options on forwarded streams. Idle connection timeout: 5 minutes (matches typical Minecraft idle).
 
 ### Security Hardening
-- **D-20 (Rate limiting):** **100 connection attempts per source IP per minute** — implemented at the gateway with a Redis-backed counter (Lua script for atomicity). Applies to both player TCP connections and tunnel connect attempts (separate counters).
+- **D-20 (Rate limiting):** **100 connection attempts per source IP per minute** — implemented at the gateway as an in-process token bucket (per-IP, refilled at 100/60 per second). Applies to both player TCP connections and tunnel connect attempts. **Phase 68 scope is single-instance (D-05) so an in-process bucket is correct**; a future horizontal-scale phase must migrate this to a Redis-backed Lua counter for atomicity across instances.
 - **D-21 (Tunnel rate limit):** **1 active tunnel per server_id** — when a new tunnel connect comes in for a server_id that already has an active tunnel, relay atomically replaces it. Race condition: the old tunnel's first missed heartbeat causes it to be marked stale; the new one is registered in parallel; no duplicate forwarding.
 
 ### Monitoring & Integration
