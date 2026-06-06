@@ -1184,42 +1184,47 @@ GoAway codes: 0x0=Normal, 0x1=Protocol, 0x2=Internal.
 **If this table is empty:** N/A — there are 12 assumptions to validate.
 **If this table is not empty:** A1–A12 are tooling/integration assumptions; the planner should accept them as defaults and the executor should validate against the local environment at Wave 0 before locking the implementation. None of them block planning — all have documented fallbacks.
 
-## Open Questions
+## Open Questions (RESOLVED)
 
-1. **Player-to-server-id resolution mechanism (Pitfall 9)**
+> All questions below were raised during research and are now resolved. The resolution feeds directly into the Plan 02 and Plan 04 implementations. See `<revision_context>` for the original open-questions set.
+
+1. **Player-to-server-id resolution mechanism (Pitfall 9) — RESOLVED**
    - What we know: CONTEXT D-06 references SNI/Host header for WSS or proxy_protocol for raw TCP, but vanilla Minecraft Java uses raw TCP without SNI and can't send custom proxy_protocol headers.
-   - What's unclear: The exact mechanism the user wants for matching a player's TCP connection to a specific `server_id` when multiple servers are on the same public IP.
-   - Recommendation: Use **player source IP = agent public IP** matching. Document the limitation. Per-server NLB listeners is a clean follow-up.
+   - What's unclear (was): The exact mechanism the user wants for matching a player's TCP connection to a specific `server_id` when multiple servers are on the same public IP.
+   - **RESOLVED Recommendation:** Use **Minecraft-protocol-aware routing** — parse the MC Java Handshake packet's `serverAddress` field to extract the `<subdomain>` from `<subdomain>.play.esluce.net`, then look up `server_id` by subdomain. The agent registers its subdomain on `TunnelConnect`; the gateway indexes a `by_subdomain: DashMap<String, Uuid>` map. **NOT** player-source-IP matching (that only works when player and agent share a public IP, which contradicts D-10).
+   - The Handshake packet is the first bytes the player sends on a new TCP connection. Structure: `[VarInt packet length][VarInt packet ID = 0x00][VarInt protocol version][String server address][ushort server port][VarInt next state]`. The `String server address` is a VarInt-prefixed UTF-8 string (max 255 chars). Read just enough bytes to extract the string, parse `<subdomain>.play.esluce.net`, look up the subdomain in the registry, then forward subsequent bytes to the matching yamux stream.
 
-2. **AWS region / AZ choice for ap-southeast-1**
+2. **AWS region / AZ choice for ap-southeast-1 — RESOLVED**
    - What we know: CONTEXT D-17 says `ap-southeast-1`, single AZ. AWS has 3 AZs in this region (1a, 1b, 1c).
-   - What's unclear: Which AZ specifically.
-   - Recommendation: `ap-southeast-1a` (matches Phase 66 Umami deployment; consistent infra footprint). Planner can confirm.
+   - What's unclear (was): Which AZ specifically.
+   - **RESOLVED Recommendation:** `ap-southeast-1a` (matches Phase 66 Umami deployment; consistent infra footprint). Planner confirmed.
 
-3. **WebSocket frame max size**
+3. **WebSocket frame max size — RESOLVED**
    - What we know: tokio-tungstenite default is 16 KiB. Minecraft packets can exceed this (chat, large SLP responses).
-   - What's unclear: The right max frame size (4 MiB? 16 MiB?).
-   - Recommendation: 4 MiB. Document in Caddyfile and gateway code. yamux stream-level frames will be smaller (16 KiB default per yamux spec, but yamux splits them across WS frames automatically).
+   - What's unclear (was): The right max frame size (4 MiB? 16 MiB?).
+   - **RESOLVED Recommendation:** 4 MiB. Document in Caddyfile and gateway code. yamux stream-level frames will be smaller (16 KiB default per yamux spec, but yamux splits them across WS frames automatically).
 
-4. **Tunnel rekeying cadence (D-25)**
+4. **Tunnel rekeying cadence (D-25) — RESOLVED**
    - What we know: yamux has no built-in rekeying. WS has no native rekey (TLS session tickets mitigate but don't rekey).
-   - What's unclear: How often to tear down and re-establish the tunnel.
-   - Recommendation: Every 24h OR 100 GB transferred (whichever first). Agent tracks both; on threshold, closes the WS cleanly, gateway detects GoAway, agent reconnects with new handshake. ~50ms downtime is acceptable.
+   - What's unclear (was): How often to tear down and re-establish the tunnel.
+   - **RESOLVED Recommendation:** Every 24h OR 100 GB transferred (whichever first). Agent tracks both in `run_relay_client`; on threshold, closes the WS cleanly. Gateway detects GoAway, tears down yamux session. Agent's existing backoff reconnect handles the new handshake (new nonce, new TLS session). ~50ms downtime is acceptable.
+   - **Implementation in Plan 02 Task 2:** track `tunnel_uptime_secs` and `bytes_transferred` (via metrics counters); when either threshold is hit, close the WS cleanly and let the existing backoff reconnect handle the re-handshake.
 
-5. **Whether to use ALB or direct Caddy TLS termination**
+5. **Whether to use ALB or direct Caddy TLS termination — RESOLVED**
    - What we know: ALB gives us a stable DNS name + ACM cert free + WAF integration. Direct Caddy avoids the ALB cost.
-   - What's unclear: The user's preference. CONTEXT D-05 says "behind an ALB" but the agent's discretion column lists "ALB vs NLB decision for player traffic" — the agent's discretion applies to the tunnel WebSocket, not the player TCP.
-   - Recommendation: Use ALB for the WebSocket tunnel (TLS termination at ALB, routes to Caddy on EC2 via internal port, which proxies to the gateway on `127.0.0.1:8443`). Use NLB for the player TCP on port 25565 (no TLS, raw passthrough).
+   - What's unclear (was): The user's preference. CONTEXT D-05 says "behind an ALB" but the agent's discretion column lists "ALB vs NLB decision for player traffic" — the agent's discretion applies to the tunnel WebSocket, not the player TCP.
+   - **RESOLVED Recommendation:** Use ALB for the WebSocket tunnel (TLS termination at ALB, routes to Caddy on EC2 via internal port, which proxies to the gateway on `127.0.0.1:8443`). Use NLB for the player TCP on port 25565 (no TLS, raw passthrough).
 
-6. **Relay pricing tier (D-15, deferred)**
+6. **Relay pricing tier (D-15, deferred) — RESOLVED**
    - What we know: Free for all in initial rollout.
-   - What's unclear: When to add the paywall. The D-09/D-10 introspection is the prerequisite; we can add a billing check at `/internal/relay/authorize` later.
-   - Recommendation: No code changes for billing in Phase 68. Add a `// TODO: phase-XX: add billing check` comment in the introspection handler.
+   - What's unclear (was): When to add the paywall. The D-09/D-10 introspection is the prerequisite; we can add a billing check at `/internal/relay/authorize` later.
+   - **RESOLVED Recommendation:** No code changes for billing in Phase 68. Add a `// TODO: phase-XX: add billing check` comment in the introspection handler.
 
-7. **Existing Phase 51 Cloudflare records' interaction with Phase 68**
+7. **Existing Phase 51 Cloudflare records' interaction with Phase 68 — RESOLVED**
    - What we know: D-24 says "no migration; all existing records continue to work".
-   - What's unclear: When the agent opens a tunnel (relay mode), should the existing Cloudflare A record be REMOVED, or just left as-is? If left as-is, players using the Direct Mode address will get a stale IP after the user has switched to Relay.
-   - Recommendation: Per D-13: on `tunnel_disconnect` → flip to Relay immediately → remove the Cloudflare A record. On `tunnel_reconnect` → re-probe Direct after 30s of stable tunnel → if probe passes, re-create the A record.
+   - What's unclear (was): When the agent opens a tunnel (relay mode), should the existing Cloudflare A record be REMOVED, or just left as-is? If left as-is, players using the Direct Mode address will get a stale IP after the user has switched to Relay.
+   - **RESOLVED Recommendation:** Per D-13: on `tunnel_disconnect` → flip to Relay immediately → remove the Cloudflare A record. On `tunnel_reconnect` → re-probe Direct after 30s of stable tunnel → if probe passes, re-create the A record.
+   - **Implementation in Plan 02 Task 2:** in `run_relay_client`'s disconnect handler, after sending `TunnelDisconnect` on the control stream, dispatch `relay.remove_cname_record` to the agent's own task queue (self-loop). The agent's existing `dns.rs::handle_remove_record` handles the actual Cloudflare DELETE.
 
 ## Environment Availability
 
