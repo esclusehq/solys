@@ -446,7 +446,7 @@ Tunnel Health:
 **Goal:** Implement Esluce Relay as the primary connectivity path on *.play.esluce.net (always-on, stable across restarts and IP changes), with Direct Mode A records on *.play.esluce.com emitted as best-effort fast-path only when probe-verified. Single AWS region, single gateway, Minecraft Java TCP only.
 
 **Depends on:** Phase 67
-**Plans:** 7 plans
+**Plans:** 7 plans planned (Wave 1: 68-01, Wave 2: 68-02 + 68-03, Wave 3: 68-04a + 68-04b + 68-04c + 68-05)
 
 **Success Criteria**:
 1. Relay endpoint `<server>.play.esluce.net` is stable across ≥10 agent restarts (DNS lookup returns valid CNAME → active tunnel).
