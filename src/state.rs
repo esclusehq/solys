@@ -7,7 +7,9 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
+use std::sync::Arc;
 use tokio::fs;
+use tokio::sync::OnceCell;
 
 /// Agent state to persist (D-19)
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -93,6 +95,32 @@ pub async fn save_state(state: &AgentState) -> std::io::Result<()> {
     tracing::debug!("State saved to {:?}", path);
 
     Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Phase 67: process-global Docker client
+// ---------------------------------------------------------------------------
+
+static DOCKER_GLOBAL: OnceCell<Arc<bollard::Docker>> = OnceCell::const_new();
+
+/// Set the global Docker client. Called once at startup from `main.rs` /
+/// `service_main.rs` after runtime detection. Subsequent calls are no-ops.
+pub fn set_docker_global(client: Arc<bollard::Docker>) {
+    let _ = DOCKER_GLOBAL.set(client);
+}
+
+/// Borrow the global Docker client, or `None` if it hasn't been initialised.
+pub fn docker_global() -> Option<Arc<bollard::Docker>> {
+    DOCKER_GLOBAL.get().cloned()
+}
+
+/// Convenience: resolve the local audit data directory (the directory the
+/// `init_audit_logger` was given). Falls back to `state.json`'s directory
+/// or `.` when nothing is configured.
+pub fn audit_data_dir() -> std::path::PathBuf {
+    get_state_path()
+        .and_then(|p| p.parent().map(|d| d.to_path_buf()))
+        .unwrap_or_else(|| std::path::PathBuf::from("."))
 }
 
 #[cfg(test)]

@@ -10,6 +10,7 @@ use chrono::Utc;
 use tokio::sync::RwLock;
 use uuid::Uuid;
 
+
 lazy_static::lazy_static! {
     pub static ref AUDIT_LOGGER: Arc<RwLock<Option<AuditLogger>>> = Arc::new(RwLock::new(None));
 }
@@ -55,3 +56,33 @@ pub async fn log_agent_registered(agent_id: Uuid) {
         let _ = logger.log(entry);
     }
 }
+
+// ---------------------------------------------------------------------------
+// Phase 67: Connectivity-specific audit log
+// ---------------------------------------------------------------------------
+
+/// Phase 67: log the exact shell command for a connectivity auto-fix action.
+/// The `connectivity_audit_log` row in the backend is the primary source; this
+/// is the agent's local mirror (D-17).
+pub async fn log_connectivity_command(server_id: &str, action: &str, command: &str) {
+    let line = format!("[CONNECTIVITY_AUDIT] server={} action={} command={} @{}",
+        server_id, action, command, Utc::now().to_rfc3339());
+    tracing::info!("{}", line);
+
+    // Append to the local audit file (audit_data_dir/connectivity-audit.log).
+    if let Ok(mut f) = tokio::fs::OpenOptions::new()
+        .append(true)
+        .create(true)
+        .open(audit_data_dir().join("connectivity-audit.log")).await {
+        use tokio::io::AsyncWriteExt;
+        let _ = f.write_all(format!("{}\n", line).as_bytes()).await;
+    }
+}
+
+/// Resolve the local audit data directory (the directory the
+/// `init_audit_logger` was given). Falls back to the state directory or
+/// `.` when nothing is configured.
+fn audit_data_dir() -> std::path::PathBuf {
+    crate::state::audit_data_dir()
+}
+

@@ -11,6 +11,7 @@ pub mod sftp;
 pub mod dns;
 pub mod dns_watch;
 pub mod files;
+pub mod connectivity;
 
 use std::time::Duration;
 
@@ -160,6 +161,13 @@ async fn execute_single(
             "file.rename" => files::handle_rename(task.clone()).await,
             "file.copy" => files::handle_copy(task.clone()).await,
 
+            // Phase 67: Connectivity
+            "connectivity.diagnostics" => connectivity::handle_diagnostics(task.clone()).await,
+            "firewall.open_port"      => connectivity::firewall::open(task.clone()).await,
+            "firewall.close_port"     => connectivity::firewall::close(task.clone()).await,
+            "upnp.add_mapping"        => connectivity::upnp::add(task.clone()).await,
+            "upnp.remove_mapping"     => connectivity::upnp::remove(task.clone()).await,
+
             // Unknown
             _ => Err(anyhow::anyhow!("Unknown task type: {}", task_type)),
         }
@@ -282,6 +290,19 @@ fn get_task_config(task_type: &str) -> TaskConfig {
             retry_delay_ms: 1000,
             max_retry_delay_ms: 10000,
             backoff_multiplier: 2.0,
+        },
+        // Phase 67: Connectivity tasks (D-04, D-05, D-08, D-09)
+        "connectivity.diagnostics" => TaskConfig {
+            timeout: Duration::from_secs(30),
+            max_retries: 0, retry_delay_ms: 0, max_retry_delay_ms: 0, backoff_multiplier: 1.0,
+        },
+        "firewall.open_port" | "firewall.close_port" => TaskConfig {
+            timeout: Duration::from_secs(10),
+            max_retries: 0, retry_delay_ms: 0, max_retry_delay_ms: 0, backoff_multiplier: 1.0,
+        },
+        "upnp.add_mapping" | "upnp.remove_mapping" => TaskConfig {
+            timeout: Duration::from_secs(15),
+            max_retries: 0, retry_delay_ms: 0, max_retry_delay_ms: 0, backoff_multiplier: 1.0,
         },
         _ => TaskConfig {
             timeout: Duration::from_secs(60),

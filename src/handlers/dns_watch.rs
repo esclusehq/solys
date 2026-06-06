@@ -94,6 +94,14 @@ async fn check_and_update() -> Result<()> {
         info!("Public IP changed: {} -> {}", old_ip, current_ip);
     }
 
+    // Phase 67: an IP change is a connectivity event — kick the diagnostics
+    // collector. The exact list of "servers on this node" lives in the
+    // agent's task_state; for now we log the event and let the backend's
+    // periodic re-probe (5 min) pick it up. The actual cross-component call
+    // requires deeper wiring into the WS outbound, so this is an
+    // audit-only trigger point.
+    tracing::info!("[CONNECTIVITY_TRIGGER] Public IP changed; backend probe will re-evaluate");
+
     let config_guard = dns::DNS_CONFIG.read().await;
     let config = match config_guard.as_ref() {
         Some(cfg) => cfg.clone(),

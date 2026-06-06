@@ -1,6 +1,5 @@
 use std::net::Ipv4Addr;
 use std::process::Stdio;
-use std::time::Duration;
 
 use anyhow::{Context, Result};
 use bollard::Docker;
@@ -23,15 +22,15 @@ pub async fn collect_diagnostics(
     // 1) Public IP — reuse dns_watch::detect_public_ip (no second fetcher)
     let public_ip = detect_public_ip().await.ok();
 
-    // 2) Local IP from default-route interface (sync list_afinet_netifas is fast)
+    // 2) Local IP from default-route interface (sync list_afinet_netifas is fast).
+    //    `list_afinet_netifas` returns `Vec<(iface_name, IpAddr)>` (local-ip-address 0.6).
     let local_ip: Option<Ipv4Addr> = list_afinet_netifas()
         .ok()
-        .and_then(|map| {
-            map.values()
-                .find_map(|ip| match ip {
-                    std::net::IpAddr::V4(v4) if !v4.is_loopback() => Some(*v4),
-                    _ => None,
-                })
+        .and_then(|vec| {
+            vec.into_iter().find_map(|(_name, ip)| match ip {
+                std::net::IpAddr::V4(v4) if !v4.is_loopback() => Some(v4),
+                _ => None,
+            })
         });
 
     // 3) Default gateway via `ip route show default` (Linux-first; best-effort on others)
@@ -122,7 +121,7 @@ async fn check_port_bound(docker: &Docker, container_name: &str, port: u16) -> b
     info.network_settings
         .and_then(|ns| ns.ports)
         .and_then(|p| p.get(&key).cloned())
-        .map(|b| !b.is_empty())
+        .and_then(|b| b.map(|v| !v.is_empty()))
         .unwrap_or(false)
 }
 

@@ -76,6 +76,7 @@ libz-sys = { version = "1", features = ["zlib-ng-no-cmake-experimental-community
 
 # Network diagnostics for Phase 67 connectivity probe (D-04, D-07)
 upnp-rs          = "0.2"
+which             = "6"
 local-ip-address = "0.6"
 
 [[bin]]
