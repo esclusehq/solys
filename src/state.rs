@@ -123,6 +123,61 @@ pub fn audit_data_dir() -> std::path::PathBuf {
         .unwrap_or_else(|| std::path::PathBuf::from("."))
 }
 
+// ---------------------------------------------------------------------------
+// Phase 68: process-global Relay config
+// ---------------------------------------------------------------------------
+
+/// Phase 68 (Plan 02). Static configuration for the outbound Esluce Relay
+/// tunnel. Populated once at startup from environment variables (see
+/// `main.rs`) and consumed by `handlers::relay_client`. The struct holds
+/// everything the tunnel client needs to authenticate and bind, plus the
+/// DNS coordinates the agent must tear down on tunnel disconnect
+/// (D-13 / RESOLVED Q7).
+#[derive(Debug, Clone)]
+pub struct RelayConfig {
+    /// WSS URL of the Esluce Relay gateway, e.g.
+    /// `wss://relay.esluce.net/relay/tunnel`.
+    pub gateway_url: String,
+    /// Per-node bearer token (`relay_token` column on `nodes`).
+    pub token: String,
+    /// Public subdomain the gateway should bind, e.g. `abc12345`.
+    pub subdomain: String,
+    /// Public port on the gateway that maps to the local MC server.
+    pub public_port: u16,
+    /// Agent's own public IP (sent inside `TunnelConnect` so the gateway
+    /// can do its own geo / reachability checks).
+    pub agent_public_ip: String,
+    /// Region tag the agent advertises (e.g. `ap-southeast-1`).
+    pub region: String,
+    /// Local Minecraft Java address the yamux sessions forward to, e.g.
+    /// `127.0.0.1:25565`. T-68-08: not overridable via inbound WS.
+    pub local_mc_addr: String,
+    /// Optional DNS credentials used for the `relay.remove_cname_record`
+    /// self-loop. When `None`, the cleanup task is still enqueued but
+    /// fails fast inside `dns::handle_remove_record`.
+    pub dns_api_token: Option<String>,
+    pub dns_zone_id: Option<String>,
+    /// Pre-resolved DNS record id for the `<subdomain>.play.esluce.com`
+    /// A record that should be removed when the tunnel is unavailable.
+    /// Optional because the agent may not have a direct-mode record at
+    /// the moment it switches to relay mode.
+    pub dns_record_id: Option<String>,
+}
+
+static RELAY_CONFIG: OnceCell<Arc<RelayConfig>> = OnceCell::const_new();
+
+/// Set the global Relay config. Called once at startup from `main.rs`.
+/// Subsequent calls are no-ops (the first wins).
+pub fn set_relay_config(cfg: RelayConfig) {
+    let _ = RELAY_CONFIG.set(Arc::new(cfg));
+}
+
+/// Borrow the global Relay config, or `None` if it hasn't been
+/// initialised (no `AGENT_RELAY_TOKEN` env var was set at startup).
+pub fn relay_config() -> Option<Arc<RelayConfig>> {
+    RELAY_CONFIG.get().cloned()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
