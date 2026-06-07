@@ -12,6 +12,12 @@ pub mod dns;
 pub mod dns_watch;
 pub mod files;
 pub mod connectivity;
+// Phase 68 (Plan 02): relay tunnel — must be declared before `relay` in
+// the dispatch match below since `relay::handle_relay_task` calls into
+// `relay_client::connect` / `disconnect` / `send_heartbeat`.
+pub mod relay_client;
+pub mod relay_session;
+pub mod relay;
 
 use std::time::Duration;
 
@@ -168,6 +174,15 @@ async fn execute_single(
             "upnp.add_mapping"        => connectivity::upnp::add(task.clone()).await,
             "upnp.remove_mapping"     => connectivity::upnp::remove(task.clone()).await,
 
+            // Phase 68: Relay tunnel (Plan 02)
+            "relay.connect"             => relay::handle_relay_task(task).await,
+            "relay.disconnect"          => relay::handle_relay_task(task).await,
+            // On-demand backend-initiated heartbeat: forces an immediate
+            // ping on the control stream for liveness checks and debug.
+            // Distinct from the periodic 10 s ticker in run_relay_client.
+            "relay.heartbeat"           => relay::handle_relay_task(task).await,
+            "relay.remove_cname_record" => dns::handle_remove_record(task.clone()).await,
+
             // Unknown
             _ => Err(anyhow::anyhow!("Unknown task type: {}", task_type)),
         }
@@ -301,6 +316,27 @@ fn get_task_config(task_type: &str) -> TaskConfig {
             max_retries: 0, retry_delay_ms: 0, max_retry_delay_ms: 0, backoff_multiplier: 1.0,
         },
         "upnp.add_mapping" | "upnp.remove_mapping" => TaskConfig {
+            timeout: Duration::from_secs(15),
+            max_retries: 0, retry_delay_ms: 0, max_retry_delay_ms: 0, backoff_multiplier: 1.0,
+        },
+        // Phase 68 (Plan 02): Relay tunnel task configs. The connect /
+        // disconnect are fire-and-forget — they just spawn / cancel the
+        // background reconnect loop. The heartbeat is short. The
+        // remove_cname_record is a single Cloudflare DELETE call, also
+        // short-lived.
+        "relay.connect" => TaskConfig {
+            timeout: Duration::from_secs(30),
+            max_retries: 0, retry_delay_ms: 0, max_retry_delay_ms: 0, backoff_multiplier: 1.0,
+        },
+        "relay.disconnect" => TaskConfig {
+            timeout: Duration::from_secs(10),
+            max_retries: 0, retry_delay_ms: 0, max_retry_delay_ms: 0, backoff_multiplier: 1.0,
+        },
+        "relay.heartbeat" => TaskConfig {
+            timeout: Duration::from_secs(5),
+            max_retries: 0, retry_delay_ms: 0, max_retry_delay_ms: 0, backoff_multiplier: 1.0,
+        },
+        "relay.remove_cname_record" => TaskConfig {
             timeout: Duration::from_secs(15),
             max_retries: 0, retry_delay_ms: 0, max_retry_delay_ms: 0, backoff_multiplier: 1.0,
         },

@@ -324,6 +324,14 @@ async fn run_agent_core(config: agent_config::AgentConfig) -> Result<()> {
         monitor_for_shutdown.stop().await;
     });
 
+    // 9c. Start RelayClient (Phase 68 Plan 02) if AGENT_RELAY_TOKEN is set.
+    //     The token is per-node and is provisioned out-of-band by the
+    //     backend when the agent first registers. We read the rest of
+    //     the relay config from the same env-var namespace.
+    if let Err(e) = bootstrap_relay_client(&config, shutdown.clone()).await {
+        error!(error = %e, "Failed to bootstrap RelayClient");
+    }
+
     // 10. Run agent with shutdown handling
     let shutdown_for_agent = shutdown.clone();
     let agent_id = tokio::select! {
@@ -360,6 +368,91 @@ async fn run_agent_core(config: agent_config::AgentConfig) -> Result<()> {
     } else {
         info!("State saved on shutdown");
     }
+
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Phase 68 (Plan 02): RelayClient bootstrap
+// ---------------------------------------------------------------------------
+
+/// Read the relay config from env vars and start the reconnect loop in a
+/// background tokio task. No-op if `AGENT_RELAY_TOKEN` is not set.
+///
+/// Env vars consumed:
+///   - `AGENT_RELAY_TOKEN`         (required, per-node bearer token)
+///   - `AGENT_RELAY_GATEWAY_URL`   (optional, default: `wss://relay.esluce.net/relay/tunnel`)
+///   - `AGENT_RELAY_SUBDOMAIN`     (optional, default: agent_name)
+///   - `AGENT_RELAY_PUBLIC_PORT`   (optional, default: 25565)
+///   - `AGENT_RELAY_REGION`        (optional, default: `ap-southeast-1`)
+///   - `AGENT_RELAY_LOCAL_ADDR`    (optional, default: `127.0.0.1:25565`)
+///   - `AGENT_RELAY_DNS_API_TOKEN` (optional, used for the
+///     `relay.remove_cname_record` self-loop)
+///   - `AGENT_RELAY_DNS_ZONE_ID`   (optional, ditto)
+///   - `AGENT_RELAY_DNS_RECORD_ID` (optional, ditto)
+async fn bootstrap_relay_client(
+    config: &agent_config::AgentConfig,
+    _shutdown: Arc<AtomicBool>,
+) -> Result<()> {
+    let token = match std::env::var("AGENT_RELAY_TOKEN").ok() {
+        Some(t) if !t.is_empty() => t,
+        _ => {
+            info!("[RELAY] No AGENT_RELAY_TOKEN set; RelayClient not started");
+            return Ok(());
+        }
+    };
+
+    let gateway_url = std::env::var("AGENT_RELAY_GATEWAY_URL")
+        .unwrap_or_else(|_| "wss://relay.esluce.net/relay/tunnel".to_string());
+    let subdomain = std::env::var("AGENT_RELAY_SUBDOMAIN")
+        .unwrap_or_else(|_| config.agent_name.clone());
+    let public_port = std::env::var("AGENT_RELAY_PUBLIC_PORT")
+        .ok()
+        .and_then(|p| p.parse::<u16>().ok())
+        .unwrap_or(25565);
+    let region = std::env::var("AGENT_RELAY_REGION")
+        .unwrap_or_else(|_| "ap-southeast-1".to_string());
+    let local_mc_addr = std::env::var("AGENT_RELAY_LOCAL_ADDR")
+        .unwrap_or_else(|_| "127.0.0.1:25565".to_string());
+
+    let dns_api_token = std::env::var("AGENT_RELAY_DNS_API_TOKEN").ok();
+    let dns_zone_id = std::env::var("AGENT_RELAY_DNS_ZONE_ID").ok();
+    let dns_record_id = std::env::var("AGENT_RELAY_DNS_RECORD_ID").ok();
+
+    // Best-effort public IP detection for the TunnelConnect payload. If it
+    // fails (no internet, etc.) we send an empty string and let the
+    // gateway decide what to do — this is advisory metadata, not auth.
+    let agent_public_ip = match crate::handlers::dns_watch::detect_public_ip().await {
+        Ok(ip) => ip,
+        Err(_) => "0.0.0.0".to_string(),
+    };
+
+    let relay_cfg = state::RelayConfig {
+        gateway_url,
+        token: token.clone(),
+        subdomain,
+        public_port,
+        agent_public_ip,
+        region,
+        local_mc_addr,
+        dns_api_token,
+        dns_zone_id,
+        dns_record_id,
+    };
+    state::set_relay_config(relay_cfg);
+
+    info!(
+        "[RELAY] Starting RelayClient (token {}..., gateway={}, subdomain={})",
+        &token[..token.len().min(8)],
+        std::env::var("AGENT_RELAY_GATEWAY_URL")
+            .unwrap_or_else(|_| "wss://relay.esluce.net/relay/tunnel".to_string()),
+        std::env::var("AGENT_RELAY_SUBDOMAIN")
+            .unwrap_or_else(|_| config.agent_name.clone()),
+    );
+
+    // Spawn the reconnect loop with the global cancellation token.
+    let cancel = crate::handlers::relay_client::cancel_token();
+    tokio::spawn(handlers::relay_client::run_relay_client(cancel));
 
     Ok(())
 }
