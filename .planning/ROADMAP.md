@@ -301,14 +301,14 @@ Plans:
 **Goal:** Make the Esluce agent and backend automatically detect and resolve Minecraft game port reachability issues at the agent node via hybrid (backend-probe + agent-diagnostics) detection, 4-mode classification (PORT_NOT_BOUND, HOST_FIREWALL_BLOCKED, CGNAT_DETECTED, UPnP_UNAVAILABLE), and safe-to-fix auto-remediation with per-server audit log.
 **Requirements**: DEPLOY-01..05, RCON-01..02 (lifecycle hooks + audit reuse)
 **Depends on:** Phase 66
-**Plans:** 1/3 plans executed
+**Plans:** 3/3 plans complete
 
 **Wave 1** *(foundational — schema + persistence)*:
 - [x] 67-01: Schema migrations (servers columns + connectivity_audit_log table) + entity + repository + container wiring + [BLOCKING] sqlx migrate run
 
 **Wave 2** *(agent + backend in parallel, blocked on Wave 1 completion)*:
-- [ ] 67-02: Agent-side connectivity (Cargo deps, diagnostics/firewall/upnp handlers, ConnectivityMonitor background task, IP-change hook in DnsWatcher)
-- [ ] 67-03: Backend-side connectivity (WS NodeMessage extension, ConnectivityService probe/classify/dispatch, REST handlers, routes mount, container wiring)
+- [x] 67-02: Agent-side connectivity (Cargo deps, diagnostics/firewall/upnp handlers, ConnectivityMonitor background task, IP-change hook in DnsWatcher)
+- [x] 67-03: Backend-side connectivity (WS NodeMessage extension, ConnectivityService probe/classify/dispatch, REST handlers, routes mount, container wiring)
 
 **Cross-cutting constraints:**
 - Hybrid probe model: backend probes from public internet, agent sends raw local diagnostics (D-01)
