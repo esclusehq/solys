@@ -1,7 +1,6 @@
 use dashmap::DashMap;
-use std::net::IpAddr;
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::time::{Instant, SystemTime};
+use std::sync::atomic::AtomicU64;
+use std::time::Instant;
 use uuid::Uuid;
 use tokio_yamux::Control;
 
@@ -18,14 +17,14 @@ pub struct TunnelHandle {
 
 #[derive(Clone, Default)]
 pub struct Registry {
-    /// Primary routing index — Handshake-packet subdomain → server_id (BLOCKER 1 fix)
+    // Primary routing index — Handshake-packet subdomain → server_id (BLOCKER 1 fix)
     pub by_subdomain: std::sync::Arc<DashMap<String, Uuid>>,
-    /// Secondary index for fast lookup from the heartbeat watcher
+    // Secondary index for fast lookup from the heartbeat watcher
     pub by_server_id: std::sync::Arc<DashMap<Uuid, std::sync::Arc<TunnelHandle>>>,
-    /// NOTE: There is intentionally NO `by_agent_ip` map. Vanilla Minecraft Java
-    /// clients do not send SNI, and the player source IP is unrelated to the
-    /// server's agent public IP (the whole point of the relay is to bridge
-    /// CGNAT agents to remote players). Routing is by subdomain only.
+    // NOTE: There is intentionally NO `by_agent_ip` map. Vanilla Minecraft Java
+    // clients do not send SNI, and the player source IP is unrelated to the
+    // server's agent public IP (the whole point of the relay is to bridge
+    // CGNAT agents to remote players). Routing is by subdomain only.
 }
 
 impl Registry {
@@ -77,7 +76,7 @@ impl Registry {
     }
 
     pub fn mark_stale(&self, server_id: &Uuid) {
-        if let Some(handle) = self.by_server_id.get(server_id) {
+        if let Some(_handle) = self.by_server_id.get(server_id) {
             tracing::warn!("[REGISTRY] Marking tunnel stale: server_id={}", server_id);
         }
         self.unregister(server_id);

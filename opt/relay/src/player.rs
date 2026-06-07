@@ -14,8 +14,9 @@ const MAX_MC_STRING_BYTES: usize = 255;
 const HANDSHAKE_READ_TIMEOUT: Duration = Duration::from_secs(5);
 
 pub async fn run_player_listener(state: Arc<AppState>) -> anyhow::Result<()> {
-    let listener = tokio::net::TcpListener::bind(state.config.server.player_bind).await?;
-    info!("[PLAYER] Listening on {}", state.config.server.player_bind);
+    let player_bind = state.config.server.player_bind.clone();
+    let listener = tokio::net::TcpListener::bind(player_bind.clone()).await?;
+    info!("[PLAYER] Listening on {}", player_bind);
     loop {
         let (stream, peer) = listener.accept().await?;
         let state = state.clone();
@@ -76,8 +77,8 @@ async fn handle_player_connection(
 
     // Open a new yamux stream on the agent's tunnel
     let control_lock = handle.yamux_control.lock().await;
-    let control = match control_lock.as_ref() {
-        Some(c) => c,
+    let mut control = match control_lock.as_ref() {
+        Some(c) => c.clone(),
         None => {
             warn!("[PLAYER] Tunnel handle has no yamux control (stale); closing");
             drop(tcp);
@@ -136,7 +137,7 @@ async fn handle_player_connection(
 /// Handshake packet on a fresh yamux stream, not just the server address).
 pub async fn read_mc_handshake_subdomain(
     tcp: &mut TcpStream,
-    peer: SocketAddr,
+    _peer: SocketAddr,
 ) -> anyhow::Result<(String, Vec<u8>)> {
     // Read up to 1 KiB — the Handshake packet for typical MC clients is
     // ~30-100 bytes (server address is short: "abc12345.play.esluce.net").
@@ -201,7 +202,7 @@ fn try_parse_handshake(buf: &[u8]) -> Option<(String, usize)> {
     p += n;
     // [String server address]
     let (server_address, n) = read_mc_string(buf, p)?;
-    p += n;
+    let _ = n;
     // [ushort server port] and [VarInt next state] follow; we don't need them
     Some((server_address, packet_end))
 }
