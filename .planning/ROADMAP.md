@@ -446,7 +446,7 @@ Tunnel Health:
 **Goal:** Implement Esluce Relay as the primary connectivity path on *.play.esluce.net (always-on, stable across restarts and IP changes), with Direct Mode A records on *.play.esluce.com emitted as best-effort fast-path only when probe-verified. Single AWS region, single gateway, Minecraft Java TCP only.
 
 **Depends on:** Phase 67
-**Plans:** 1/7 plans executed
+**Plans:** 3/7 plans executed
 
 **Success Criteria**:
 1. Relay endpoint `<server>.play.esluce.net` is stable across ≥10 agent restarts (DNS lookup returns valid CNAME → active tunnel).
@@ -457,8 +457,8 @@ Tunnel Health:
 
 Plans:
 - [x] 68-01-PLAN.md — Schema migration + entities + NodeMessage enum (Wave 1, blocking sqlx migrate)
-- [ ] 68-02-PLAN.md — Agent tunnel client: relay_client.rs, relay_session.rs, dispatch, bootstrap, D-25 rekeying (24h/100GB), D-13 CNAME cleanup on disconnect (Wave 2)
-- [ ] 68-03-PLAN.md — Backend RelayService + REST handlers + internal HMAC handlers + WS dispatch + D-23 alert scraper (Wave 2)
+- [x] 68-02-PLAN.md — Agent tunnel client: relay_client.rs, relay_session.rs, dispatch, bootstrap, D-25 rekeying (24h/100GB), D-13 CNAME cleanup on disconnect (Wave 2)
+- [x] 68-03-PLAN.md — Backend RelayService + REST handlers + internal HMAC handlers + WS dispatch + D-23 alert scraper (Wave 2)
 - [ ] 68-04a-PLAN.md — Relay gateway crate: 13 source files with MC Handshake-parse routing (by_subdomain, NOT by_agent_ip), registry, player, metrics on :9100 (Wave 3)
 - [ ] 68-04b-PLAN.md — Docker + Caddy + compose (9100:9100 Prometheus exposure, TLS 1.3 enforcement) (Wave 3)
 - [ ] 68-04c-PLAN.md — DEPLOY.md operator runbook (AWS NLB + Route 53 static wildcard + IAM scoped + EC2 + verify) (Wave 3)
