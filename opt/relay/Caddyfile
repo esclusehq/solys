@@ -1,0 +1,16 @@
+{
+    servers {
+        protocols h1 h2
+    }
+}
+
+relay.esluce.net, *.play.esluce.net {
+    encode zstd gzip
+    tls {
+        protocols tls1.3
+    }
+    @websocket {
+        path /relay/tunnel
+    }
+    reverse_proxy @websocket relay-gateway:8080
+}
