@@ -1,0 +1,23 @@
+[server]
+tunnel_bind = "0.0.0.0:8080"      # axum serves WSS upgrade + /healthz
+player_bind = "0.0.0.0:25565"     # raw TCP for MC Java players
+metrics_bind = "0.0.0.0:9100"     # Prometheus /metrics (D-22)
+
+[backend]
+base_url = "https://api.esluce.net"
+hmac_secret_env = "GATEWAY_HMAC_SECRET"  # read from env at startup
+request_timeout_secs = 5
+
+[redis]
+url = "redis://localhost:6379"     # for nonce dedup
+
+[tunnel]
+heartbeat_interval_secs = 10
+heartbeat_missed_threshold = 3     # mark stale after 3 missed
+max_tunnels_per_server = 1         # D-21
+
+[ratelimit]
+requests_per_minute = 100          # D-20 (in-process token bucket; Redis-backed is a horizontal-scale follow-up per CONTEXT D-20 RESOLVED)
+
+[logging]
+level = "info"
