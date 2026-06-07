@@ -446,7 +446,7 @@ Tunnel Health:
 **Goal:** Implement Esluce Relay as the primary connectivity path on *.play.esluce.net (always-on, stable across restarts and IP changes), with Direct Mode A records on *.play.esluce.com emitted as best-effort fast-path only when probe-verified. Single AWS region, single gateway, Minecraft Java TCP only.
 
 **Depends on:** Phase 67
-**Plans:** 7/7 plans complete
+**Plans:** 7/7 plans complete + 1 gap-closure plan pending
 
 **Success Criteria**:
 1. Relay endpoint `<server>.play.esluce.net` is stable across ≥10 agent restarts (DNS lookup returns valid CNAME → active tunnel).
@@ -463,3 +463,4 @@ Plans:
 - [x] 68-04b-PLAN.md — Docker + Caddy + compose (9100:9100 Prometheus exposure, TLS 1.3 enforcement) (Wave 3)
 - [x] 68-04c-PLAN.md — DEPLOY.md operator runbook (AWS NLB + Route 53 static wildcard + IAM scoped + EC2 + verify) (Wave 3)
 - [x] 68-05-PLAN.md — Dashboard UI: relayApi + useConnectivity + TunnelHealthCard + ModeOverrideDropdown + InviteFriendsModal + ConnectivitySection (Wave 3)
+- [ ] 68-gap-01-PLAN.md — Gap closure: gateway's tunnel.rs real yamux server session + auth::authorize + WS Binary frame compatibility (closes 3 of 4 BLOCKERs from VERIFICATION.md; BLOCKER #4 rate-limiter is a verifier false positive)
