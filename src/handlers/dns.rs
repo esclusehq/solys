@@ -1,7 +1,7 @@
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
-use agent_proto::{Task, TaskResult};
+use agent_proto::Task;
 use anyhow::{anyhow, Context};
 use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize};
@@ -152,6 +152,82 @@ pub async fn handle_delete_record(task: Task) -> Result<serde_json::Value, anyho
     Ok(json!({
         "status": "deleted",
         "domain": full_name,
+    }))
+}
+
+// ---------------------------------------------------------------------------
+// Phase 68: remove_record — issued by the relay client's self-loop on
+// tunnel disconnect (D-13 / RESOLVED Q7). Removes the stale A record at
+// `<subdomain>.play.esluce.com` so a future re-resolve doesn't get cached
+// at a now-defunct IP. Resolves the zone_id and record_id from the task
+// payload (NOT from DNS_CONFIG) because the agent may have lost DNS
+// credentials by the time this fires — the payload carries everything
+// needed for a single DELETE call.
+// ---------------------------------------------------------------------------
+
+pub async fn handle_remove_record(task: Task) -> Result<serde_json::Value, anyhow::Error> {
+    let payload = task.payload.clone();
+    let api_token = payload.get("api_token")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| anyhow!("Missing 'api_token' in remove_record payload"))?;
+    let zone_id = payload.get("zone_id")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| anyhow!("Missing 'zone_id' in remove_record payload"))?;
+    let record_id = payload.get("record_id")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| anyhow!("Missing 'record_id' in remove_record payload"))?;
+    let subdomain = payload.get("subdomain")
+        .and_then(|v| v.as_str())
+        .unwrap_or("<unknown>");
+
+    let client = reqwest::Client::new();
+    let url = format!("{}/zones/{}/dns_records/{}", CLOUDFLARE_API_BASE, zone_id, record_id);
+
+    let resp = client.delete(&url)
+        .header("Authorization", format!("Bearer {}", api_token))
+        .send()
+        .await
+        .context("Failed to send Cloudflare DELETE dns_records request")?;
+
+    let status = resp.status();
+    let text = resp.text().await.unwrap_or_default();
+
+    // 404 → record already gone, treat as success per the plan's contract.
+    if status.as_u16() == 404 {
+        info!(
+            subdomain = %subdomain,
+            record_id = %record_id,
+            "DNS record already absent (404), treating as success"
+        );
+        return Ok(json!({
+            "removed": true,
+            "already_gone": true,
+            "subdomain": subdomain,
+            "record_id": record_id,
+        }));
+    }
+
+    if !status.is_success() {
+        error!(
+            subdomain = %subdomain,
+            record_id = %record_id,
+            status = %status,
+            body = %text,
+            "Cloudflare DELETE dns_records failed"
+        );
+        return Err(anyhow!("Cloudflare API error ({}): {}", status, text));
+    }
+
+    info!(
+        subdomain = %subdomain,
+        record_id = %record_id,
+        "DNS record removed (CNAME/A cleanup after tunnel disconnect)"
+    );
+
+    Ok(json!({
+        "removed": true,
+        "subdomain": subdomain,
+        "record_id": record_id,
     }))
 }
 
