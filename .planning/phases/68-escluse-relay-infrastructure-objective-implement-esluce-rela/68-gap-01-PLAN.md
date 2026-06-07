@@ -44,7 +44,7 @@ must_haves:
       provides: "bootstrap_relay_client reads AGENT_RELAY_SERVER_ID and populates RelayConfig.server_id"
       contains: "AGENT_RELAY_SERVER_ID"
     - path: "src/handlers/relay_client.rs"
-      provides: "TunnelConnect JSON includes `relay_token: cfg.token.clone()` and `server_id: cfg.server_id` — gateway can now call auth::authorize"
+      provides: "TunnelConnect JSON includes `relay_token: cfg.token` (no `.clone()` needed — see plan line ~241) and `server_id: cfg.server_id` — gateway can now call auth::authorize"
       contains: "relay_token.*cfg.token"
     - path: "opt/relay/src/tunnel.rs"
       provides: "Real yamux server session: ws_bridge task + Session::new_server + read TunnelConnect from first inbound yamux stream + auth::authorize call + store Control in TunnelHandle + drive session loop"
@@ -116,7 +116,7 @@ Purpose: The 22/28 score reflects that the backend, agent, dashboard, Docker, an
 Output:
 - `src/state.rs` — `RelayConfig` gains `pub server_id: Uuid` field (new)
 - `src/main.rs` — `bootstrap_relay_client` reads `AGENT_RELAY_SERVER_ID` env var and populates `RelayConfig.server_id` (defaults to `Uuid::nil()` with a warn log if missing)
-- `src/handlers/relay_client.rs` — `connect_msg` JSON includes `relay_token: cfg.token.clone()` and `server_id: cfg.server_id`
+- `src/handlers/relay_client.rs` — `connect_msg` JSON includes `relay_token: cfg.token` (no `.clone()` — the `&RelayConfig` borrow means `cfg.token` is not moved; the example code in Task 1 Part C uses this uncloned form) and `server_id: cfg.server_id`
 - `opt/relay/src/tunnel.rs` — major refactor: spawn `ws_bridge` task, `Session::new_server(duplex_side, yamux_cfg)`, wait for first inbound yamux stream, read TunnelConnect JSON from it, call `state.backend.authorize(relay_token, server_id).await`, store `session.control()` in `TunnelHandle.yamux_control`, drive session loop on the bridge task's lifetime + 10s ticker
 
 Scope: This plan only touches the gateway's tunnel control plane and a small agent-side addition to put the bearer token in the JSON. The handshake parser, by_subdomain/by_server_id routing, rate limiter, metrics, Docker, Caddyfile, dashboard, and the entire backend HMAC stack are NOT modified — they were verified PASS at 22/28 and stay byte-identical.
@@ -231,19 +231,57 @@ Scope: This plan only touches the gateway's tunnel control plane and a small age
       "agent_public_ip": cfg.agent_public_ip,
       "region": cfg.region,
   });
+  let mut connect_bytes = serde_json::to_vec(&connect_msg).map_err(|e| anyhow!("TunnelConnect serialize: {}", e))?;
+  connect_bytes.push(b'\n');  // NDJSON framing: gateway's read_json_message reads until '\n'
+  control.write_all(&connect_bytes).await
+      .map_err(|e| anyhow!("TunnelConnect write failed: {}", e))?;
   ```
   Note: `cfg.token: String` is the string form of the relay_token UUID. The gateway's `TunnelConnect.relay_token: Uuid` field (added in Task 2) parses the string back to a UUID. The `Uuid::nil()` default in Part B means a missing env var results in a JSON `server_id: "00000000-0000-0000-0000-000000000000"` — the backend's `find_by_relay_token` will then return 403, which is the correct fail-closed behavior.
 
-  Do NOT change `cfg.token.clone()` semantics: the existing `cfg.token` is moved into the `Bearer` header at `build_ws_request(uri, &cfg.token)` (line 315). Since `json!` consumes `cfg.token` by value, you may need `cfg.token.clone()` instead of `cfg.token`. Inspect the call site at line 315 and clone if needed.
+  About `cfg.token` ownership: the existing `build_ws_request(uri, &cfg.token)` at line 315 takes a `&str` borrow (it builds the `Authorization: Bearer` header without consuming the string), so `cfg: &RelayConfig` is a borrow and `cfg.token` is NOT moved by `json!` (the macro internally calls `.serialize` on `&cfg.token`). `relay_token: cfg.token` and `relay_token: cfg.token.clone()` are both valid and produce the same JSON. Use the form that reads cleanest; no `clone()` is required.
+
+  **Part D — `src/handlers/relay_client.rs` (heartbeat NDJSON)**: in the heartbeat ticker at line 499-507, append a newline to the heartbeat JSON so the gateway can read it as a complete NDJSON message:
+  ```rust
+  // Normal heartbeat.
+  let msg = json!({
+      "type": "tunnel_heartbeat",
+      "tunnel_uptime_secs": uptime,
+  });
+  let mut bytes = serde_json::to_vec(&msg).unwrap_or_default();
+  bytes.push(b'\n');  // NDJSON framing
+  if control.write_all(&bytes).await.is_err() {
+      warn!("RelayClient: heartbeat write failed, exiting heartbeat loop");
+      return;
+  }
+  ```
+
+  **Part E — `src/handlers/relay_client.rs` (on-demand NDJSON)**: the heartbeat loop at line 515-524 also has an `Some(payload) = ctrl_rx.recv() => { ... }` arm that consumes the `ctrl_rx` mpsc (which is fed by `send_heartbeat` at line 225-229, the dashboard's `relay.heartbeat` task arm, and any `relay.disconnect` arms). This arm writes the payload directly to the control stream — so it ALSO needs the trailing newline or the gateway's `read_control_stream` will concatenate the on-demand payload with the next regular heartbeat and fail JSON deserialization:
+  ```rust
+  // On-demand backend-initiated commands (immediate heartbeat,
+  // disconnect signal) get forwarded onto the control stream
+  // verbatim. The trailing '\n' is required for the gateway's
+  // NDJSON read_json_message demuxer.
+  Some(payload) = ctrl_rx.recv() => {
+      let mut bytes = serde_json::to_vec(&payload).unwrap_or_default();
+      bytes.push(b'\n');  // NDJSON framing
+      if control.write_all(&bytes).await.is_err() {
+          warn!("RelayClient: on-demand control message write failed");
+          return;
+      }
+  }
+  ```
+  Without this Part E fix, the gateway's `read_control_stream` would see concatenated JSONs (e.g., `{"type":"tunnel_heartbeat",...}{"type":"tunnel_disconnect",...}`) on its first on-demand payload, fail `serde_json::from_slice` with "trailing characters", and log a warning while continuing — leaving `last_heartbeat` stale.
 
   </action>
   <verify>
-    <automated>grep -n "pub server_id: Uuid" src/state.rs && echo "---" && grep -n "AGENT_RELAY_SERVER_ID" src/main.rs && echo "---" && grep -n "relay_token.*cfg\.token\|relay_token: cfg" src/handlers/relay_client.rs && echo "---" && grep -n '"server_id": cfg.server_id' src/handlers/relay_client.rs && echo "---" && cargo check 2>&1 | tail -10</automated>
+    <automated>grep -n "pub server_id: Uuid" src/state.rs && echo "---" && grep -n "AGENT_RELAY_SERVER_ID" src/main.rs && echo "---" && grep -n "relay_token.*cfg\.token\|relay_token: cfg" src/handlers/relay_client.rs && echo "---" && grep -n '"server_id": cfg.server_id' src/handlers/relay_client.rs && echo "---" && grep -nF 'push(b' src/handlers/relay_client.rs && echo "(should be ≥3: connect_bytes.push(b'\\n') + 2× bytes.push(b'\\n') on the heartbeat ticker and the on-demand ctrl_rx arm)" && echo "---" && cargo check 2>&1 | tail -10</automated>
   </verify>
   <done>
   - `src/state.rs` has `pub server_id: Uuid` field in `RelayConfig` with the doc comment above
   - `src/main.rs` reads `AGENT_RELAY_SERVER_ID`, parses as Uuid, defaults to `Uuid::nil()` with warn log if missing
-  - `src/handlers/relay_client.rs:343-349` TunnelConnect JSON includes `relay_token: cfg.token.clone()` and `server_id: cfg.server_id`
+  - `src/handlers/relay_client.rs:343-354` TunnelConnect JSON includes `relay_token: cfg.token` and `server_id: cfg.server_id`, then `connect_bytes.push(b'\n')` appends the NDJSON newline before `control.write_all`
+  - `src/handlers/relay_client.rs:499-507` heartbeat write appends `bytes.push(b'\n')` (NDJSON framing) so the gateway can demux multiple heartbeats on the long-lived control stream
+  - `src/handlers/relay_client.rs:515-524` on-demand `ctrl_rx.recv()` arm appends `bytes.push(b'\n')` (NDJSON framing) so the gateway's `read_control_stream` can demux dashboard-initiated heartbeats and disconnect signals that share the control stream
   - `cargo check` exits 0 with no new errors and no new warnings in the 3 modified files
   </done>
 </task>
@@ -449,18 +487,77 @@ Scope: This plan only touches the gateway's tunnel control plane and a small age
 
   - `async fn read_control_stream(state: Arc<AppState>, handle: Arc<TunnelHandle>, mut stream: StreamHandle)`: reads JSON messages from the agent's control stream in a loop, parses as `TunnelMessage`, dispatches to the existing `handle_tunnel_message` helper at lines 190-224 (which is unchanged), and breaks on `TunnelDisconnect` or stream EOF. Body is ~20 lines.
 
-  - `async fn read_json_message(stream: &mut StreamHandle) -> Result<Vec<u8>, std::io::Error>`: reads a single JSON message from a yamux stream. yamux framing is by stream, not by message, so a "message" is whatever the agent wrote in one `write_all` call. Since the agent writes the full JSON in one `control.write_all(&connect_bytes)` (relay_client.rs:351-353), the gateway can read up to a reasonable max (e.g., 64 KiB) and parse it. If the buffer fills before the JSON ends, treat that as an error. Body is ~15 lines.
+  - `async fn read_json_message(stream: &mut StreamHandle) -> Result<Vec<u8>, std::io::Error>`: reads a single JSON message from a yamux stream using **newline-delimited JSON (NDJSON) framing**. The control stream is long-lived (one stream per tunnel, used for the initial `TunnelConnect` then repeated `TunnelHeartbeat` messages every 10s), so raw `write_all`/`read` calls cannot reliably demultiplex the messages. The protocol is:
+    1. The agent writes `serde_json::to_vec(&msg) + b"\n"` (Tasks 1 Part C and 1 Part D add the trailing `\n`).
+    2. The gateway reads from the yamux stream into a 64 KiB buffer, growing if needed, until it finds `\n` (0x0A) or EOF.
+    3. Returns the bytes BEFORE the newline (i.e., the JSON document), with the newline stripped.
+    4. If the buffer grows past 64 KiB without finding `\n`, treat that as a protocol error (`Err(std::io::Error::new(std::io::ErrorKind::InvalidData, "NDJSON message exceeds 64 KiB"))`).
+    5. On EOF without any data, return `Ok(empty)` (caller treats as disconnect).
+    Body is ~25 lines:
+    ```rust
+    async fn read_json_message(stream: &mut StreamHandle) -> Result<Vec<u8>, std::io::Error> {
+        let mut buf: Vec<u8> = Vec::with_capacity(BRIDGE_BUFFER_BYTES);
+        let mut tmp = [0u8; BRIDGE_BUFFER_BYTES];
+        loop {
+            let n = stream.read(&mut tmp).await?;
+            if n == 0 {
+                if buf.is_empty() { return Ok(Vec::new()); }  // clean EOF
+                return Err(std::io::Error::new(std::io::ErrorKind::UnexpectedEof, "NDJSON: stream closed mid-message"));
+            }
+            buf.extend_from_slice(&tmp[..n]);
+            if let Some(pos) = buf.iter().position(|&b| b == b'\n') {
+                // Note: Vec::split_to is from the `bytes::BytesMut` API and is NOT
+                // available on std::vec::Vec<u8>. We use slice + drain to extract
+                // the message and discard the consumed bytes (including the newline).
+                let out = buf[..pos].to_vec();
+                buf.drain(..=pos);
+                return Ok(out);
+            }
+            if buf.len() > BRIDGE_BUFFER_BYTES {
+                return Err(std::io::Error::new(std::io::ErrorKind::InvalidData, "NDJSON message exceeds 64 KiB"));
+            }
+        }
+    }
+    ```
 
   **Preserve unchanged**:
   - `TunnelMessage` enum (lines 33-39) — keep as-is.
-  - `TunnelHeartbeat` struct (lines 25-31) — keep as-is.
-  - `handle_tunnel_message` (lines 190-224) — keep as-is. The control-stream reader task in the new design calls this on each parsed `TunnelMessage`.
+  - `TunnelHeartbeat` struct (lines 25-31) — **MODIFY**: add `#[serde(default)]` to the `server_id` field. The agent's heartbeat JSON (relay_client.rs:225-229 and :499-502) does NOT include `server_id` (the gateway already knows which server owns the control stream via `handle.server_id`), and the `TunnelMessage::TunnelHeartbeat` deserializer in `TunnelMessage` (which uses `#[serde(tag = "type", rename_all = "snake_case")]` and `TunnelHeartbeat(TunnelHeartbeat)`) will fail to parse the first heartbeat (within 10s of connect) with "missing field `server_id`" → `last_heartbeat` never updates → `run_heartbeat_watcher` at heartbeat.rs:36 marks every tunnel stale after 90s. The fix is small and surgical:
+  ```rust
+  #[derive(Debug, Clone, Serialize, Deserialize)]
+  pub struct TunnelHeartbeat {
+      #[serde(rename = "type")]
+      pub msg_type: String,
+      #[serde(default)]
+      pub server_id: Uuid,             // OPTIONAL: gateway uses handle.server_id instead
+      pub tunnel_uptime_secs: u64,
+  }
+  ```
+  - `handle_tunnel_message` (lines 190-224) — **MODIFY 1 LINE**: change `h.server_id` to `handle.server_id` in the `report_tunnel_event_with_uptime` call at line 208. Since `server_id` is now optional and the agent doesn't send it, using `h.server_id` would log `Uuid::nil()` in the backend's `/internal/relay/tunnel-event` audit trail. Using `handle.server_id` is correct because the gateway already validated and registered the tunnel against this specific `server_id` from the initial `TunnelConnect`:
+  ```rust
+  TunnelMessage::TunnelHeartbeat(h) => {
+      let now_secs = std::time::SystemTime::now()
+          .duration_since(std::time::UNIX_EPOCH)
+          .unwrap_or_default()
+          .as_secs();
+      handle
+          .last_heartbeat
+          .store(now_secs, std::sync::atomic::Ordering::Relaxed);
+      crate::metrics::TUNNEL_EVENTS_TOTAL
+          .with_label_values(&["heartbeat"])
+          .inc();
+      let _ = state
+          .backend
+          .report_tunnel_event_with_uptime(handle.server_id, "heartbeat", "ok", h.tunnel_uptime_secs)  // CHANGED: handle.server_id
+          .await;
+  }
+  ```
   - `validate_subdomain` (lines 226-236) — keep as-is.
   - The `Message::Text` arms at lines 46 and 152 — DELETE them; the gateway no longer matches `Message::Text` directly. yamux framing handles all bytes.
 
   </action>
   <verify>
-    <automated>grep -n "Session::new_server" opt/relay/src/tunnel.rs && echo "---" && grep -n "Message::Binary" opt/relay/src/tunnel.rs && echo "---" && grep -n "session.control()" opt/relay/src/tunnel.rs && echo "---" && grep -n "Mutex::new(None)" opt/relay/src/tunnel.rs && echo "(should be 0)" && echo "---" && grep -n "Message::Text" opt/relay/src/tunnel.rs && echo "(should be 0)" && echo "---" && cd /home/rhnbztnl/Downloads/Berguna/Projects/escluse/opt/relay && cargo check 2>&1 | tail -15</automated>
+    <automated>grep -n "Session::new_server" opt/relay/src/tunnel.rs && echo "---" && grep -n "Message::Binary" opt/relay/src/tunnel.rs && echo "---" && grep -n "session.control()" opt/relay/src/tunnel.rs && echo "---" && grep -n "Mutex::new(None)" opt/relay/src/tunnel.rs && echo "(should be 0)" && echo "---" && grep -n "Message::Text" opt/relay/src/tunnel.rs && echo "(should be 0)" && echo "---" && (grep -nB2 'pub server_id: Uuid' opt/relay/src/tunnel.rs | grep -q 'serde(default)' && echo "OK: TunnelHeartbeat.server_id is #[serde(default)]") && echo "---" && grep -nF "report_tunnel_event_with_uptime(handle.server_id" opt/relay/src/tunnel.rs && echo "(should be 1 — heartbeat uses handle.server_id, not h.server_id)" && echo "---" && grep -nF 'split_to' opt/relay/src/tunnel.rs && echo "(should be 0 — read_json_message uses buf.drain, not the non-existent Vec::split_to)" && echo "---" && cd /home/rhnbztnl/Downloads/Berguna/Projects/escluse/opt/relay && cargo check 2>&1 | tail -15</automated>
   </verify>
   <done>
   - `opt/relay/src/tunnel.rs` has exactly 1 match for `Session::new_server` (line ~70 of the rewritten file)
@@ -468,10 +565,13 @@ Scope: This plan only touches the gateway's tunnel control plane and a small age
   - `opt/relay/src/tunnel.rs` has 1 match for `session.control()` (the Control is stored in TunnelHandle)
   - `opt/relay/src/tunnel.rs` has 0 matches for `Mutex::new(None)` (the yamux_control stub is replaced with `Some(control)`)
   - `opt/relay/src/tunnel.rs` has 0 matches for `Message::Text` (the gateway no longer reads Text frames directly; yamux handles all framing)
+  - `opt/relay/src/tunnel.rs` has 0 matches for `split_to` (read_json_message uses `buf.drain`, not the non-existent `Vec::split_to` from the `bytes::BytesMut` API)
   - `TunnelConnect` struct has the new `pub relay_token: Uuid` field
-  - 3 new private helpers exist: `ws_bridge`, `read_control_stream`, `read_json_message`
+  - `TunnelHeartbeat.server_id` has `#[serde(default)]` attribute (verifier regression check: heartbeat JSON without `server_id` deserializes correctly)
+  - `handle_tunnel_message` at line ~208 uses `handle.server_id` (not `h.server_id`) in the `report_tunnel_event_with_uptime` call
+  - 3 new private helpers exist: `ws_bridge`, `read_control_stream`, `read_json_message` (the last one uses NDJSON framing — reads until `\n` via `buf.drain(..=pos)`)
   - `cd opt/relay && cargo check` exits 0 with no new errors and no new warnings in tunnel.rs
-  - `handle_tunnel_message` (lines 190-224) and `validate_subdomain` (lines 226-236) are byte-identical to their pre-rewrite state
+  - `validate_subdomain` (lines 226-236) is byte-identical to its pre-rewrite state (only `handle_tunnel_message` had a 1-line change)
   </done>
 </task>
 
@@ -555,6 +655,15 @@ Scope: This plan only touches the gateway's tunnel control plane and a small age
   - `grep -n "relay_token" src/handlers/relay_client.rs` returns ≥1 match (the new field in the TunnelConnect JSON, between `type` and `server_id`)
   - `grep -n "pub server_id: Uuid" src/state.rs` returns 1 match (the new RelayConfig field)
   - `grep -n "AGENT_RELAY_SERVER_ID" src/main.rs` returns 1 match (the new env var read)
+
+  **Heartbeat regression check (avoids the BLOCKER found by the plan-checker iteration 1)**:
+  - `grep -nB2 'pub server_id: Uuid' opt/relay/src/tunnel.rs` shows `#[serde(default)]` on the line immediately above the `pub server_id: Uuid` line in the `TunnelHeartbeat` struct (this lets the agent's heartbeat JSON without `server_id` deserialize cleanly)
+  - `grep -nF "report_tunnel_event_with_uptime(handle.server_id" opt/relay/src/tunnel.rs` returns 1 match (heartbeat uses `handle.server_id`, not `h.server_id`)
+  - `grep -nF 'push(b' src/handlers/relay_client.rs` returns ≥3 matches (NDJSON newline appended to: `connect_bytes.push(b'\n')` in connect, `bytes.push(b'\n')` in the 10s heartbeat ticker, and `bytes.push(b'\n')` in the on-demand `ctrl_rx` arm at lines 515-524)
+  - `grep -nF 'buf.drain(..=pos)' opt/relay/src/tunnel.rs` returns 1 match (NDJSON read logic in `read_json_message`: drain the consumed bytes including the newline — note: NOT `split_to` which doesn't exist on `Vec<u8>`)
+  - `grep -nF 'split_to' opt/relay/src/tunnel.rs` returns 0 matches (regression check: the plan uses `buf.drain` not the non-existent `Vec::split_to`)
+  - `grep -nF 'NDJSON' opt/relay/src/tunnel.rs` returns ≥1 match (doc comment in `read_json_message` names the protocol)
+  - `grep -nF 'NDJSON' src/handlers/relay_client.rs` returns ≥1 match (comment near the heartbeat `push(b'\n')` call names the protocol)
 
   **Compile checks**:
   - `cd /home/rhnbztnl/Downloads/Berguna/Projects/escluse/opt/relay && cargo check 2>&1 | tail -10` exits 0 with no errors (warnings are OK; the existing 17 warnings stay)
@@ -650,6 +759,15 @@ grep -n "relay_token" src/handlers/relay_client.rs           # ≥1 (in connect_
 grep -n "pub server_id: Uuid" src/state.rs                   # 1 (new RelayConfig field)
 grep -n "AGENT_RELAY_SERVER_ID" src/main.rs                  # 1 (new env var)
 
+# Heartbeat / NDJSON regression check (plan-checker iteration 1 BLOCKER fix + iteration 2 BLOCKER fix)
+grep -nB2 'pub server_id: Uuid' opt/relay/src/tunnel.rs | grep -q 'serde(default)' && echo "OK: TunnelHeartbeat.server_id is #[serde(default)]" || echo "FAIL"
+grep -nF "report_tunnel_event_with_uptime(handle.server_id" opt/relay/src/tunnel.rs   # 1 (heartbeat uses handle.server_id, not h.server_id)
+grep -nF 'push(b' src/handlers/relay_client.rs                                          # ≥3 (NDJSON newline on connect + heartbeat ticker + on-demand ctrl_rx arm)
+grep -nF 'buf.drain(..=pos)' opt/relay/src/tunnel.rs                                    # 1 (NDJSON read logic in read_json_message, using Vec<u8> not BytesMut)
+test $(grep -c 'split_to' opt/relay/src/tunnel.rs) -eq 0 && echo "OK: no Vec::split_to (non-existent method)"  # 0 (regression check: must use buf.drain, not split_to)
+grep -nF 'NDJSON' opt/relay/src/tunnel.rs                                               # ≥1 (doc comment in read_json_message)
+grep -nF 'NDJSON' src/handlers/relay_client.rs                                          # ≥1 (comment near the heartbeat push)
+
 # Compile checks
 cd /home/rhnbztnl/Downloads/Berguna/Projects/escluse/opt/relay && cargo check 2>&1 | tail -5   # exit 0
 cd /home/rhnbztnl/Downloads/Berguna/Projects/escluse && cargo check 2>&1 | tail -5             # exit 0
@@ -664,21 +782,27 @@ End-to-end behavior (real WS handshake + yamux session + auth::authorize) is NOT
 <success_criteria>
 1. `src/state.rs` has `pub server_id: Uuid` field in `RelayConfig` (between `pub token: String` and `pub subdomain: String`).
 2. `src/main.rs` reads `AGENT_RELAY_SERVER_ID` env var, parses as `Uuid`, defaults to `Uuid::nil()` with a warn log if missing.
-3. `src/handlers/relay_client.rs:343-349` TunnelConnect JSON includes `relay_token: cfg.token.clone()` and `server_id: cfg.server_id`.
+  3. `src/handlers/relay_client.rs:343-349` TunnelConnect JSON includes `relay_token: cfg.token` (no `.clone()` needed — the plan-checker iteration 2 INFO confirms both forms produce identical JSON; the example code uses the uncloned form per the `cfg: &RelayConfig` borrow analysis) and `server_id: cfg.server_id`.
 4. `opt/relay/src/tunnel.rs` has 0 matches for `Mutex::new(None)` (the yamux_control stub is replaced with `Some(session.control())`).
 5. `opt/relay/src/tunnel.rs` has 0 matches for `Message::Text` (the gateway no longer reads Text frames directly).
 6. `opt/relay/src/tunnel.rs` has ≥1 match for `Session::new_server`, `Message::Binary`, `session.control()`, `ws_bridge`, and `auth::authorize` (or `state.backend.authorize`).
-7. `opt/relay/src/tunnel.rs` has 3 new private helpers: `ws_bridge`, `read_control_stream`, `read_json_message`.
-8. `opt/relay/src/tunnel.rs` `TunnelConnect` struct has the new `pub relay_token: Uuid` field.
-9. `cd /home/rhnbztnl/Downloads/Berguna/Projects/escluse/opt/relay && cargo check` exits 0 with no new errors and no new warnings.
-10. `cd /home/rhnbztnl/Downloads/Berguna/Projects/escluse && cargo check` exits 0 with no new errors and no new warnings.
-11. The 3 BLOCKERs (yamux session, WS frame type, auth::authorize called) are closed; BLOCKER #4 (rate limiter) is explicitly noted as a verifier false positive in the plan's `out_of_scope` frontmatter and is NOT addressed.
-12. The `TunnelHandle` shape in `opt/relay/src/registry.rs` is byte-identical (no field changes).
-13. The `Registry::register` 1-tunnel-per-server_id (D-21) enforcement in `opt/relay/src/registry.rs:42-61` is byte-identical.
-14. The handshake parser + by_subdomain routing + 100 req/min rate limit (already wired at player.rs:37) are byte-identical.
-15. No new dependencies added; `tokio-yamux 0.3`, `tokio-tungstenite 0.26`, `tokio 1`, `futures 0.3`, `serde`, `serde_json`, `uuid`, `tracing` are all already in `opt/relay/Cargo.toml` and the root `Cargo.toml`.
-16. No other file is touched (the 4 modified files are `src/state.rs`, `src/main.rs`, `src/handlers/relay_client.rs`, `opt/relay/src/tunnel.rs`).
-17. Verifier re-check should show 28/28 must-haves verified (was 22/28; the missing 6 = 3 BLOCKERs × 2 must-haves each + the 0 expected from BLOCKER #4's false-positive status).
+  7. `opt/relay/src/tunnel.rs` has 3 new private helpers: `ws_bridge`, `read_control_stream`, `read_json_message` (the last one uses NDJSON framing — reads until `\n` via `buf.drain(..=pos)` on `Vec<u8>`, NOT the non-existent `Vec::split_to`).
+  8. `opt/relay/src/tunnel.rs` `TunnelConnect` struct has the new `pub relay_token: Uuid` field.
+  9. `opt/relay/src/tunnel.rs` `TunnelHeartbeat.server_id` has `#[serde(default)]` attribute (heartbeat JSON without `server_id` deserializes cleanly — the plan-checker iteration 1 BLOCKER).
+  10. `opt/relay/src/tunnel.rs` `handle_tunnel_message` uses `handle.server_id` (not `h.server_id`) in the `report_tunnel_event_with_uptime` call (1-line change).
+  11. `src/handlers/relay_client.rs` heartbeat write at line 499-507 appends `b'\n'` to the JSON bytes (NDJSON framing).
+  12. `src/handlers/relay_client.rs` connect write at line 343-354 appends `b'\n'` to `connect_bytes` (NDJSON framing).
+  13. `src/handlers/relay_client.rs` on-demand `ctrl_rx.recv()` arm at line 515-524 appends `b'\n'` to the JSON bytes (NDJSON framing — plan-checker iteration 2 WARNING fix).
+  14. `opt/relay/src/tunnel.rs` `read_json_message` does NOT call `split_to` (non-existent on `Vec<u8>` — the plan uses `buf.drain(..=pos)` instead, plan-checker iteration 2 BLOCKER fix).
+  15. `cd /home/rhnbztnl/Downloads/Berguna/Projects/escluse/opt/relay && cargo check` exits 0 with no new errors and no new warnings.
+  16. `cd /home/rhnbztnl/Downloads/Berguna/Projects/escluse && cargo check` exits 0 with no new errors and no new warnings.
+  17. The 3 BLOCKERs (yamux session, WS frame type, auth::authorize called) are closed; BLOCKER #4 (rate limiter) is explicitly noted as a verifier false positive in the plan's `out_of_scope` frontmatter and is NOT addressed.
+  18. The `TunnelHandle` shape in `opt/relay/src/registry.rs` is byte-identical (no field changes).
+  19. The `Registry::register` 1-tunnel-per-server_id (D-21) enforcement in `opt/relay/src/registry.rs:42-61` is byte-identical.
+  20. The handshake parser + by_subdomain routing + 100 req/min rate limit (already wired at player.rs:37) are byte-identical.
+  21. No new dependencies added; `tokio-yamux 0.3`, `tokio-tungstenite 0.26`, `tokio 1`, `futures 0.3`, `serde`, `serde_json`, `uuid`, `tracing` are all already in `opt/relay/Cargo.toml` and the root `Cargo.toml`.
+  22. No other file is touched (the 4 modified files are `src/state.rs`, `src/main.rs`, `src/handlers/relay_client.rs`, `opt/relay/src/tunnel.rs`).
+  23. Verifier re-check should show 28/28 must-haves verified (was 22/28; the missing 6 = 3 BLOCKERs × 2 must-haves each + the 0 expected from BLOCKER #4's false-positive status).
 </success_criteria>
 
 <output>
