@@ -171,3 +171,10 @@ None - no external service configuration required for this plan. The gateway (Pl
 ---
 *Phase: 68-escluse-relay-infrastructure-objective-implement-esluce-rela*
 *Completed: 2026-06-07*
+
+## Self-Check: PASSED
+
+- SUMMARY.md created at expected path.
+- All 3 task commits present in `api/.git`: `77e4e6f`, `2b989bd`, `e030466`.
+- Final docs commit `03f6d5d` recorded in outer repo.
+- `cargo check` exits 0 (77 warnings, within pre-existing baseline).
