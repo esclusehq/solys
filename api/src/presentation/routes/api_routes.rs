@@ -35,6 +35,17 @@ pub fn routes(container: Arc<AppContainer>) -> Router {
         .route("/api/v1/servers/:server_id/tasks", get(crate::presentation::handlers::cron_task_handlers::list_tasks).post(crate::presentation::handlers::cron_task_handlers::create_task))
         .route("/api/v1/servers/:server_id/tasks/:task_id", patch(crate::presentation::handlers::cron_task_handlers::update_task).delete(crate::presentation::handlers::cron_task_handlers::delete_task))
         .route("/api/v1/servers/:server_id/tasks/:task_id/run", post(crate::presentation::handlers::cron_task_handlers::run_task))
+
+        // Phase 67: Connectivity (per-server)
+        .route("/api/v1/servers/:server_id/connectivity",
+            get(crate::presentation::handlers::connectivity_handlers::get_status))
+        .route("/api/v1/servers/:server_id/connectivity/probe",
+            post(crate::presentation::handlers::connectivity_handlers::trigger_probe))
+        .route("/api/v1/servers/:server_id/connectivity/audit",
+            get(crate::presentation::handlers::connectivity_handlers::get_audit_log))
+
+        // Phase 68: Relay (per-server nested under /api/v1/servers)
+        .merge(crate::presentation::handlers::relay_handlers::router())
         
         // Agents & Nodes
         .nest("/api/v1/agents", AgentHandlers::router(state.clone()))
