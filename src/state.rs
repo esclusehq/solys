@@ -159,12 +159,16 @@ pub struct RelayConfig {
 /// Per-server portion of the relay config — arrives in task.payload for
 /// `relay.connect` (D-15).  A new instance is created for each tunnel
 /// and stored in the associated `PerServerRuntime`.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct PerServerRelayConfig {
     pub server_id: Uuid,
     pub subdomain: String,
     pub public_port: u16,
     pub local_mc_addr: String,
+    /// DNS record ID from the Cloudflare API response — stored so the
+    /// `relay.remove_cname_record` cleanup can delete by ID rather than
+    /// name. `None` means fall back to subdomain-based lookup (D-15).
+    pub dns_record_id: Option<String>,
 }
 
 static RELAY_CONFIG: OnceCell<Arc<RelayConfig>> = OnceCell::const_new();
