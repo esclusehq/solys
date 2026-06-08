@@ -9,7 +9,9 @@
 
 use axum::{
     extract::{Path, Query, State},
-    Json,
+    response::IntoResponse,
+    routing::{get, post},
+    Json, Router,
 };
 use serde::Deserialize;
 use uuid::Uuid;
@@ -19,6 +21,13 @@ use crate::presentation::responses::api_response::ApiResponse;
 use crate::presentation::routes::api_routes::ApiState;
 use crate::shared::errors::app_error::AppError;
 use crate::application::services::connectivity_service::ConnectivityState;
+
+pub fn router() -> Router<ApiState> {
+    Router::new()
+        .route("/:server_id/connectivity", get(get_status))
+        .route("/:server_id/connectivity/probe", post(trigger_probe))
+        .route("/:server_id/connectivity/audit", get(get_audit_log))
+}
 
 async fn ensure_ownership(
     state: &ApiState,

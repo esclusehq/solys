@@ -1,6 +1,6 @@
-FROM caddy:2.8-builder AS builder
-RUN caddy build-modules --modules github.com/caddy-dns/route53
+FROM caddy:builder AS builder
+RUN xcaddy build --with github.com/caddy-dns/cloudflare
 
-FROM caddy:2.8
+FROM caddy:latest
 COPY --from=builder /usr/bin/caddy /usr/bin/caddy
 COPY opt/relay/Caddyfile /etc/caddy/Caddyfile

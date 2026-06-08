@@ -1,11 +1,11 @@
 # ---- Build stage ----
-FROM rust:1.81-slim-bookworm AS builder
+FROM rust:1.86-slim-bookworm AS builder
 WORKDIR /build
 RUN apt-get update && apt-get install -y --no-install-recommends pkg-config libssl-dev && rm -rf /var/lib/apt/lists/*
 # Cache deps
 COPY Cargo.toml Cargo.lock ./
 COPY opt/relay/Cargo.toml opt/relay/
-RUN mkdir -p opt/relay/src && touch opt/relay/src/main.rs
+RUN mkdir -p opt/relay/src && echo 'fn main() {}' > opt/relay/src/main.rs
 RUN cargo build -p relay-gateway --release
 # Build real binary
 COPY opt/relay/src opt/relay/src
@@ -22,4 +22,4 @@ EXPOSE 8080 25565 9100
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
     CMD wget -q --spider http://localhost:9100/metrics || exit 1
 ENTRYPOINT ["/usr/local/bin/relay-gateway"]
-CMD ["--config", "/etc/relay-gateway/relay-gateway.toml"]
+CMD ["/usr/local/bin/relay-gateway"]

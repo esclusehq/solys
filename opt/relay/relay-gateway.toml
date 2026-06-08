@@ -4,7 +4,7 @@ player_bind = "0.0.0.0:25565"     # raw TCP for MC Java players
 metrics_bind = "0.0.0.0:9100"     # Prometheus /metrics (D-22)
 
 [backend]
-base_url = "https://api.esluce.net"
+base_url = "https://api.esluce.com"
 hmac_secret_env = "GATEWAY_HMAC_SECRET"  # read from env at startup
 request_timeout_secs = 5
 

@@ -1,6 +1,11 @@
-version: "3.9"
-
 services:
+  redis:
+    image: redis:7-alpine
+    container_name: relay-redis
+    restart: unless-stopped
+    networks:
+      - relay-net
+
   relay-gateway:
     build:
       context: ../..
@@ -11,6 +16,7 @@ services:
     environment:
       - GATEWAY_HMAC_SECRET=${GATEWAY_HMAC_SECRET}
       - RUST_LOG=info
+      - RELAY_CONFIG=/etc/relay-gateway/relay-gateway.toml
     volumes:
       - ./relay-gateway.toml:/etc/relay-gateway/relay-gateway.toml:ro
     ports:
@@ -18,6 +24,9 @@ services:
       - "9100:9100"     # Prometheus /metrics (D-22; NOT 9090)
     networks:
       - relay-net
+    depends_on:
+      redis:
+        condition: service_started
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://localhost:9100/metrics"]
       interval: 30s
@@ -31,6 +40,8 @@ services:
     image: escluse/relay-caddy:latest
     container_name: relay-caddy
     restart: unless-stopped
+    environment:
+      - CLOUDFLARE_API_TOKEN=${CLOUDFLARE_API_TOKEN}
     ports:
       - "443:443"
       - "80:80"
