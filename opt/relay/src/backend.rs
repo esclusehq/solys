@@ -1,18 +1,12 @@
 use hmac::{Hmac, Mac};
-use serde::Deserialize;
+use serde_json::Value;
 use sha2::Sha256;
 use uuid::Uuid;
 
-use crate::auth::Authorization;
 use crate::error::GatewayError;
+use crate::types::ServerMapping;
 
 type HmacSha256 = Hmac<Sha256>;
-
-#[derive(Debug, Deserialize)]
-struct AuthorizeResponse {
-    node_id: Uuid,
-    user_id: Uuid,
-}
 
 pub struct BackendClient {
     base_url: String,
@@ -66,15 +60,16 @@ impl BackendClient {
     }
 
     /// POST /internal/relay/authorize with HMAC headers.
+    /// Phase 69: server_id removed from request — relay_token alone authorizes
+    /// all servers for this agent. Returns `Vec<ServerMapping>` (one per server).
+    /// Backward-compatible: handles both JSON array `[...]` and single object `{...}`.
     pub async fn authorize(
         &self,
         relay_token: Uuid,
-        server_id: Uuid,
-    ) -> Result<Authorization, GatewayError> {
+    ) -> Result<Vec<ServerMapping>, GatewayError> {
         let path = "/internal/relay/authorize";
         let body = serde_json::json!({
             "relay_token": relay_token,
-            "server_id": server_id,
         })
         .to_string();
         let ts = Self::now_unix();
@@ -100,14 +95,19 @@ impl BackendClient {
 
         match resp.status().as_u16() {
             200..=299 => {
-                let parsed: AuthorizeResponse = resp
+                let value: Value = resp
                     .json()
                     .await
                     .map_err(|e| GatewayError::BackendUnreachable(format!("bad /authorize json: {}", e)))?;
-                Ok(Authorization {
-                    node_id: parsed.node_id,
-                    user_id: parsed.user_id,
-                })
+                // Backward-compatible: handle both JSON array and single object.
+                if value.is_array() {
+                    serde_json::from_value(value)
+                        .map_err(|e| GatewayError::BackendUnreachable(format!("bad /authorize array: {}", e)))
+                } else {
+                    let single: ServerMapping = serde_json::from_value(value)
+                        .map_err(|e| GatewayError::BackendUnreachable(format!("bad /authorize object: {}", e)))?;
+                    Ok(vec![single])
+                }
             }
             401 | 403 => Err(GatewayError::Auth),
             s => Err(GatewayError::BackendUnreachable(format!(

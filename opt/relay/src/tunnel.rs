@@ -121,22 +121,28 @@ pub async fn run_tunnel_session(socket: WebSocket, state: Arc<AppState>) {
         return;
     }
 
-    // 6. Authorize the (relay_token, server_id) pair against the backend.
-    //    The backend's /internal/relay/authorize endpoint verifies ownership
-    //    (the node that owns this relay_token also owns this server_id) and
-    //    returns 200 on success, 401/403 on auth failure, 502 on backend
-    //    unreachable. The HMAC is signed by `state.backend` (T-68-17).
-    if let Err(e) =
-        crate::auth::authorize(&state, &connect.relay_token, &connect.server_id).await
-    {
-        warn!(
-            "[TUNNEL] auth::authorize failed for server_id={}, token={}: {}; closing WS",
-            connect.server_id, connect.relay_token, e
-        );
-        // No tunnel is registered on auth failure — clean close. The bridge
-        // task is aborted implicitly when this function returns and `socket`
-        // is dropped (axum sends a WS Close frame on drop).
-        return;
+    // 6. Authorize the relay_token against the backend (Phase 69: 1:N mapping).
+    //    The backend's /internal/relay/authorize endpoint returns all servers
+    //    authorized by this token. We verify that the requested server_id is
+    //    in the authorized list — allowing multiple tunnels from the same
+    //    agent IP, each with a different server_id (multi-server).
+    match crate::auth::authorize(&state, &connect.relay_token).await {
+        Ok(mappings) => {
+            if !mappings.iter().any(|m| m.server_id == connect.server_id) {
+                warn!(
+                    "[TUNNEL] server_id={} not authorized by token={}; closing WS",
+                    connect.server_id, connect.relay_token
+                );
+                return;
+            }
+        }
+        Err(e) => {
+            warn!(
+                "[TUNNEL] auth::authorize failed for token={}: {}; closing WS",
+                connect.relay_token, e
+            );
+            return;
+        }
     }
 
     // 7. Build the TunnelHandle with the real `Control` handle. This is the
