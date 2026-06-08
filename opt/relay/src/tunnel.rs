@@ -60,6 +60,14 @@ pub enum TunnelMessage {
 }
 
 pub async fn run_tunnel_session(socket: WebSocket, state: Arc<AppState>) {
+    // Phase 69 (multi-server): The gateway accepts N concurrent WS connections
+    // from the same agent IP, each authenticating with the same relay_token
+    // but a different server_id. There is NO agent-IP uniqueness enforcement
+    // in this function — the registry enforces one tunnel per server_id, and
+    // the authorize() call above validates that the token authorizes the
+    // requested server_id. Per-IP rate limiting for player connections is
+    // handled separately in player.rs (DoS protection, not tunnel uniqueness).
+    //
     // 1. Set up the WS <-> duplex bridge. The bridge task pumps bytes
     //    between WS Binary messages and the duplex's yamux side. yamux
     //    handles all framing; the gateway code below only reads from the
