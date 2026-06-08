@@ -414,6 +414,16 @@ async fn bootstrap_relay_client(
         .unwrap_or_else(|_| "ap-southeast-1".to_string());
     let local_mc_addr = std::env::var("AGENT_RELAY_LOCAL_ADDR")
         .unwrap_or_else(|_| "127.0.0.1:25565".to_string());
+    let server_id = std::env::var("AGENT_RELAY_SERVER_ID")
+        .ok()
+        .and_then(|s| Uuid::parse_str(&s).ok())
+        .unwrap_or_else(|| {
+            tracing::warn!(
+                "[RELAY] AGENT_RELAY_SERVER_ID not set or invalid; using Uuid::nil(). \
+                 Gateway's auth::authorize will return 403 until this is set."
+            );
+            Uuid::nil()
+        });
 
     let dns_api_token = std::env::var("AGENT_RELAY_DNS_API_TOKEN").ok();
     let dns_zone_id = std::env::var("AGENT_RELAY_DNS_ZONE_ID").ok();
@@ -430,6 +440,7 @@ async fn bootstrap_relay_client(
     let relay_cfg = state::RelayConfig {
         gateway_url,
         token: token.clone(),
+        server_id,
         subdomain,
         public_port,
         agent_public_ip,
