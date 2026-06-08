@@ -19,6 +19,11 @@ pub struct CloudflareDnsConfig {
     pub auto_refresh: bool,
     pub refresh_interval_secs: u64,
     pub subdomain: Option<String>,
+    /// Per-server subdomains to keep in sync alongside the global one
+    /// (e.g. `["mantap-wou", "server-lain"]` — the watcher prepends
+    /// `<sub>.<global_subdomain>.<wildcard_domain>` to build the FQDN).
+    #[serde(default)]
+    pub extra_subdomains: Vec<String>,
 }
 
 lazy_static! {
@@ -50,12 +55,18 @@ pub async fn handle_configure(task: Task) -> Result<serde_json::Value, anyhow::E
     *guard = Some(config.clone());
     drop(guard);
 
-    info!("DNS configured for zone: {}", config.zone_name);
+    info!(
+        "DNS configured for zone: {} (global={:?}, per_server={:?})",
+        config.zone_name,
+        config.subdomain,
+        config.extra_subdomains
+    );
 
     Ok(json!({
         "status": "configured",
         "zone": config.zone_name,
         "domain": config.wildcard_domain,
+        "per_server_count": config.extra_subdomains.len(),
     }))
 }
 
@@ -237,14 +248,20 @@ pub async fn handle_status(_task: Task) -> Result<serde_json::Value, anyhow::Err
 
     let status = match config.as_ref() {
         Some(cfg) => {
-            let domain = cfg.subdomain.as_deref()
-                .map(|s| format!("{}.{}", s, cfg.wildcard_domain))
-                .unwrap_or_else(|| format!("<subdomain>.{}", cfg.wildcard_domain));
+            let global_subdomain = cfg.subdomain.as_deref().unwrap_or("node");
+            let domain = format!("{}.{}", global_subdomain, cfg.wildcard_domain);
+            let per_server_domains: Vec<String> = cfg
+                .extra_subdomains
+                .iter()
+                .filter(|s| !s.trim().is_empty())
+                .map(|s| format!("{}.{}.{}", s.trim(), global_subdomain, cfg.wildcard_domain))
+                .collect();
 
             json!({
                 "configured": true,
                 "zone": cfg.zone_name,
                 "domain": domain,
+                "per_server_domains": per_server_domains,
                 "current_ip": ip.clone(),
                 "auto_refresh": cfg.auto_refresh,
                 "interval_secs": cfg.refresh_interval_secs,

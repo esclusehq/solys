@@ -1,2 +1,0 @@
-ALTER TABLE nodes ADD COLUMN IF NOT EXISTS container_runtime VARCHAR(50);
-ALTER TABLE nodes ADD COLUMN IF NOT EXISTS runtime_version VARCHAR(50);
