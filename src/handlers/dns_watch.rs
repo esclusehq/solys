@@ -84,14 +84,11 @@ async fn check_and_update() -> Result<()> {
 
     {
         let mut ip_guard = dns::CURRENT_IP.write().await;
-        if *ip_guard == current_ip {
-            return Ok(());
+        if *ip_guard != current_ip {
+            let old_ip = ip_guard.clone();
+            *ip_guard = current_ip.clone();
+            info!("Public IP changed: {} -> {}", old_ip, current_ip);
         }
-        let old_ip = ip_guard.clone();
-        *ip_guard = current_ip.clone();
-        drop(ip_guard);
-
-        info!("Public IP changed: {} -> {}", old_ip, current_ip);
     }
 
     // Phase 67: an IP change is a connectivity event — kick the diagnostics

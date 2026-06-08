@@ -11,6 +11,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Per-server DNS records (`<server>.<global_subdomain>.<wildcard_domain>`)** — `CloudflareDnsConfig` now carries `extra_subdomains: Vec<String>` and the DDNS watcher keeps every record in sync alongside the global one. Backend computes the per-server subdomains from `servers.public_host` and ships them in `NodeMessage::DnsConfig` on every Cloudflare save and on every reconnect. Watcher creates/updates each A record (`<sub>.<global_sub>.<wildcard>`) on every IP change, not just the global one. Example: server "mantap wou" gets `mantap-wou.play.esluce.com` while the global `play.esluce.com` continues to update. Status task (`dns.status`) now reports `per_server_domains` for the dashboard.
 
+### Fixed
+
+- **DnsWatcher never syncs DNS when config arrives after first tick** — `check_and_update` returned early when IP did not change, so if `CloudflareDnsConfig` was received from the backend *after* the initial DnsWatcher tick (which is the normal startup sequence), the per-server A records were never created and existing records were never refreshed until the next IP change. Removed the IP-change guard so DNS records are always synced on every polling cycle (every 300s).
+- **RelayClient default gateway URL uses unregistered domain `esluce.net`** — `bootstrap_relay_client` defaulted to `wss://relay.esluce.net/relay/tunnel`, but `esluce.net` is not registered (NXDOMAIN). Changed default to `wss://relay.esluce.com/relay/tunnel`.
+
 ## [v0.4.6] - 2026-06-06
 
 ### Fixed
