@@ -267,6 +267,35 @@ pub async fn send_heartbeat(server_id: Uuid) -> Result<serde_json::Value> {
     }
 }
 
+/// Returns a snapshot of all active per-server bandwidth counts.
+/// Each tuple contains (server_id, bytes_transferred, tunnel_uptime).
+pub async fn active_servers_with_bandwidth() -> Vec<(Uuid, u64, Duration)> {
+    // Snapshot server IDs while holding the read lock.
+    let server_ids: Vec<Uuid> = {
+        let tunnels = runtime().tunnels.read().await;
+        tunnels.keys().copied().collect()
+    };
+
+    let mut results = Vec::with_capacity(server_ids.len());
+    for server_id in server_ids {
+        let (bytes, uptime) = {
+            let tunnels = runtime().tunnels.read().await;
+            match tunnels.get(&server_id) {
+                Some(psr) => {
+                    let b = psr.bytes_transferred.load(Ordering::Relaxed);
+                    let u = psr.tunnel_start.lock().await
+                        .map(|t| t.elapsed())
+                        .unwrap_or(Duration::ZERO);
+                    (b, u)
+                }
+                None => continue,
+            }
+        };
+        results.push((server_id, bytes, uptime));
+    }
+    results
+}
+
 // ---------------------------------------------------------------------------
 // Per-server reconnect loop (Phase 69 — D-04)
 // ---------------------------------------------------------------------------
@@ -307,7 +336,13 @@ pub async fn run_relay_client(
                 backoff_ms = BACKOFF_INITIAL_MS;
             }
             Err(e) => {
-                warn!(server_id = %per_server_cfg.server_id, error = %e, "connect_and_run failed");
+                let delay_s = backoff_ms / 1000;
+                warn!(
+                    server_id = %per_server_cfg.server_id,
+                    error = %e,
+                    "relay tunnel disconnected, reconnecting in {}s",
+                    delay_s,
+                );
             }
         }
 
@@ -317,6 +352,11 @@ pub async fn run_relay_client(
         tokio::time::sleep(Duration::from_millis(sleep_ms)).await;
         backoff_ms = (backoff_ms.saturating_mul(2)).min(BACKOFF_MAX_MS);
     }
+
+    info!(
+        server_id = %per_server_cfg.server_id,
+        "relay tunnel disconnected permanently",
+    );
 }
 
 /// Per-server tunnel lifecycle: WS handshake → TunnelConnect → heartbeat
@@ -333,7 +373,12 @@ async fn connect_and_run(
     // 2. Build the WS handshake request with the Bearer token.
     let req = build_ws_request(uri.clone(), &shared_cfg.token)?;
 
-    // 3. Upgrade to WSS.
+    // 3. Transition: connecting — before the WS upgrade.
+    info!(
+        server_id = %per_server_cfg.server_id,
+        "connecting to relay gateway"
+    );
+
     let (ws_stream, _response) = tokio_tungstenite::connect_async_tls_with_config(
         req, None, true, None,
     )
@@ -382,6 +427,13 @@ async fn connect_and_run(
     )
     .await;
 
+    // Transition: connected — control stream established.
+    info!(
+        server_id = %per_server_cfg.server_id,
+        subdomain = %per_server_cfg.subdomain,
+        "relay tunnel connected"
+    );
+
     // 7. Reset byte counter + start time; install the control_tx
     // channel on the per-server runtime.
     let (ctrl_tx, ctrl_rx) = tokio::sync::mpsc::unbounded_channel::<serde_json::Value>();
@@ -420,8 +472,12 @@ async fn connect_and_run(
 
     // 8. Spawn the heartbeat task (T-68-03 / T-68-04 + D-25 rekey).
     let heartbeat_cancel = shutdown.clone();
+    let heartbeat_server_id = per_server_cfg.server_id;
     let heartbeat_handle = tokio::spawn(async move {
-        run_heartbeat_task(control, ctrl_rx, bytes_counter, tunnel_start, heartbeat_cancel).await;
+        run_heartbeat_task(
+            control, ctrl_rx, bytes_counter, tunnel_start,
+            heartbeat_cancel, heartbeat_server_id,
+        ).await;
     });
 
     // 9. Drive incoming streams until the session ends.
@@ -513,6 +569,7 @@ async fn run_heartbeat_task(
     bytes_counter: Arc<AtomicU64>,
     tunnel_start: Option<Instant>,
     shutdown: CancellationToken,
+    server_id: Uuid,
 ) {
     let mut ticker = interval(HEARTBEAT_INTERVAL);
     ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
@@ -533,9 +590,10 @@ async fn run_heartbeat_task(
                     || bytes >= REKEY_BYTES
                 {
                     info!(
+                        server_id = %server_id,
                         uptime_secs = uptime,
                         bytes_transferred = bytes,
-                        "RelayClient: D-25 rekey threshold hit; closing tunnel for fresh handshake"
+                        "rekeying relay session"
                     );
                     audit::log_relay_tunnel_event(
                         Uuid::nil(),
@@ -551,6 +609,10 @@ async fn run_heartbeat_task(
                 }
 
                 // Normal heartbeat.
+                debug!(
+                    server_id = %server_id,
+                    "sending heartbeat"
+                );
                 let msg = json!({
                     "type": "tunnel_heartbeat",
                     "tunnel_uptime_secs": uptime,
