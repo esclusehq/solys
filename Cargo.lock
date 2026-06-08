@@ -3976,6 +3976,7 @@ dependencies = [
  "libz-sys",
  "local-ip-address",
  "notify",
+ "rand 0.8.6",
  "reqwest 0.12.4",
  "rusoto_core",
  "rusoto_s3",

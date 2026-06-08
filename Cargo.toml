@@ -93,6 +93,9 @@ hmac        = "0.12"
 sha2        = "0.10"
 hex         = "0.4"
 
+# Phase 69-04: Heartbeat staggering via random jitter
+rand = "0.8"
+
 [[bin]]
 name = "escluse-agent"
 path = "src/main.rs"

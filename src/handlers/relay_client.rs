@@ -74,8 +74,10 @@ use tokio_tungstenite::tungstenite::{
     Message,
 };
 use tokio_util::sync::CancellationToken;
-use tracing::{error, info, warn};
+use tracing::{debug, error, info, warn};
 use uuid::Uuid;
+
+use rand::Rng;
 
 use tokio_yamux::{Config as YamuxConfig, Session, StreamHandle};
 
@@ -403,6 +405,18 @@ async fn connect_and_run(
             return Ok(());
         }
     }
+
+    // Phase 69-04: Stagger first heartbeat 0-10s to prevent thundering
+    // herd when many per-server loops start simultaneously (e.g. after
+    // agent WS reconnect).  The jitter is a one-time offset before the
+    // heartbeat task starts its 10 s ticker loop.
+    let jitter_ms: u64 = rand::thread_rng().gen_range(0..=10_000);
+    tokio::time::sleep(Duration::from_millis(jitter_ms)).await;
+    debug!(
+        server_id = %per_server_cfg.server_id,
+        jitter_ms,
+        "heartbeat staggered"
+    );
 
     // 8. Spawn the heartbeat task (T-68-03 / T-68-04 + D-25 rekey).
     let heartbeat_cancel = shutdown.clone();
