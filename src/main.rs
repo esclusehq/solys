@@ -403,7 +403,7 @@ async fn bootstrap_relay_client(
     };
 
     let gateway_url = std::env::var("AGENT_RELAY_GATEWAY_URL")
-        .unwrap_or_else(|_| "wss://relay.esluce.net/relay/tunnel".to_string());
+        .unwrap_or_else(|_| "wss://relay.esluce.com/relay/tunnel".to_string());
     let subdomain = std::env::var("AGENT_RELAY_SUBDOMAIN")
         .unwrap_or_else(|_| config.agent_name.clone());
     let public_port = std::env::var("AGENT_RELAY_PUBLIC_PORT")
