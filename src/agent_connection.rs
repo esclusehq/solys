@@ -16,7 +16,7 @@ use uuid::Uuid;
 use crate::handlers;
 use crate::handlers::metrics;
 use crate::handlers::dns::{self, CloudflareDnsConfig};
-use crate::agent::result_sender::ResultSender;
+use crate::agent::result_sender::{AgentToBackend, ResultSender};
 use crate::task_state;
 use agent_config::AgentConfig;
 use agent_proto::{TaskResult, TaskStatus};
@@ -135,6 +135,11 @@ enum BackendMessage {
         public_ip: Option<String>,
         #[serde(default)]
         subdomain: Option<String>,
+        /// Per-server subdomains to keep in sync alongside the global one
+        /// (e.g. `["mantap-wou", "server-lain"]` — the watcher prepends
+        /// `<sub>.<global_subdomain>.<wildcard_domain>`).
+        #[serde(default)]
+        extra_subdomains: Vec<String>,
     },
 }
 
@@ -158,6 +163,20 @@ pub struct CommandParams {
     pub follow: Option<bool>,
     #[serde(default)]
     pub tail: Option<u32>,
+    #[serde(default)]
+    pub connection_key: Option<String>,
+    #[serde(default)]
+    pub local_path: Option<String>,
+    #[serde(default)]
+    pub remote_path: Option<String>,
+    #[serde(default)]
+    pub command: Option<String>,
+    #[serde(default)]
+    pub rcon_port: Option<u16>,
+    #[serde(default)]
+    pub rcon_password: Option<String>,
+    #[serde(default)]
+    pub host: Option<String>,
 }
 
 #[derive(Debug, Clone, serde::Deserialize)]
@@ -256,14 +275,11 @@ pub async fn run(
     let multiplier = config.reconnect_multiplier;
 
     let node_id: std::sync::Mutex<Option<Uuid>> = std::sync::Mutex::new(None);
-    
-    // ResultSender for buffering
-    let (ws_tx, _ws_rx) = mpsc::channel(100);
-    let result_sender = ResultSender::new(ws_tx.clone(), data_dir.clone());
+
+    // ResultSender starts with no sender; the inner reconnect loop installs a fresh
+    // sender (and a writer task that drains it into the WebSocket) on every connect.
+    let result_sender = ResultSender::new(None, data_dir.clone());
     result_sender.init().await?;
-    
-    // Set progress sender for task state tracking
-    crate::task_state::set_progress_sender(ws_tx);
 
     // Check shutdown before connecting
     if shutdown.load(Ordering::Relaxed) {
@@ -271,14 +287,29 @@ pub async fn run(
         return Ok(Uuid::nil());
     }
 
+    let mut reconnect_attempt: u32 = 0;
+
     loop {
-        info!(url = %ws_url, "Connecting to backend");
+        reconnect_attempt = reconnect_attempt.saturating_add(1);
+        info!(
+            url = %ws_url,
+            attempt = reconnect_attempt,
+            delay_secs = initial_delay.as_secs(),
+            "Connecting to backend (reconnect loop)"
+        );
 
-        match connect_async(&ws_url).await {
-            Ok((ws_stream, _)) => {
-                info!("WebSocket connected");
+        // Wrap connect_async in a timeout so a hung TCP/WS handshake doesn't block forever
+        let connect_result = tokio::time::timeout(
+            std::time::Duration::from_secs(15),
+            connect_async(&ws_url),
+        )
+        .await;
 
-                let (mut ws_sender, mut ws_receiver) = ws_stream.split();
+        match connect_result {
+            Ok(Ok((ws_stream, _))) => {
+                info!(attempt = reconnect_attempt, "WebSocket connected");
+
+                let (ws_sender, mut ws_receiver) = ws_stream.split();
 
                 // Collect system info for node registration
                 let mut sys = System::new_all();
@@ -291,7 +322,53 @@ pub async fn run(
                     Ok(ip) => ip,
                     Err(_) => "127.0.0.1".to_string(),
                 };
-                let register = AgentMessage::Register {
+
+                // Outbound channel: result_sender, task_state, and the inner loop all
+                // push `AgentToBackend` messages here. A single writer task drains the
+                // channel and serialises/writes them to the WebSocket. This is the
+                // fix for "WebSocket channel full, buffering result" — previously no
+                // task consumed the channel at all.
+                let (ws_tx, ws_rx) = mpsc::channel::<crate::agent::result_sender::AgentToBackend>(1000);
+                result_sender.update_sender(Some(ws_tx.clone())).await;
+                crate::task_state::set_progress_sender(ws_tx.clone());
+
+                // Writer task: owns the WebSocket sink and the channel receiver.
+                // Exits when the channel is closed (old sender clones dropped) or
+                // when a WS write fails — either way, the inner loop notices via
+                // the read side and triggers a reconnect.
+                let writer_handle = tokio::spawn(async move {
+                    use crate::agent::result_sender::AgentToBackend;
+                    let mut rx = ws_rx;
+                    let mut sink = ws_sender;
+                    while let Some(msg) = rx.recv().await {
+                        match msg {
+                            AgentToBackend::Pong(payload) => {
+                                if let Err(e) = sink.send(Message::Pong(payload)).await {
+                                    error!(error = %e, "Writer: Pong send failed, exiting");
+                                    return;
+                                }
+                            }
+                            other => {
+                                match serde_json::to_string(&other) {
+                                    Ok(text) => {
+                                        if let Err(e) = sink.send(Message::Text(text.into())).await {
+                                            error!(error = %e, "Writer: Text send failed, exiting");
+                                            return;
+                                        }
+                                    }
+                                    Err(e) => {
+                                        error!(error = %e, "Writer: serialise failed, skipping");
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    info!("Writer exiting: channel closed");
+                });
+
+                // Build the Register message; now send it via the channel so it
+                // gets serialised + written by the same writer task as everything else.
+                let register = AgentToBackend::Register {
                     id: config.agent_id,
                     name: agent_name.clone(),
                     ip: ip.clone(),
@@ -304,7 +381,7 @@ pub async fn run(
                     cpu_cores,
                     agent_version,
                 };
-                ws_sender.send(Message::Text(serde_json::to_string(&register)?.into())).await?;
+                ws_tx.send(register).await?;
 
                 info!("Waiting for register ack...");
                 
@@ -429,16 +506,23 @@ pub async fn run(
                 loop {
                     // Check shutdown signal
                     if shutdown.load(Ordering::Relaxed) {
-                        info!("Shutdown requested, closing connection...");
-                        let _ = ws_sender.close().await;
+                        info!("Shutdown requested, aborting writer to close connection...");
+                        writer_handle.abort();
                         break;
                     }
-                    
+
                     tokio::select! {
                         // Phase 60: Process crash reports from Docker event listener
                         Some(crash_msg) = crash_rx.recv() => {
-                            if let Ok(msg) = serde_json::to_string(&crash_msg) {
-                                let _ = ws_sender.send(Message::Text(msg.into())).await;
+                            // crash_msg is an AgentMessage::CrashReport — route via the
+                            // outbound channel so the writer task serialises + writes it.
+                            if let AgentMessage::CrashReport { server_id, exit_code, log_excerpt, timestamp } = crash_msg {
+                                let _ = ws_tx.send(AgentToBackend::CrashReport {
+                                    server_id,
+                                    exit_code,
+                                    log_excerpt,
+                                    timestamp,
+                                }).await;
                             }
                         }
                         _ = heartbeat_interval.tick() => {
@@ -467,14 +551,37 @@ pub async fn run(
                                         })
                                     }).collect();
                                     
-                                    let heartbeat = AgentMessage::Heartbeat {
+                                    let heartbeat = AgentToBackend::Heartbeat {
                                         node_id: id,
                                         status: "online".to_string(),
                                         metrics: Some(m),
                                         containers: c,
                                     };
-                                    if let Ok(msg) = serde_json::to_string(&heartbeat) {
-                                        let _ = ws_sender.send(Message::Text(msg.into())).await;
+                                    // `ws_tx.send` applies backpressure to the channel —
+                                    // if the writer is stuck on a dead WS, the channel fills
+                                    // and this `await` will block. Wrap with a short timeout
+                                    // so a stuck writer doesn't stall heartbeats forever; if
+                                    // it does stall, the writer is probably wedged and we
+                                    // should break out and let the reconnect loop re-establish.
+                                    match tokio::time::timeout(
+                                        std::time::Duration::from_secs(5),
+                                        ws_tx.send(heartbeat),
+                                    )
+                                    .await
+                                    {
+                                        Ok(Ok(_)) => {}
+                                        Ok(Err(_closed)) => {
+                                            error!("Heartbeat channel closed, WS writer likely exited");
+                                            break;
+                                        }
+                                        Err(_elapsed) => {
+                                            error!(
+                                                timeout_secs = 5,
+                                                "Heartbeat channel send timed out, writer is likely wedged; \
+                                                 breaking inner loop to trigger reconnect"
+                                            );
+                                            break;
+                                        }
                                     }
                                 }
                             }
@@ -482,9 +589,16 @@ pub async fn run(
                         Some(msg_result) = ws_receiver.next() => {
                             match msg_result {
                                 Ok(Message::Ping(p)) => {
-                                    let _ = ws_sender.send(Message::Pong(p)).await;
+                                    let _ = ws_tx.send(AgentToBackend::Pong(p)).await;
                                 }
-                                Ok(Message::Close(_)) | Ok(Message::Pong(_)) | Ok(Message::Binary(_)) | Ok(Message::Frame(_)) => {}
+                                Ok(Message::Close(close_frame)) => {
+                                    warn!(
+                                        frame = ?close_frame,
+                                        "Received close frame from backend, ending inner loop"
+                                    );
+                                    break;
+                                }
+                                Ok(Message::Pong(_)) | Ok(Message::Binary(_)) | Ok(Message::Frame(_)) => {}
                                 Ok(Message::Text(text)) => {
                                     let text_str = text.to_string();
                                     info!(msg = %text_str, "=== RECEIVED TEXT MESSAGE ===");
@@ -499,22 +613,24 @@ pub async fn run(
                                                 info!(request_id = %request_id, command = %command, "Executing task");
                                                 
                                                 let task_type = match command.as_str() {
-                                                    "create" => "server.create",
-                                                    "start" => "server.start",
-                                                    "stop" => "server.stop",
-                                                    "restart" => "server.restart",
-                                                    "delete" => "server.delete",
-                                                    "logs" => "server.logs",
-                                                    "command" => "server.command",
+                                                    "create" | "server.create" => "server.create",
+                                                    "start" | "server.start" => "server.start",
+                                                    "stop" | "server.stop" => "server.stop",
+                                                    "restart" | "server.restart" => "server.restart",
+                                                    "delete" | "server.delete" => "server.delete",
+                                                    "logs" | "server.logs" => "server.logs",
+                                                    "command" | "server.command" => "server.command",
                                                     "backup.start" => "backup.start",
                                                     "backup.restore" => "backup.restore",
-                                                    "list_dir" => "file.list_dir",
-                                                    "read_file" => "file.read_file",
-                                                    "write_file" => "file.write_file",
-                                                    "delete_path" => "file.delete",
-                                                    "mkdir" => "file.mkdir",
-                                                    "rename_path" => "file.rename",
-                                                    "copy_path" => "file.copy",
+                                                    "list_dir" | "file.list_dir" => "file.list_dir",
+                                                    "read_file" | "file.read_file" => "file.read_file",
+                                                    "write_file" | "file.write_file" => "file.write_file",
+                                                    "delete_path" | "file.delete" => "file.delete",
+                                                    "mkdir" | "file.mkdir" => "file.mkdir",
+                                                    "rename_path" | "file.rename" => "file.rename",
+                                                    "copy_path" | "file.copy" => "file.copy",
+                                                    "sftp_upload" | "sftp.upload" => "sftp.upload",
+                                                    "sftp_download" | "sftp.download" => "sftp.download",
                                                     _ => "unknown",
                                                 };
                                                 
@@ -552,11 +668,38 @@ pub async fn run(
                                                    if let Some(f) = follow {
                                                        payload["follow"] = serde_json::json!(f);
                                                    }
-                                                   if let Some(t) = tail {
-                                                       payload["tail"] = serde_json::json!(t);
-                                                   }
-                                                
-                                                if let Some(config) = deploy_config {
+                                                    if let Some(t) = tail {
+                                                        payload["tail"] = serde_json::json!(t);
+                                                    }
+                                                    if let Some(ck) = params.as_ref().and_then(|p| p.connection_key.clone()) {
+                                                        payload["connection_key"] = serde_json::json!(ck);
+                                                    }
+                                                    if let Some(lp) = params.as_ref().and_then(|p| p.local_path.clone()) {
+                                                        payload["local_path"] = serde_json::json!(lp);
+                                                    }
+                                                     if let Some(rp) = params.as_ref().and_then(|p| p.remote_path.clone()) {
+                                                         payload["remote_path"] = serde_json::json!(rp);
+                                                     }
+                                                     if let Some(c) = params.as_ref().and_then(|p| p.command.clone()) {
+                                                         payload["command"] = serde_json::json!(c);
+                                                     }
+                                                     if let Some(rp) = params.as_ref().and_then(|p| p.rcon_port) {
+                                                         payload["rcon_port"] = serde_json::json!(rp);
+                                                     }
+                                                     if let Some(pw) = params.as_ref().and_then(|p| p.rcon_password.clone()) {
+                                                         payload["rcon_password"] = serde_json::json!(pw);
+                                                     }
+                                                     if let Some(nn) = params.as_ref().and_then(|p| p.new_name.clone()) {
+                                                         payload["new_name"] = serde_json::json!(nn);
+                                                     }
+                                                     if let Some(bp) = params.as_ref().and_then(|p| p.backup_path.clone()) {
+                                                         payload["backup_path"] = serde_json::json!(bp);
+                                                     }
+                                                     if let Some(h) = params.as_ref().and_then(|p| p.host.clone()) {
+                                                         payload["host"] = serde_json::json!(h);
+                                                     }
+
+                                                 if let Some(config) = deploy_config {
                                                     payload["image"] = serde_json::json!(config.image);
                                                     if let Some(port) = config.game_port {
                                                         payload["ports"] = serde_json::json!({ "25565": [port.to_string()] });
@@ -594,17 +737,21 @@ pub async fn run(
                                                 };
                                                 result_sender.send(task_result).await;
                                                 
-                                                let response = AgentMessage::CommandResponse {
+                                                let response = AgentToBackend::CommandResponse {
                                                     request_id,
                                                     command,
                                                     server_id,
                                                     success: result.status == TaskStatus::Completed,
-                                                    output: serde_json::to_string(&result.output).unwrap_or_default(),
+                                                    output: match &result.output {
+                                                        Some(v) => serde_json::to_string(v).unwrap_or_default(),
+                                                        None => match &result.error {
+                                                            Some(e) => format!("{}: {}", e.code, e.message),
+                                                            None => "null".to_string(),
+                                                        },
+                                                    },
                                                     duration_ms: Some(duration_ms),
                                                 };
-                                                if let Ok(msg) = serde_json::to_string(&response) {
-                                                    let _ = ws_sender.send(Message::Text(msg.into())).await;
-                                                }
+                                                let _ = ws_tx.send(response).await;
                                             }
                                             BackendMessage::GetMetrics { request_id, container_id } => {
                                                 info!(request_id = %request_id, "Getting metrics");
@@ -634,19 +781,24 @@ pub async fn run(
                                                 };
                                                 result_sender.send(task_result).await;
                                                 
-                                                let response = AgentMessage::CommandResponse {
+                                                let response = AgentToBackend::CommandResponse {
                                                     request_id,
                                                     command: "get_metrics".to_string(),
                                                     server_id: Uuid::nil(),
                                                     success: result.status == TaskStatus::Completed,
-                                                    output: serde_json::to_string(&result.output).unwrap_or_default(),
+                                                    output: match &result.output {
+                                                        Some(v) => serde_json::to_string(v).unwrap_or_default(),
+                                                        None => match &result.error {
+                                                            Some(e) => format!("{}: {}", e.code, e.message),
+                                                            None => "null".to_string(),
+                                                        },
+                                                    },
                                                     duration_ms: Some(duration_ms),
                                                 };
-                                                if let Ok(msg) = serde_json::to_string(&response) {
-                                                    let _ = ws_sender.send(Message::Text(msg.into())).await;
-                                                }
+                                                let _ = ws_tx.send(response).await;
                                             }
-                                            BackendMessage::DnsConfig { api_token, zone_id, zone_name, wildcard_domain, auto_refresh, refresh_interval_secs, public_ip, subdomain } => {
+                                            BackendMessage::DnsConfig { api_token, zone_id, zone_name, wildcard_domain, auto_refresh, refresh_interval_secs, public_ip, subdomain, extra_subdomains } => {
+                                                let per_server_count = extra_subdomains.len();
                                                 let config = CloudflareDnsConfig {
                                                     api_token,
                                                     zone_id,
@@ -655,10 +807,12 @@ pub async fn run(
                                                     auto_refresh,
                                                     refresh_interval_secs,
                                                     subdomain,
+                                                    extra_subdomains,
                                                 };
                                                 let mut guard = dns::DNS_CONFIG.write().await;
                                                 *guard = Some(config);
-                                                info!("DNS configuration updated from backend");
+                                                drop(guard);
+                                                info!("DNS configuration updated from backend ({} per-server subdomains)", per_server_count);
                                             }
                                             BackendMessage::Ping => {
                                                 let node_id_value = *node_id.lock().unwrap();
@@ -686,15 +840,13 @@ pub async fn run(
                                                             })
                                                         }).collect();
                                                         
-                                                        let heartbeat = AgentMessage::Heartbeat {
+                                                        let heartbeat = AgentToBackend::Heartbeat {
                                                             node_id: id,
                                                             status: "online".to_string(),
                                                             metrics: Some(m),
                                                             containers: c,
                                                         };
-                                                        if let Ok(msg) = serde_json::to_string(&heartbeat) {
-                                                            let _ = ws_sender.send(Message::Text(msg.into())).await;
-                                                        }
+                                                        let _ = ws_tx.send(heartbeat).await;
                                                     }
                                                 }
                                             }
@@ -708,12 +860,28 @@ pub async fn run(
                                 }
                             }
                         }
-                        else => break
+                        else => {
+                            warn!("All select branches exhausted, breaking inner loop");
+                            break;
+                        }
                     }
                 }
+
+                warn!("Inner loop exited, will attempt reconnection");
             }
-            Err(e) => {
-                error!(error = %e, "Failed to connect to backend");
+            Ok(Err(e)) => {
+                error!(
+                    error = %e,
+                    attempt = reconnect_attempt,
+                    "Failed to connect to backend (handshake error)"
+                );
+            }
+            Err(_elapsed) => {
+                error!(
+                    attempt = reconnect_attempt,
+                    timeout_secs = 15,
+                    "Connect to backend timed out (handshake hung)"
+                );
             }
         }
 
