@@ -4,13 +4,11 @@
     }
 }
 
-relay.esluce.net, *.play.esluce.net {
+relay.esluce.com, *.play.esluce.com {
     encode zstd gzip
     tls {
         protocols tls1.3
+        dns cloudflare {$CLOUDFLARE_API_TOKEN}
     }
-    @websocket {
-        path /relay/tunnel
-    }
-    reverse_proxy @websocket relay-gateway:8080
+    reverse_proxy relay-gateway:8080
 }

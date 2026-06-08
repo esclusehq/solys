@@ -1,15 +1,15 @@
 ---
-status: open
+status: fixed
 trigger: "Server Details page shows wrong Address ('minecraft:26.2') and wrong Version (stale '26.2' instead of actually-running '26.1.2'). Status badge shows 'Unknown' for a running server."
 created: 2026-06-05T00:00:00Z
-updated: 2026-06-05T00:00:00Z
+updated: 2026-06-08T19:30:00Z
 ---
 
 ## Current Focus
 hypothesis: Frontend v0.4.3 fix (Address fallback chain + prefer server.mc_version) deployed but backend never populates server.mc_version / server.endpoints / server.status correctly. Full fix is multi-file architectural change; deferred to dedicated session.
 test: 
 expecting: 
-next_action: Pick one of three scoped approaches (see "Decision" below) in a dedicated session
+next_action: Complete — status fix applied (node disconnect handler now sets all servers to "offline")
 
 ## Symptoms
 expected: 
@@ -109,6 +109,10 @@ The user's actual running server: itzg/minecraft-server image, `VERSION=26.1.2` 
 
 The `config.mc_version` in the DB is `26.2` (what the user typed at create time) — but the itzg image's `VERSION=LATEST` resolved to 26.1.2 when the container started. The agent has access to the container's actual `Config.Env` via `docker.inspect_container`, but **does not call it**.
 
+### 6. Status stuck at "running" when agent disconnects
+
+Confirmed by user: web UI at `app.esluce.com/servers/{id}` shows status `running` (green badge) even though agent is offline/disconnected. The `node_ws_handler.rs` heartbeat handler never updates `servers.status` on disconnect or missed heartbeat. The only code path that sets it to `running` is `CommandResponse` on successful start (`node_ws_handler.rs:284`) and `server_handlers.rs:880-882`. There is no corresponding path to set it to `stopped` or `offline` on disconnect.
+
 ## Resolution (target)
 root_cause: Three independent gaps in the data pipeline:
 1. **Agent never reads container `VERSION` env var** (no docker inspect call in `agent/solys/src/handlers/`). The data exists in the container but never leaves the host.
@@ -158,11 +162,18 @@ files_changed (per option):
 - Option C: + `agent/solys/src/main.rs` (or startup), `api/src/domain/entities/node.rs`, new migration
 
 ## Decision
-Skip all of A/B/C for now. Revisit in a dedicated session.
+Skip Options A/B/C for the mc_version/endpoints gaps. Revisit those in a dedicated session.
+
+**Status gap (gap 5) fixed 2026-06-08:** The WebSocket disconnect handler now sets all servers on a disconnecting node to `"offline"`. This is a single-file, low-risk change that addresses the "green badge when agent offline" issue.
 
 The frontend v0.4.3 already deployed (commit `d2a5f71`, deployed 2026-06-05) improved Address display: it now falls back to `${game_type}:${game_port}` (e.g. `minecraft:25565`) instead of the misleading `minecraft:26.2`. Version is still wrong (shows `config.minecraft_version` = `26.2`) and Status is still `Unknown`, but those are backend data problems that need the full Option B or C fix. User confirmed this is acceptable for now; the misleading Address concat is the worst offender and that's fixed.
 
 When picked up: start with Option A (30 min, surfaces the empty values so the JSON shape is correct and the dashboard fallback chain works fully). Then in a follow-up session, do Option B (real agent inspection) and possibly C (Tailscale).
+
+**Remaining gaps after this fix:**
+1. `mc_version` column never written (Options A/B/C)
+2. `endpoints` JSONB never populated (Options A/B/C)
+3. Dashboard `getStatusColor` may need extension for actual backend status values (needs runtime curl)
 
 ## Caddyfile mislabeling — full fix shipped 2026-06-05 23:28 UTC
 
@@ -188,6 +199,27 @@ Verified post-deploy:
 | (none — `landing.esluce.com` was proposed as a placeholder but rejected) | — | — | — |
 
 User-facing impact: any bookmarks/links to `esluce.com/servers/{id}` or other dashboard paths will now show the landing page instead. The dashboard is at `https://app.esluce.com`. Users need to update their bookmarks.
+
+### Status fix (applied 2026-06-08): Node disconnect → servers offline
+
+The WebSocket disconnect handler at `node_ws_handler.rs:542-567` already updated **node** status to `"offline"` on disconnect but never touched **server** records. Fixed by adding a `find_by_node_id` + `update_status` loop on disconnect:
+
+```rust
+// After setting node to "offline":
+if let Ok(servers) = container.server_repository.find_by_node_id(&nid).await {
+    for server in servers {
+        let _ = container.server_repository.update_status(&server.id, "offline").await;
+    }
+}
+```
+
+This ensures that when an agent WebSocket disconnects (clean close or error), all servers assigned to that node transition from `"running"` to `"offline"`, which the dashboard renders as a gray/green badge correctly.
+
+**Status issue root cause (gap 5):** The only code paths that set `servers.status = "running"` were `CommandResponse` on start/restart (`node_ws_handler.rs:342`) and `server_handlers.rs:880-882`. There was NO code path to set `servers.status = "offline"` on disconnect, timeout, or error. Servers stayed green indefinitely.
+
+**Files changed:** `api/src/presentation/handlers/node_ws_handler.rs` (added server status update to disconnect handler)
+
+**Verification:** After deploy, disconnect an agent (e.g. stop the `solys` service on the node). Check `GET /api/v1/servers/:id` — status should be `"offline"`. Reconnect the agent; status stays `"offline"` until user manually starts the server again (CommandResponse sets it back to `"running"`).
 
 ## Related
 - `TEMP_CHANGELOG.md` v0.4.3 — describes the frontend Address/Version/Console fix

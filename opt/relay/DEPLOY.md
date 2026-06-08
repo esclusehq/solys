@@ -4,6 +4,8 @@ This runbook provisions the AWS infrastructure that hosts the relay gateway
 (built in Plan 04a, containerized in Plan 04b) and deploys the Docker
 Compose stack.
 
+> **Domain note:** All relay endpoints use `esluce.com` (not `esluce.com`).
+
 ## AWS Setup (one-time)
 
 ### 1. EC2 Instance
@@ -13,7 +15,7 @@ Compose stack.
 - Security group inbound:
   - TCP 22 (admin SSH)
   - TCP 80 (Caddy HTTP-01 challenge + redirect to HTTPS)
-  - TCP 443 (Caddy WSS termination for `relay.esluce.net` and `*.play.esluce.net`)
+  - TCP 443 (Caddy WSS termination for `relay.esluce.com` and `*.play.esluce.com`)
   - TCP 25565 (NLB health check + player traffic)
   - TCP 9100 (Prometheus scraping — **RESTRICT TO backend's monitoring-service IP range only**; do not expose to the public internet)
 - IAM instance profile: attach `EsluceRelayGatewayRole` (see step 3)
@@ -45,7 +47,7 @@ wildcard cert provisioning.
 ### 4. Route 53 Wildcard (STATIC — manual setup is acceptable)
 
 **IMPORTANT (Phase 68 scope):** The wildcard A record
-`*.play.esluce.net` → NLB DNS name is **STATIC** in Phase 68 scope. The
+`*.play.esluce.com` → NLB DNS name is **STATIC** in Phase 68 scope. The
 NLB IP does not change for the lifetime of the deployment (single-AZ,
 single-instance, no horizontal scaling, no blue/green). Because the
 target is static, **manual AWS Console setup is acceptable**; backend
@@ -53,13 +55,13 @@ automation (e.g., `aws-sdk-route53` calls from `relay_service.rs`) is
 **deferred** to a future phase that needs dynamic record management
 (e.g., per-region failover or per-server A records).
 
-Create the following A records in the `esluce.net` hosted zone:
-- `*.play.esluce.net` → `<NLB_DNS_NAME>` (alias; TTL 60s)
-- `relay.esluce.net` → `<EC2_PUBLIC_IP_OR_ALB>` (alias; TTL 60s)
+Create the following A records in the `esluce.com` hosted zone:
+- `*.play.esluce.com` → `<NLB_DNS_NAME>` (alias; TTL 60s)
+- `relay.esluce.com` → `<EC2_PUBLIC_IP_OR_ALB>` (alias; TTL 60s)
 
 The Caddy image (built in Plan 04b with `caddy-dns/route53`) will
 automatically request and renew the wildcard cert for
-`*.play.esluce.net` and the single-name cert for `relay.esluce.net`
+`*.play.esluce.com` and the single-name cert for `relay.esluce.com`
 via Let's Encrypt DNS-01 on first boot.
 
 ### 5. GATEWAY_HMAC_SECRET
@@ -113,18 +115,18 @@ ingress from the backend's IP range.
 
 ### 2. TLS is terminated by Caddy
 ```bash
-curl -fsS https://relay.esluce.net/healthz
+curl -fsS https://relay.esluce.com/healthz
 # Expected: "OK"
 ```
 Verify TLS 1.3:
 ```bash
-echo | openssl s_client -connect relay.esluce.net:443 -tls1_3 2>&1 | grep "Protocol"
+echo | openssl s_client -connect relay.esluce.com:443 -tls1_3 2>&1 | grep "Protocol"
 # Expected: TLSv1.3
 ```
 
 ### 3. Player TCP works
 From any Minecraft Java client (NOT inside the VPC), connect to
-`<subdomain>.play.esluce.net:25565`. The client should resolve via
+`<subdomain>.play.esluce.com:25565`. The client should resolve via
 Route 53 → NLB → EC2 → gateway. The gateway's `read_mc_handshake_subdomain`
 (Plan 04a) will parse the Handshake, look up the subdomain in the
 `by_subdomain` DashMap, and forward to the matching yamux stream.
