@@ -1,8 +1,8 @@
 //! Per-stream yamux ↔ local TCP forwarder.
 //!
-//! Phase 68 (Plan 02). The gateway opens one yamux stream per inbound
-//! Minecraft Java client connection. For each accepted stream, the agent
-//! spawns a [`run_relay_session`] task that:
+//! Phase 68 (Plan 02) / Phase 69 (Plan 02). The gateway opens one yamux
+//! stream per inbound Minecraft Java client connection. For each accepted
+//! stream, the agent spawns a [`run_relay_session`] task that:
 //!
 //! 1. Opens a `TcpStream` to the configured local MC address (typically
 //!    `127.0.0.1:25565`).
@@ -12,9 +12,12 @@
 //!    signals the gateway (T-68-08: only local 127.0.0.1 is ever dialed;
 //!    user-supplied WS payloads can never redirect this target).
 //!
-//! Byte accounting is shared with the heartbeat task via
-//! [`Arc<AtomicU64>`] so the 100 GB rekey threshold (D-25 / RESOLVED Q4)
-//! is correctly summed across all in-flight sessions.
+//! Byte accounting is shared with the per-server heartbeat task via
+//! [`Arc<AtomicU64>`] (D-18). Each inbound stream in
+//! [`relay_client::drive_inbound_streams`] looks up the per-server
+//! `bytes_transferred` counter from the
+//! `RwLock<HashMap<ServerId, PerServerRuntime>>` so the 100 GB rekey
+//! threshold (D-25 / RESOLVED Q4) is correctly summed per server.
 
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
