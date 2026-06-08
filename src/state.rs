@@ -10,6 +10,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::fs;
 use tokio::sync::OnceCell;
+use uuid::Uuid;
 
 /// Agent state to persist (D-19)
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -140,6 +141,12 @@ pub struct RelayConfig {
     pub gateway_url: String,
     /// Per-node bearer token (`relay_token` column on `nodes`).
     pub token: String,
+    /// Per-server UUID the gateway uses for the auth::authorize (relay_token,
+    /// server_id) HMAC pair. Read from `AGENT_RELAY_SERVER_ID` env var at
+    /// bootstrap; defaults to `Uuid::nil()` with a warn log if missing (the
+    /// gateway's authorize call will then 403, which is the correct fail-closed
+    /// behavior).
+    pub server_id: Uuid,
     /// Public subdomain the gateway should bind, e.g. `abc12345`.
     pub subdomain: String,
     /// Public port on the gateway that maps to the local MC server.

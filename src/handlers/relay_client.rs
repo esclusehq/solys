@@ -342,12 +342,19 @@ async fn connect_and_run(
         .map_err(|e| anyhow!("yamux open_stream failed: {}", e))?;
     let connect_msg = json!({
         "type": "tunnel_connect",
+        "relay_token": cfg.token,
+        "server_id": cfg.server_id,
         "subdomain": cfg.subdomain,
         "public_port": cfg.public_port,
         "agent_public_ip": cfg.agent_public_ip,
         "region": cfg.region,
     });
-    let connect_bytes = serde_json::to_vec(&connect_msg)?;
+    let mut connect_bytes = serde_json::to_vec(&connect_msg)?;
+    // NDJSON framing: the gateway's read_json_message demuxer reads bytes
+    // until it sees a '\n' byte. Without this newline, the gateway would
+    // concatenate TunnelConnect with the next heartbeat and fail JSON
+    // deserialization with "trailing characters".
+    connect_bytes.push(b'\n');
     control
         .write_all(&connect_bytes)
         .await
@@ -500,7 +507,10 @@ async fn run_heartbeat_task(
                     "type": "tunnel_heartbeat",
                     "tunnel_uptime_secs": uptime,
                 });
-                let bytes = serde_json::to_vec(&msg).unwrap_or_default();
+                let mut bytes = serde_json::to_vec(&msg).unwrap_or_default();
+                // NDJSON framing: see connect_and_run for rationale. The
+                // gateway's read_control_stream reads bytes until '\n'.
+                bytes.push(b'\n');
                 if control.write_all(&bytes).await.is_err() {
                     warn!("RelayClient: heartbeat write failed, exiting heartbeat loop");
                     return;
@@ -514,9 +524,13 @@ async fn run_heartbeat_task(
             }
             // On-demand backend-initiated commands (immediate heartbeat,
             // disconnect signal) get forwarded onto the control stream
-            // verbatim.
+            // verbatim. The trailing '\n' is required for the gateway's
+            // NDJSON read_json_message demuxer; without it, a payload
+            // would be concatenated with the next regular heartbeat
+            // and fail JSON deserialization with "trailing characters".
             Some(payload) = ctrl_rx.recv() => {
-                let bytes = serde_json::to_vec(&payload).unwrap_or_default();
+                let mut bytes = serde_json::to_vec(&payload).unwrap_or_default();
+                bytes.push(b'\n');
                 if control.write_all(&bytes).await.is_err() {
                     warn!("RelayClient: on-demand control message write failed");
                     return;
