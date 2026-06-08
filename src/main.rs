@@ -351,6 +351,9 @@ async fn run_agent_core(config: agent_config::AgentConfig) -> Result<()> {
 
     info!(agent_id = %agent_id, "Web Agent stopped");
 
+    // Phase 69 (Plan 02): shut down all relay tunnels
+    crate::handlers::relay_client::shutdown_all().await;
+
     // D-23: Save final state on shutdown
     // Capture any error from the agent run
     let final_state = AgentState {
