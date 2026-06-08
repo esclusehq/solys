@@ -12,12 +12,16 @@
 //!    signals the gateway (T-68-08: only local 127.0.0.1 is ever dialed;
 //!    user-supplied WS payloads can never redirect this target).
 //!
-//! Byte accounting is shared with the per-server heartbeat task via
-//! [`Arc<AtomicU64>`] (D-18). Each inbound stream in
-//! [`relay_client::drive_inbound_streams`] looks up the per-server
-//! `bytes_transferred` counter from the
-//! `RwLock<HashMap<ServerId, PerServerRuntime>>` so the 100 GB rekey
-//! threshold (D-25 / RESOLVED Q4) is correctly summed per server.
+//! Phase 69: Each [`run_relay_session`] call now receives the per-server
+//! `bytes_counter` from the [`PerServerRuntime`](crate::handlers::relay_client::PerServerRuntime)
+//! that spawned it. The yamux stream comes from the per-server session
+//! (one Session per server, not one global session). The streaming logic
+//! itself is unchanged — the function is already fully generic over
+//! `S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin + Send + 'static`.
+//!
+//! Byte accounting accumulates toward that server's 100 GB rekey threshold.
+//! The counter is fetched from the per-server `PerServerRuntime` by the
+//! caller in `relay_client::drive_inbound_streams`.
 
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
@@ -33,9 +37,10 @@ use tracing::{debug, info, warn};
 /// `host:port` to forward bytes to (defaults to `127.0.0.1:25565` from
 /// [`crate::state::RelayConfig::local_mc_addr`]).
 ///
-/// `bytes_counter` is incremented by the byte counts returned from
-/// `copy_bidirectional` so the heartbeat task can sum toward the 100 GB
-/// rekey threshold (D-25).
+/// `bytes_counter` is the per-server [`Arc<AtomicU64>`] from the
+/// [`PerServerRuntime`](crate::handlers::relay_client::PerServerRuntime)
+/// that owns this session. It accumulates bytes toward that server's
+/// rekey threshold.
 pub async fn run_relay_session<S>(
     yamux_stream: S,
     local_addr: String,
