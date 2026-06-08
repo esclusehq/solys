@@ -464,3 +464,15 @@ Plans:
 - [x] 68-04c-PLAN.md — DEPLOY.md operator runbook (AWS NLB + Route 53 static wildcard + IAM scoped + EC2 + verify) (Wave 3)
 - [x] 68-05-PLAN.md — Dashboard UI: relayApi + useConnectivity + TunnelHealthCard + ModeOverrideDropdown + InviteFriendsModal + ConnectivitySection (Wave 3)
 - [ ] 68-gap-01-PLAN.md — Gap closure: gateway's tunnel.rs real yamux server session + auth::authorize + WS Binary frame compatibility (closes 3 of 4 BLOCKERs from VERIFICATION.md; BLOCKER #4 rate-limiter is a verifier false positive)
+
+### Phase 70: Auto-fetch relay config via WS
+
+**Goal:** Auto-fetch via WS — setelah agent connect ke backend pakai AGENT_API_KEY, backend kirim relay_token + server_ids langsung via WebSocket
+**Requirements**: None
+**Depends on:** Phase 69
+**Plans:** 0 plans
+
+Plans:
+- [ ] 70-01-PLAN.md — Backend RelayConfigSync push after RegisterAck
+- [ ] 70-02-PLAN.md — Agent-side config storage split + apply_relay_config() hot update
+- [ ] 70-03-PLAN.md — Agent conditional bootstrap (skip relay if no AGENT_RELAY_TOKEN)
