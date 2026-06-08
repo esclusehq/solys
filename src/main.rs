@@ -376,22 +376,25 @@ async fn run_agent_core(config: agent_config::AgentConfig) -> Result<()> {
 // Phase 68 (Plan 02): RelayClient bootstrap
 // ---------------------------------------------------------------------------
 
-/// Read the relay config from env vars and start the reconnect loop in a
-/// background tokio task. No-op if `AGENT_RELAY_TOKEN` is not set.
+/// Read the relay config from env vars and set the global shared config.
+/// No-op if `AGENT_RELAY_TOKEN` is not set.
 ///
-/// Env vars consumed:
+/// Phase 69: Per-server fields (server_id, subdomain, public_port,
+/// local_mc_addr) arrive in `relay.connect` task payloads, not env vars.
+/// This function only sets the shared env-var-based config (D-15).
+///
+/// Env vars consumed (shared only):
 ///   - `AGENT_RELAY_TOKEN`         (required, per-node bearer token)
 ///   - `AGENT_RELAY_GATEWAY_URL`   (optional, default: `wss://relay.esluce.net/relay/tunnel`)
-///   - `AGENT_RELAY_SUBDOMAIN`     (optional, default: agent_name)
-///   - `AGENT_RELAY_PUBLIC_PORT`   (optional, default: 25565)
 ///   - `AGENT_RELAY_REGION`        (optional, default: `ap-southeast-1`)
-///   - `AGENT_RELAY_LOCAL_ADDR`    (optional, default: `127.0.0.1:25565`)
 ///   - `AGENT_RELAY_DNS_API_TOKEN` (optional, used for the
 ///     `relay.remove_cname_record` self-loop)
 ///   - `AGENT_RELAY_DNS_ZONE_ID`   (optional, ditto)
-///   - `AGENT_RELAY_DNS_RECORD_ID` (optional, ditto)
+///
+/// Per-server tunnels are started/stopped via task dispatch
+/// (`relay.connect` / `relay.disconnect`) from the backend.
 async fn bootstrap_relay_client(
-    config: &agent_config::AgentConfig,
+    _config: &agent_config::AgentConfig,
     _shutdown: Arc<AtomicBool>,
 ) -> Result<()> {
     let token = match std::env::var("AGENT_RELAY_TOKEN").ok() {
@@ -404,30 +407,11 @@ async fn bootstrap_relay_client(
 
     let gateway_url = std::env::var("AGENT_RELAY_GATEWAY_URL")
         .unwrap_or_else(|_| "wss://relay.esluce.com/relay/tunnel".to_string());
-    let subdomain = std::env::var("AGENT_RELAY_SUBDOMAIN")
-        .unwrap_or_else(|_| config.agent_name.clone());
-    let public_port = std::env::var("AGENT_RELAY_PUBLIC_PORT")
-        .ok()
-        .and_then(|p| p.parse::<u16>().ok())
-        .unwrap_or(25565);
     let region = std::env::var("AGENT_RELAY_REGION")
         .unwrap_or_else(|_| "ap-southeast-1".to_string());
-    let local_mc_addr = std::env::var("AGENT_RELAY_LOCAL_ADDR")
-        .unwrap_or_else(|_| "127.0.0.1:25565".to_string());
-    let server_id = std::env::var("AGENT_RELAY_SERVER_ID")
-        .ok()
-        .and_then(|s| Uuid::parse_str(&s).ok())
-        .unwrap_or_else(|| {
-            tracing::warn!(
-                "[RELAY] AGENT_RELAY_SERVER_ID not set or invalid; using Uuid::nil(). \
-                 Gateway's auth::authorize will return 403 until this is set."
-            );
-            Uuid::nil()
-        });
 
     let dns_api_token = std::env::var("AGENT_RELAY_DNS_API_TOKEN").ok();
     let dns_zone_id = std::env::var("AGENT_RELAY_DNS_ZONE_ID").ok();
-    let dns_record_id = std::env::var("AGENT_RELAY_DNS_RECORD_ID").ok();
 
     // Best-effort public IP detection for the TunnelConnect payload. If it
     // fails (no internet, etc.) we send an empty string and let the
@@ -438,32 +422,23 @@ async fn bootstrap_relay_client(
     };
 
     let relay_cfg = state::RelayConfig {
-        gateway_url,
+        gateway_url: gateway_url.clone(),
         token: token.clone(),
-        server_id,
-        subdomain,
-        public_port,
         agent_public_ip,
         region,
-        local_mc_addr,
         dns_api_token,
         dns_zone_id,
-        dns_record_id,
     };
     state::set_relay_config(relay_cfg);
 
     info!(
-        "[RELAY] Starting RelayClient (token {}..., gateway={}, subdomain={})",
+        "[RELAY] Shared relay config set (token {}..., gateway={})",
         &token[..token.len().min(8)],
-        std::env::var("AGENT_RELAY_GATEWAY_URL")
-            .unwrap_or_else(|_| "wss://relay.esluce.net/relay/tunnel".to_string()),
-        std::env::var("AGENT_RELAY_SUBDOMAIN")
-            .unwrap_or_else(|_| config.agent_name.clone()),
+        gateway_url,
     );
 
-    // Spawn the reconnect loop with the global cancellation token.
-    let cancel = crate::handlers::relay_client::cancel_token();
-    tokio::spawn(handlers::relay_client::run_relay_client(cancel));
+    // Phase 69: Per-server tunnels are started via `relay.connect` task
+    // dispatch from the backend, not from a global spawn here.
 
     Ok(())
 }

@@ -160,7 +160,6 @@ pub async fn connect() -> Result<serde_json::Value> {
         return Ok(json!({
             "action": "connect",
             "status": "already_running",
-            "subdomain": cfg.subdomain,
         }));
     }
 
@@ -170,13 +169,11 @@ pub async fn connect() -> Result<serde_json::Value> {
 
     info!(
         gateway = %cfg.gateway_url,
-        subdomain = %cfg.subdomain,
         "RelayClient: reconnect loop started"
     );
     Ok(json!({
         "action": "connect",
         "status": "started",
-        "subdomain": cfg.subdomain,
     }))
 }
 
@@ -213,8 +210,6 @@ pub async fn disconnect() -> Result<serde_json::Value> {
 /// primary heartbeat path; this is for backend-initiated liveness
 /// probes only).
 pub async fn send_heartbeat(_task: &Task) -> Result<serde_json::Value> {
-    let cfg = state::relay_config()
-        .ok_or_else(|| anyhow!("RelayClient: no relay config"))?;
     let uptime = runtime()
         .tunnel_start
         .lock()
@@ -224,7 +219,6 @@ pub async fn send_heartbeat(_task: &Task) -> Result<serde_json::Value> {
 
     let payload = json!({
         "type": "tunnel_heartbeat",
-        "subdomain": cfg.subdomain,
         "tunnel_uptime_secs": uptime,
     });
 
@@ -266,7 +260,6 @@ pub async fn run_relay_client(shutdown: CancellationToken) {
 
     info!(
         gateway = %cfg.gateway_url,
-        subdomain = %cfg.subdomain,
         "RelayClient: entering reconnect loop"
     );
 
@@ -343,9 +336,9 @@ async fn connect_and_run(
     let connect_msg = json!({
         "type": "tunnel_connect",
         "relay_token": cfg.token,
-        "server_id": cfg.server_id,
-        "subdomain": cfg.subdomain,
-        "public_port": cfg.public_port,
+        "server_id": Uuid::nil(),         // TEMP: per_server_cfg.server_id in Task 2
+        "subdomain": "unknown",            // TEMP: per_server_cfg.subdomain in Task 2
+        "public_port": 25565,              // TEMP: per_server_cfg.public_port in Task 2
         "agent_public_ip": cfg.agent_public_ip,
         "region": cfg.region,
     });
@@ -359,13 +352,13 @@ async fn connect_and_run(
         .write_all(&connect_bytes)
         .await
         .map_err(|e| anyhow!("TunnelConnect write failed: {}", e))?;
-    info!(subdomain = %cfg.subdomain, "RelayClient: TunnelConnect sent");
+    info!("RelayClient: TunnelConnect sent");
 
     audit::log_relay_tunnel_event(
         *node_id,
         Uuid::nil(),  // server_id is server-specific; resolved by gateway from subdomain
         "connected",
-        &format!("subdomain={}", cfg.subdomain),
+        "subdomain=unknown",              // TEMP: per_server_cfg.subdomain in Task 2
     )
     .await;
 
@@ -387,7 +380,8 @@ async fn connect_and_run(
     });
 
     // 9. Drive incoming streams until the session ends.
-    let session_result = drive_inbound_streams(&mut session, &cfg.local_mc_addr, shutdown).await;
+    let local_mc_addr = "127.0.0.1:25565"; // TEMP: per_server_cfg.local_mc_addr in Task 2
+    let session_result = drive_inbound_streams(&mut session, local_mc_addr, shutdown).await;
 
     // 10. Cleanup: drop the control_tx so on-demand heartbeats fail
     // fast, cancel the heartbeat task, await the bridge.
@@ -643,18 +637,20 @@ fn backoff_with_jitter(backoff_ms: u64) -> u64 {
 /// call `dns::handle_remove_record` directly with a constructed
 /// `Task`; the dispatch arm in `mod.rs` handles the case where the
 /// backend itself sends this task type.
+///
+/// TEMP (Task 2): will take (shared_cfg, per_server_cfg) and use
+/// per_server_cfg.subdomain + remove dns_record_id (D-15).
 async fn dispatch_remove_cname_record(cfg: &RelayConfig) {
     let payload = json!({
         "api_token": cfg.dns_api_token.clone().unwrap_or_default(),
         "zone_id": cfg.dns_zone_id.clone().unwrap_or_default(),
-        "record_id": cfg.dns_record_id.clone().unwrap_or_default(),
-        "subdomain": cfg.subdomain,
+        "record_id": String::new(),       // TEMP: per-server field removed from RelayConfig
+        "subdomain": "unknown",            // TEMP: per_server_cfg.subdomain in Task 2
     });
     let task = Task::new("relay.remove_cname_record".to_string(), payload);
     match super::dns::handle_remove_record(task).await {
         Ok(v) => {
             info!(
-                subdomain = %cfg.subdomain,
                 result = %v,
                 "RelayClient: remove_cname_record self-loop completed (D-13 / RESOLVED Q7)"
             );
@@ -664,7 +660,6 @@ async fn dispatch_remove_cname_record(cfg: &RelayConfig) {
             // reconnect loop — the next tunnel teardown will retry.
             warn!(
                 error = %e,
-                subdomain = %cfg.subdomain,
                 "RelayClient: remove_cname_record self-loop failed (will retry on next teardown)"
             );
         }
