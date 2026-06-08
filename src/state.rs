@@ -128,12 +128,15 @@ pub fn audit_data_dir() -> std::path::PathBuf {
 // Phase 68: process-global Relay config
 // ---------------------------------------------------------------------------
 
-/// Phase 68 (Plan 02). Static configuration for the outbound Esluce Relay
-/// tunnel. Populated once at startup from environment variables (see
-/// `main.rs`) and consumed by `handlers::relay_client`. The struct holds
-/// everything the tunnel client needs to authenticate and bind, plus the
-/// DNS coordinates the agent must tear down on tunnel disconnect
-/// (D-13 / RESOLVED Q7).
+/// Phase 69 (Plan 02). Shared (global) configuration for the Esluce Relay
+/// tunnel client. Populated once at startup from environment variables (see
+/// `main.rs`) and consumed by `handlers::relay_client`. Per-server fields
+/// (server_id, subdomain, public_port, local_mc_addr) arrive in the task
+/// payload and are stored in `PerServerRelayConfig`.
+///
+/// Phase 68 originally held everything in one struct; Phase 69 splits
+/// shared and per-server fields so the agent can manage multiple tunnel
+/// instances independently (D-15).
 #[derive(Debug, Clone)]
 pub struct RelayConfig {
     /// WSS URL of the Esluce Relay gateway, e.g.
@@ -141,34 +144,27 @@ pub struct RelayConfig {
     pub gateway_url: String,
     /// Per-node bearer token (`relay_token` column on `nodes`).
     pub token: String,
-    /// Per-server UUID the gateway uses for the auth::authorize (relay_token,
-    /// server_id) HMAC pair. Read from `AGENT_RELAY_SERVER_ID` env var at
-    /// bootstrap; defaults to `Uuid::nil()` with a warn log if missing (the
-    /// gateway's authorize call will then 403, which is the correct fail-closed
-    /// behavior).
-    pub server_id: Uuid,
-    /// Public subdomain the gateway should bind, e.g. `abc12345`.
-    pub subdomain: String,
-    /// Public port on the gateway that maps to the local MC server.
-    pub public_port: u16,
     /// Agent's own public IP (sent inside `TunnelConnect` so the gateway
     /// can do its own geo / reachability checks).
     pub agent_public_ip: String,
     /// Region tag the agent advertises (e.g. `ap-southeast-1`).
     pub region: String,
-    /// Local Minecraft Java address the yamux sessions forward to, e.g.
-    /// `127.0.0.1:25565`. T-68-08: not overridable via inbound WS.
-    pub local_mc_addr: String,
     /// Optional DNS credentials used for the `relay.remove_cname_record`
     /// self-loop. When `None`, the cleanup task is still enqueued but
     /// fails fast inside `dns::handle_remove_record`.
     pub dns_api_token: Option<String>,
     pub dns_zone_id: Option<String>,
-    /// Pre-resolved DNS record id for the `<subdomain>.play.esluce.com`
-    /// A record that should be removed when the tunnel is unavailable.
-    /// Optional because the agent may not have a direct-mode record at
-    /// the moment it switches to relay mode.
-    pub dns_record_id: Option<String>,
+}
+
+/// Per-server portion of the relay config — arrives in task.payload for
+/// `relay.connect` (D-15).  A new instance is created for each tunnel
+/// and stored in the associated `PerServerRuntime`.
+#[derive(Debug, Clone)]
+pub struct PerServerRelayConfig {
+    pub server_id: Uuid,
+    pub subdomain: String,
+    pub public_port: u16,
+    pub local_mc_addr: String,
 }
 
 static RELAY_CONFIG: OnceCell<Arc<RelayConfig>> = OnceCell::const_new();
