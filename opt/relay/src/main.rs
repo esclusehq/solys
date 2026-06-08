@@ -22,6 +22,7 @@ mod player;
 mod ratelimit;
 mod registry;
 mod session_log;
+mod types;
 mod state;
 mod tunnel;
 
