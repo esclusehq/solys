@@ -22,20 +22,64 @@
 use agent_proto::Task;
 use anyhow::{anyhow, Result};
 use serde_json::json;
+use uuid::Uuid;
+
+use crate::state::PerServerRelayConfig;
 
 /// Dispatch a relay.* task to the appropriate handler in
 /// [`crate::handlers::relay_client`].
+///
+/// Phase 69 (Plan 02): all relay.* tasks now require a `server_id` in
+/// the task payload. `connect` additionally requires the per-server
+/// config fields (subdomain, public_port, local_mc_addr).
 pub async fn handle_relay_task(task: &Task) -> Result<serde_json::Value> {
     let task_type = task.task_type.as_str();
     match task_type {
         "relay.connect" => {
-            crate::handlers::relay_client::connect().await
+            let server_id_str = task.payload.get("server_id")
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| anyhow!("Missing server_id in relay.connect payload"))?;
+            let server_id = Uuid::parse_str(server_id_str)
+                .map_err(|e| anyhow!("Invalid server_id: {}", e))?;
+            let subdomain = task.payload.get("subdomain")
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| anyhow!("Missing subdomain in relay.connect payload"))?
+                .to_string();
+            let public_port = task.payload.get("public_port")
+                .and_then(|v| v.as_u64())
+                .and_then(|n| u16::try_from(n).ok())
+                .ok_or_else(|| anyhow!("Missing or invalid public_port in relay.connect payload"))?;
+            let local_mc_addr = task.payload.get("local_mc_addr")
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| anyhow!("Missing local_mc_addr in relay.connect payload"))?
+                .to_string();
+            let dns_record_id = task.payload.get("dns_record_id")
+                .and_then(|v| v.as_str())
+                .map(String::from);
+            let per_server_cfg = PerServerRelayConfig {
+                server_id,
+                subdomain,
+                public_port,
+                local_mc_addr,
+                dns_record_id,
+            };
+            crate::handlers::relay_client::connect(server_id, per_server_cfg).await
         }
         "relay.disconnect" => {
-            crate::handlers::relay_client::disconnect().await
+            let server_id_str = task.payload.get("server_id")
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| anyhow!("Missing server_id in relay.disconnect payload"))?;
+            let server_id = Uuid::parse_str(server_id_str)
+                .map_err(|e| anyhow!("Invalid server_id: {}", e))?;
+            crate::handlers::relay_client::disconnect(server_id).await
         }
         "relay.heartbeat" => {
-            crate::handlers::relay_client::send_heartbeat(task).await
+            let server_id_str = task.payload.get("server_id")
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| anyhow!("Missing server_id in relay.heartbeat payload"))?;
+            let server_id = Uuid::parse_str(server_id_str)
+                .map_err(|e| anyhow!("Invalid server_id: {}", e))?;
+            crate::handlers::relay_client::send_heartbeat(server_id).await
         }
         other => Err(anyhow!("Unknown relay task type: {}", other)),
     }

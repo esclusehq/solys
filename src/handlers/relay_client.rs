@@ -1,36 +1,42 @@
-//! Outbound Esluce Relay tunnel client.
+//! Per-server outbound Esluce Relay tunnel client.
 //!
-//! Phase 68 (Plan 02). The agent opens an outbound WSS to the Esluce Relay
-//! gateway (`wss://relay.esluce.net/relay/tunnel`), authenticates with the
-//! per-node `relay_token`, opens a yamux session, and forwards any inbound
-//! yamux streams to the local Minecraft Java server (`127.0.0.1:25565` by
-//! default).
+//! Phase 69 (Plan 02). Each active server on this agent node gets its own
+//! independent WSS connection to the Esluce Relay gateway, its own yamux
+//! session, and its own reconnect loop.  The per-server state is managed
+//! in an `RwLock<HashMap<ServerId, PerServerRuntime>>` (D-01).
 //!
 //! Architecture
 //! ------------
 //!
 //! ```text
-//!  gateway <──WSS/binary frames──> WebSocketStream
-//!                                     │
-//!                              (ws_bridge task)
-//!                                     │
-//!                              tokio::io::duplex
-//!                                     │
-//!                              tokio_yamux::Session (client)
-//!                                  │
-//!                          (per inbound stream)
-//!                                  │
-//!                          run_relay_session
-//!                                  │
-//!                              TcpStream 127.0.0.1:25565
+//!  RelayRuntime {
+//!      shutdown: CancellationToken   // parent — cascades to all children
+//!      tunnels: Arc<RwLock<HashMap<Uuid, PerServerRuntime>>>
+//!  }
+//!
+//!  PerServerRuntime {                // × N (one per server)
+//!      cancel: child_token(),
+//!      join: JoinHandle,
+//!      control_tx: mpsc::Sender,
+//!      bytes_transferred: AtomicU64,
+//!      tunnel_start: Instant,
+//!      config: PerServerRelayConfig,
+//!  }
 //! ```
+//!
+//! Each per-server tunnel:
+//!   ──[WSS]──> Gateway
+//!        └── yamux session (client)
+//!             ├── control stream (TunnelConnect, heartbeats)
+//!             └── inbound player streams → local MC (`local_mc_addr`)
 //!
 //! Lifecycle
 //! ---------
 //!
-//! 1. [`connect`] is invoked by the `relay.connect` task arm. It spawns
-//!    [`run_relay_client`] (idempotent: a second call while one is running
-//!    is a no-op).
+//! 1. [`connect(server_id, config)`] is invoked by the `relay.connect` task
+//!    arm. It creates a new `PerServerRuntime`, spawns a per-server
+//!    [`run_relay_client`] loop. If a tunnel already exists for the same
+//!    server_id, it is cancelled and replaced atomically (D-06).
 //! 2. [`run_relay_client`] runs the reconnect loop with exponential
 //!    backoff (1s → 30s cap, ±20% jitter). On every successful
 //!    handshake it spawns a heartbeat task and watches for new inbound
@@ -41,23 +47,25 @@
 //!    establishes a fresh handshake with a new TLS session.
 //! 4. On any disconnect (graceful or errored), the disconnect branch
 //!    enqueues a `relay.remove_cname_record` task via the local
-//!    self-loop (D-13 / RESOLVED Q7) so the stale
-//!    `<subdomain>.play.esluce.com` A record is removed.
-//! 5. [`disconnect`] cancels the cancel token, awaits the join handle,
-//!    and returns.
-//! 6. [`send_heartbeat`] (the `relay.heartbeat` task arm) writes a
-//!    `TunnelHeartbeat` JSON frame to the current control stream. If
-//!    no tunnel is open, returns `Ok(())` silently.
+//!    self-loop (D-13 / RESOLVED Q7) so the stale DNS record is removed.
+//! 5. [`disconnect(server_id)`] cancels the child token, removes from
+//!    HashMap, and returns.
+//! 6. [`send_heartbeat(server_id)`] sends a `TunnelHeartbeat` JSON frame
+//!    on the specified server's control stream.
+//! 7. [`shutdown_all()`] cancels the parent token → all child tokens fire
+//!    → all reconnect loops exit → HashMap is cleared (D-04).
 
+use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, OnceLock};
 use std::time::{Duration, Instant};
 
+use agent_proto::Task;
 use anyhow::{anyhow, Context, Result};
 use futures::{SinkExt, StreamExt};
 use serde_json::json;
 use tokio::io::{AsyncReadExt, AsyncWriteExt, AsyncWrite, DuplexStream};
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, RwLock};
 use tokio::time::interval;
 use tokio_tungstenite::tungstenite::{
     self,
@@ -69,11 +77,10 @@ use tokio_util::sync::CancellationToken;
 use tracing::{error, info, warn};
 use uuid::Uuid;
 
-use agent_proto::Task;
 use tokio_yamux::{Config as YamuxConfig, Session, StreamHandle};
 
 use crate::audit;
-use crate::state::{self, RelayConfig};
+use crate::state::{self, PerServerRelayConfig, RelayConfig};
 
 use super::relay_session;
 
@@ -102,224 +109,235 @@ const BACKOFF_JITTER_PCT: u64 = 20;
 const BRIDGE_BUFFER_BYTES: usize = 64 * 1024;
 
 // ---------------------------------------------------------------------------
-// Shared runtime state
+// Per-server runtime state (Phase 69 — D-01, D-03, D-04)
 // ---------------------------------------------------------------------------
 
-/// Process-global runtime state for the relay tunnel. Mirrors the
-/// `DOCKER_GLOBAL` pattern in [`crate::state`].
-struct RelayRuntime {
-    /// Join handle for the current [`run_relay_client`] task. `Some`
-    /// while the reconnect loop is active.
-    join: Mutex<Option<tokio::task::JoinHandle<()>>>,
-    /// Cancel token; set to cancel the current [`run_relay_client`] task.
-    cancel: CancellationToken,
-    /// Channel for sending `TunnelHeartbeat` / `TunnelDisconnect` JSON
-    /// payloads to the currently-active control stream. `None` while no
-    /// tunnel is open.
-    control_tx: Mutex<Option<tokio::sync::mpsc::UnboundedSender<serde_json::Value>>>,
-    /// Aggregated bytes across all in-flight yamux sessions, updated by
-    /// every [`super::relay_session::run_relay_session`] call.
-    bytes_transferred: Arc<AtomicU64>,
-    /// Tunnel start time, set when the current yamux session becomes
-    /// active. Used by the heartbeat task to evaluate the 24 h rekey.
-    tunnel_start: Mutex<Option<Instant>>,
+/// Per-server tunnel state. Each active server on this node gets one.
+pub struct PerServerRuntime {
+    /// Child of the parent RelayRuntime::shutdown token (D-04).
+    pub cancel: CancellationToken,
+    /// Join handle for the per-server run_relay_client task.
+    pub join: Mutex<Option<tokio::task::JoinHandle<()>>>,
+    /// Channel for sending heartbeat/disconnect JSON to this server's
+    /// control stream. None while no tunnel is open.
+    pub control_tx: Mutex<Option<tokio::sync::mpsc::UnboundedSender<serde_json::Value>>>,
+    /// Per-server byte counter, updated by relay_session on each stream close (D-18).
+    pub bytes_transferred: Arc<AtomicU64>,
+    /// Tunnel start time, used by the heartbeat task for uptime and rekey.
+    pub tunnel_start: Mutex<Option<Instant>>,
+    /// Per-server config from task payload (D-15).
+    pub config: PerServerRelayConfig,
+}
+
+/// Parent runtime — holds the shutdown token that cascades to all children.
+pub struct RelayRuntime {
+    /// Parent token. parent.cancel() fires all child tokens (D-04).
+    pub shutdown: CancellationToken,
+    /// Per-server tunnel map. Concurrent reads, exclusive writes (D-01).
+    pub tunnels: Arc<RwLock<HashMap<Uuid, PerServerRuntime>>>,
 }
 
 static RELAY_RUNTIME: OnceLock<RelayRuntime> = OnceLock::new();
 
 fn runtime() -> &'static RelayRuntime {
     RELAY_RUNTIME.get_or_init(|| RelayRuntime {
-        join: Mutex::new(None),
-        cancel: CancellationToken::new(),
-        control_tx: Mutex::new(None),
-        bytes_transferred: Arc::new(AtomicU64::new(0)),
-        tunnel_start: Mutex::new(None),
+        shutdown: CancellationToken::new(),
+        tunnels: Arc::new(RwLock::new(HashMap::new())),
     })
-}
-
-/// Public accessor for the global cancellation token. Used by the
-/// bootstrap in `main.rs` to wire the same token the reconnect loop
-/// uses, so the main shutdown signal can cascade.
-pub fn cancel_token() -> CancellationToken {
-    runtime().cancel.clone()
 }
 
 // ---------------------------------------------------------------------------
 // Public task entrypoints
 // ---------------------------------------------------------------------------
 
-/// `relay.connect` task arm: spawn [`run_relay_client`] (idempotent).
-pub async fn connect() -> Result<serde_json::Value> {
-    let cfg = state::relay_config().ok_or_else(|| {
-        anyhow!("RelayClient: no relay config set; check AGENT_RELAY_TOKEN env var")
-    })?;
+/// Cancel ALL tunnels. Called from agent shutdown sequence.
+/// parent.cancel() cascades to all child tokens (D-04).
+pub async fn shutdown_all() {
+    info!("RelayRuntime: shutdown_all — cancelling parent token");
+    runtime().shutdown.cancel();
+    // Brief yield so tasks see cancellation
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    let mut tunnels = runtime().tunnels.write().await;
+    tunnels.clear();
+    info!("RelayRuntime: all tunnels cleared");
+}
 
-    let mut join_guard = runtime().join.lock().await;
-    if join_guard.is_some() {
-        info!("RelayClient: reconnect loop already running; connect() is a no-op");
-        return Ok(json!({
-            "action": "connect",
-            "status": "already_running",
-        }));
+/// `relay.connect` task: start a per-server tunnel. Replaces existing
+/// tunnel for the same server_id atomically (D-06).
+pub async fn connect(server_id: Uuid, per_server_cfg: PerServerRelayConfig) -> Result<serde_json::Value> {
+    let rt = runtime();
+    let mut tunnels = rt.tunnels.write().await;
+
+    // D-06: Replace existing tunnel if one exists
+    if let Some(existing) = tunnels.remove(&server_id) {
+        info!("Replacing existing tunnel for server_id={}", server_id);
+        existing.cancel.cancel();  // child token fires → reconnect loop exits
+        // PerServerRuntime drops, JoinHandle detaches
     }
 
-    let cancel = runtime().cancel.clone();
-    let handle = tokio::spawn(run_relay_client(cancel));
-    *join_guard = Some(handle);
+    let child_cancel = rt.shutdown.child_token();
+    let config_clone = per_server_cfg.clone();
+    let parent_shutdown = rt.shutdown.clone();
+    let handle = tokio::spawn(async move {
+        run_relay_client(config_clone, parent_shutdown).await;
+    });
 
-    info!(
-        gateway = %cfg.gateway_url,
-        "RelayClient: reconnect loop started"
-    );
+    let psr = PerServerRuntime {
+        cancel: child_cancel,
+        join: Mutex::new(Some(handle)),
+        control_tx: Mutex::new(None),
+        bytes_transferred: Arc::new(AtomicU64::new(0)),
+        tunnel_start: Mutex::new(None),
+        config: per_server_cfg,
+    };
+
+    tunnels.insert(server_id, psr);
+
+    info!(%server_id, "PerServer tunnel: connect started");
     Ok(json!({
         "action": "connect",
         "status": "started",
+        "server_id": server_id,
     }))
 }
 
-/// `relay.disconnect` task arm: cancel the reconnect loop and wait for
-/// the join handle to finish.
-pub async fn disconnect() -> Result<serde_json::Value> {
-    info!("RelayClient: disconnect requested");
-    runtime().cancel.cancel();
-
-    let handle = {
-        let mut join_guard = runtime().join.lock().await;
-        join_guard.take()
-    };
-    if let Some(h) = handle {
-        // Wait for the loop to exit; cap at 10 s so we don't hang the
-        // task dispatcher.
-        let _ = tokio::time::timeout(Duration::from_secs(10), h).await;
-    }
-
-    // Clear the bytes/start markers so the next connect() starts fresh.
-    runtime().bytes_transferred.store(0, Ordering::Relaxed);
-    *runtime().tunnel_start.lock().await = None;
-    *runtime().control_tx.lock().await = None;
-
-    Ok(json!({
-        "action": "disconnect",
-        "status": "stopped",
-    }))
-}
-
-/// `relay.heartbeat` task arm: send an immediate `TunnelHeartbeat` on
-/// the open control stream. If no tunnel is open, returns `Ok(())`
-/// silently (the periodic 10 s ticker in the reconnect loop is the
-/// primary heartbeat path; this is for backend-initiated liveness
-/// probes only).
-pub async fn send_heartbeat(_task: &Task) -> Result<serde_json::Value> {
-    let uptime = runtime()
-        .tunnel_start
-        .lock()
-        .await
-        .map(|t| t.elapsed().as_secs())
-        .unwrap_or(0);
-
-    let payload = json!({
-        "type": "tunnel_heartbeat",
-        "tunnel_uptime_secs": uptime,
-    });
-
-    let tx_guard = runtime().control_tx.lock().await;
-    if let Some(tx) = tx_guard.as_ref() {
-        let _ = tx.send(payload);
+/// `relay.disconnect` task: cancel a specific server's tunnel.
+pub async fn disconnect(server_id: Uuid) -> Result<serde_json::Value> {
+    let mut tunnels = runtime().tunnels.write().await;
+    if let Some(psr) = tunnels.remove(&server_id) {
+        info!("Disconnecting tunnel for server_id={}", server_id);
+        psr.cancel.cancel();  // child token fires → reconnect loop exits
+        // Dispatch remove_cname_record cleanup
+        let shared_cfg = state::relay_config();
+        if let Some(cfg) = shared_cfg {
+            dispatch_remove_cname_record(&cfg, &psr.config).await;
+        }
         Ok(json!({
-            "action": "heartbeat",
-            "status": "sent",
-            "tunnel_uptime_secs": uptime,
+            "action": "disconnect",
+            "status": "stopped",
+            "server_id": server_id,
         }))
+    } else {
+        info!("disconnect: no active tunnel for server_id={} (already gone)", server_id);
+        Ok(json!({
+            "action": "disconnect",
+            "status": "already_disconnected",
+            "server_id": server_id,
+        }))
+    }
+}
+
+/// `relay.heartbeat` task: send an immediate TunnelHeartbeat on the
+/// per-server control stream. Returns silently if no tunnel open.
+pub async fn send_heartbeat(server_id: Uuid) -> Result<serde_json::Value> {
+    let tunnels = runtime().tunnels.read().await;
+    if let Some(psr) = tunnels.get(&server_id) {
+        let uptime = psr.tunnel_start.lock().await
+            .map(|t| t.elapsed().as_secs())
+            .unwrap_or(0);
+        let payload = json!({
+            "type": "tunnel_heartbeat",
+            "server_id": server_id,
+            "tunnel_uptime_secs": uptime,
+        });
+        let tx_guard = psr.control_tx.lock().await;
+        if let Some(tx) = tx_guard.as_ref() {
+            let _ = tx.send(payload);
+            Ok(json!({
+                "action": "heartbeat",
+                "status": "sent",
+                "server_id": server_id,
+                "tunnel_uptime_secs": uptime,
+            }))
+        } else {
+            Ok(json!({
+                "action": "heartbeat",
+                "status": "no_tunnel_open",
+                "server_id": server_id,
+            }))
+        }
     } else {
         Ok(json!({
             "action": "heartbeat",
-            "status": "no_tunnel_open",
+            "status": "no_tunnel_for_server",
+            "server_id": server_id,
         }))
     }
 }
 
 // ---------------------------------------------------------------------------
-// Main reconnect loop
+// Per-server reconnect loop (Phase 69 — D-04)
 // ---------------------------------------------------------------------------
 
-/// The outer reconnect loop. Runs forever (or until `shutdown` is
-/// cancelled). Each iteration performs one full handshake + yamux
-/// session lifecycle, then sleeps with exponential backoff before the
-/// next attempt.
-pub async fn run_relay_client(shutdown: CancellationToken) {
-    let cfg = match state::relay_config() {
+/// Per-server reconnect loop. Exits when child_shutdown is cancelled
+/// (via parent.cancel() or disconnect()). Heartbeat staggering (0-10s
+/// jitter) added by Plan 69-04.
+pub async fn run_relay_client(
+    per_server_cfg: PerServerRelayConfig,
+    parent_shutdown: CancellationToken,
+) {
+    let shared_cfg = match state::relay_config() {
         Some(c) => c,
         None => {
-            error!("RelayClient: no relay config; run_relay_client exiting");
+            error!("PerServer[{}]: no shared relay config", per_server_cfg.server_id);
             return;
         }
     };
 
+    // D-04: child token — parent.cancel() cascades to this loop
+    let child_shutdown = parent_shutdown.child_token();
     let mut backoff_ms: u64 = BACKOFF_INITIAL_MS;
-    let mut node_id = Uuid::nil();
 
     info!(
-        gateway = %cfg.gateway_url,
-        "RelayClient: entering reconnect loop"
+        server_id = %per_server_cfg.server_id,
+        subdomain = %per_server_cfg.subdomain,
+        "PerServer tunnel: entering reconnect loop"
     );
 
     loop {
-        if shutdown.is_cancelled() {
-            info!("RelayClient: shutdown requested, exiting reconnect loop");
+        if child_shutdown.is_cancelled() {
+            info!("PerServer[{}]: shutdown requested, exiting", per_server_cfg.server_id);
             break;
         }
 
-        match connect_and_run(&cfg, &shutdown, &mut node_id).await {
+        match connect_and_run(&shared_cfg, &per_server_cfg, &child_shutdown).await {
             Ok(()) => {
-                info!("RelayClient: connect_and_run returned cleanly (re-handshake or shutdown)");
                 backoff_ms = BACKOFF_INITIAL_MS;
             }
             Err(e) => {
-                warn!(error = %e, "RelayClient: connect_and_run failed");
+                warn!(server_id = %per_server_cfg.server_id, error = %e, "connect_and_run failed");
             }
         }
 
-        if shutdown.is_cancelled() {
-            break;
-        }
+        if child_shutdown.is_cancelled() { break; }
 
         let sleep_ms = backoff_with_jitter(backoff_ms);
-        info!(
-            backoff_ms = sleep_ms,
-            "RelayClient: sleeping before next reconnect attempt"
-        );
         tokio::time::sleep(Duration::from_millis(sleep_ms)).await;
         backoff_ms = (backoff_ms.saturating_mul(2)).min(BACKOFF_MAX_MS);
     }
-
-    info!("RelayClient: reconnect loop exited");
 }
 
+/// Per-server tunnel lifecycle: WS handshake → TunnelConnect → heartbeat
+/// loop + inbound stream drive → cleanup → remove_cname_record.
 async fn connect_and_run(
-    cfg: &RelayConfig,
+    shared_cfg: &RelayConfig,
+    per_server_cfg: &PerServerRelayConfig,
     shutdown: &CancellationToken,
-    node_id: &mut Uuid,
 ) -> Result<()> {
     // 1. Parse the gateway URL.
-    let uri: Uri = cfg.gateway_url.parse()
-        .with_context(|| format!("invalid gateway_url: {}", cfg.gateway_url))?;
+    let uri: Uri = shared_cfg.gateway_url.parse()
+        .with_context(|| format!("invalid gateway_url: {}", shared_cfg.gateway_url))?;
 
     // 2. Build the WS handshake request with the Bearer token.
-    let req = build_ws_request(uri.clone(), &cfg.token)?;
+    let req = build_ws_request(uri.clone(), &shared_cfg.token)?;
 
-    // 3. Upgrade to WSS. The native-tls feature on tokio-tungstenite
-    //    handles TCP+TLS+WS internally and returns
-    //    `WebSocketStream<MaybeTlsStream<TcpStream>>`. This works for
-    //    both `ws://` (no TLS) and `wss://` (TLS) URLs.
+    // 3. Upgrade to WSS.
     let (ws_stream, _response) = tokio_tungstenite::connect_async_tls_with_config(
-        req,
-        None,
-        true,   // disable_nagle
-        None,   // default connector
+        req, None, true, None,
     )
     .await
     .with_context(|| "RelayClient: WS handshake failed")?;
-    info!("RelayClient: WS handshake complete");
+    info!(server_id = %per_server_cfg.server_id, "RelayClient: WS handshake complete");
 
     // 4. Build a duplex bridge between the WS and the yamux session.
     let (yamux_side, ws_byte_side) = tokio::io::duplex(BRIDGE_BUFFER_BYTES);
@@ -335,81 +353,97 @@ async fn connect_and_run(
         .map_err(|e| anyhow!("yamux open_stream failed: {}", e))?;
     let connect_msg = json!({
         "type": "tunnel_connect",
-        "relay_token": cfg.token,
-        "server_id": Uuid::nil(),         // TEMP: per_server_cfg.server_id in Task 2
-        "subdomain": "unknown",            // TEMP: per_server_cfg.subdomain in Task 2
-        "public_port": 25565,              // TEMP: per_server_cfg.public_port in Task 2
-        "agent_public_ip": cfg.agent_public_ip,
-        "region": cfg.region,
+        "relay_token": shared_cfg.token,
+        "server_id": per_server_cfg.server_id,
+        "subdomain": per_server_cfg.subdomain,
+        "public_port": per_server_cfg.public_port,
+        "agent_public_ip": shared_cfg.agent_public_ip,
+        "region": shared_cfg.region,
     });
     let mut connect_bytes = serde_json::to_vec(&connect_msg)?;
-    // NDJSON framing: the gateway's read_json_message demuxer reads bytes
-    // until it sees a '\n' byte. Without this newline, the gateway would
-    // concatenate TunnelConnect with the next heartbeat and fail JSON
-    // deserialization with "trailing characters".
     connect_bytes.push(b'\n');
     control
         .write_all(&connect_bytes)
         .await
         .map_err(|e| anyhow!("TunnelConnect write failed: {}", e))?;
-    info!("RelayClient: TunnelConnect sent");
+    info!(
+        server_id = %per_server_cfg.server_id,
+        subdomain = %per_server_cfg.subdomain,
+        "RelayClient: TunnelConnect sent"
+    );
 
     audit::log_relay_tunnel_event(
-        *node_id,
-        Uuid::nil(),  // server_id is server-specific; resolved by gateway from subdomain
+        per_server_cfg.server_id,
+        per_server_cfg.server_id,
         "connected",
-        "subdomain=unknown",              // TEMP: per_server_cfg.subdomain in Task 2
+        &format!("subdomain={}", per_server_cfg.subdomain),
     )
     .await;
 
     // 7. Reset byte counter + start time; install the control_tx
-    // channel so on-demand heartbeats / disconnects can talk to the
-    // gateway.
-    runtime().bytes_transferred.store(0, Ordering::Relaxed);
-    *runtime().tunnel_start.lock().await = Some(Instant::now());
-
+    // channel on the per-server runtime.
     let (ctrl_tx, ctrl_rx) = tokio::sync::mpsc::unbounded_channel::<serde_json::Value>();
-    *runtime().control_tx.lock().await = Some(ctrl_tx);
+    let bytes_counter;
+    let tunnel_start;
+    {
+        let mut tunnels = runtime().tunnels.write().await;
+        if let Some(psr) = tunnels.get_mut(&per_server_cfg.server_id) {
+            psr.bytes_transferred.store(0, Ordering::Relaxed);
+            *psr.tunnel_start.lock().await = Some(Instant::now());
+            *psr.control_tx.lock().await = Some(ctrl_tx);
+            bytes_counter = psr.bytes_transferred.clone();
+            tunnel_start = Some(Instant::now());
+        } else {
+            warn!(
+                server_id = %per_server_cfg.server_id,
+                "PerServerRuntime vanished before tunnel connect completed"
+            );
+            bridge_handle.abort();
+            let _ = bridge_handle.await;
+            return Ok(());
+        }
+    }
 
     // 8. Spawn the heartbeat task (T-68-03 / T-68-04 + D-25 rekey).
-    let bytes_counter = runtime().bytes_transferred.clone();
-    let tunnel_start = *runtime().tunnel_start.lock().await;
     let heartbeat_cancel = shutdown.clone();
     let heartbeat_handle = tokio::spawn(async move {
         run_heartbeat_task(control, ctrl_rx, bytes_counter, tunnel_start, heartbeat_cancel).await;
     });
 
     // 9. Drive incoming streams until the session ends.
-    let local_mc_addr = "127.0.0.1:25565"; // TEMP: per_server_cfg.local_mc_addr in Task 2
-    let session_result = drive_inbound_streams(&mut session, local_mc_addr, shutdown).await;
+    let session_result = drive_inbound_streams(
+        &mut session,
+        &per_server_cfg.local_mc_addr,
+        per_server_cfg.server_id,
+        shutdown,
+    ).await;
 
-    // 10. Cleanup: drop the control_tx so on-demand heartbeats fail
-    // fast, cancel the heartbeat task, await the bridge.
-    *runtime().control_tx.lock().await = None;
-    *runtime().tunnel_start.lock().await = None;
+    // 10. Cleanup: clear per-server runtime state, abort bridge.
+    {
+        let mut tunnels = runtime().tunnels.write().await;
+        if let Some(psr) = tunnels.get_mut(&per_server_cfg.server_id) {
+            *psr.tunnel_start.lock().await = None;
+            *psr.control_tx.lock().await = None;
+        }
+    }
     heartbeat_handle.abort();
     let _ = heartbeat_handle.await;
     bridge_handle.abort();
     let _ = bridge_handle.await;
 
-    // 11. D-13 / RESOLVED Q7: dispatch the remove_cname_record
-    // self-loop. We call `dns::handle_remove_record` directly with a
-    // constructed `Task` rather than going through the
-    // `execute_single` dispatcher — the agent has no public local
-    // task queue, and the result of this call only needs to be
-    // audit-logged, not round-tripped back to the backend. The
-    // dispatcher arm in `mod.rs` is the path used when the backend
-    // itself sends a `relay.remove_cname_record` task.
-    dispatch_remove_cname_record(cfg).await;
+    // 11. Dispatch remove_cname_record cleanup.
+    dispatch_remove_cname_record(shared_cfg, per_server_cfg).await;
 
     session_result
 }
 
 /// Drive the yamux session's incoming stream queue. Each new inbound
-/// stream is handed off to [`super::relay_session::run_relay_session`].
+/// stream is handed off to [`super::relay_session::run_relay_session`]
+/// with the per-server bytes counter looked up from the HashMap.
 async fn drive_inbound_streams(
     session: &mut Session<DuplexStream>,
     local_mc_addr: &str,
+    server_id: Uuid,
     shutdown: &CancellationToken,
 ) -> Result<()> {
     loop {
@@ -423,16 +457,22 @@ async fn drive_inbound_streams(
                 match next {
                     Some(Ok(stream)) => {
                         let local = local_mc_addr.to_string();
-                        let bytes_counter = runtime().bytes_transferred.clone();
-                        tokio::spawn(async move {
-                            if let Err(e) = relay_session::run_relay_session(
-                                stream,
-                                local.clone(),
-                                bytes_counter,
-                            ).await {
-                                warn!(error = %e, local = %local, "Relay session exited with error");
-                            }
-                        });
+                        // Look up the per-server bytes counter (D-18)
+                        let bytes_counter = {
+                            let tunnels = runtime().tunnels.read().await;
+                            tunnels.get(&server_id)
+                                .map(|psr| psr.bytes_transferred.clone())
+                        };
+                        if let Some(counter) = bytes_counter {
+                            let local_for_task = local.clone();
+                            tokio::spawn(async move {
+                                if let Err(e) = relay_session::run_relay_session(
+                                    stream, local_for_task.clone(), counter,
+                                ).await {
+                                    warn!(error = %e, local = %local_for_task, "Relay session error");
+                                }
+                            });
+                        }
                     }
                     Some(Err(e)) => {
                         warn!(error = %e, "RelayClient: yamux session stream error");
@@ -638,28 +678,31 @@ fn backoff_with_jitter(backoff_ms: u64) -> u64 {
 /// `Task`; the dispatch arm in `mod.rs` handles the case where the
 /// backend itself sends this task type.
 ///
-/// TEMP (Task 2): will take (shared_cfg, per_server_cfg) and use
-/// per_server_cfg.subdomain + remove dns_record_id (D-15).
-async fn dispatch_remove_cname_record(cfg: &RelayConfig) {
+/// Uses `per_server_cfg.dns_record_id` when available; falls back to
+/// subdomain-based lookup if the record_id was not stored (D-15).
+async fn dispatch_remove_cname_record(
+    shared_cfg: &RelayConfig,
+    per_server_cfg: &PerServerRelayConfig,
+) {
     let payload = json!({
-        "api_token": cfg.dns_api_token.clone().unwrap_or_default(),
-        "zone_id": cfg.dns_zone_id.clone().unwrap_or_default(),
-        "record_id": String::new(),       // TEMP: per-server field removed from RelayConfig
-        "subdomain": "unknown",            // TEMP: per_server_cfg.subdomain in Task 2
+        "api_token": shared_cfg.dns_api_token.clone().unwrap_or_default(),
+        "zone_id": shared_cfg.dns_zone_id.clone().unwrap_or_default(),
+        "record_id": per_server_cfg.dns_record_id.clone().unwrap_or_default(),
+        "subdomain": per_server_cfg.subdomain,
     });
     let task = Task::new("relay.remove_cname_record".to_string(), payload);
     match super::dns::handle_remove_record(task).await {
         Ok(v) => {
             info!(
                 result = %v,
+                server_id = %per_server_cfg.server_id,
                 "RelayClient: remove_cname_record self-loop completed (D-13 / RESOLVED Q7)"
             );
         }
         Err(e) => {
-            // We don't want a transient CF failure to take down the
-            // reconnect loop — the next tunnel teardown will retry.
             warn!(
                 error = %e,
+                server_id = %per_server_cfg.server_id,
                 "RelayClient: remove_cname_record self-loop failed (will retry on next teardown)"
             );
         }
