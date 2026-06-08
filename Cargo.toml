@@ -1,5 +1,5 @@
 [workspace]
-members = [".", "api", "opt/relay"]
+members = [".", "opt/relay"]
 
 [package]
 name    = "solys"
