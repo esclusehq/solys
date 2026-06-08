@@ -174,13 +174,18 @@ async fn execute_single(
             "upnp.add_mapping"        => connectivity::upnp::add(task.clone()).await,
             "upnp.remove_mapping"     => connectivity::upnp::remove(task.clone()).await,
 
-            // Phase 68: Relay tunnel (Plan 02)
+            // Phase 69: Per-server relay tunnel dispatch
+            // All relay.* tasks go through relay::handle_relay_task which extracts
+            // server_id from task.payload and dispatches to the correct
+            // PerServerRuntime in relay_client's RwLock<HashMap<...>>.
             "relay.connect"             => relay::handle_relay_task(task).await,
             "relay.disconnect"          => relay::handle_relay_task(task).await,
-            // On-demand backend-initiated heartbeat: forces an immediate
-            // ping on the control stream for liveness checks and debug.
-            // Distinct from the periodic 10 s ticker in run_relay_client.
+            // On-demand heartbeat: forces an immediate TunnelHeartbeat on the
+            // per-server control stream. server_id extracted from payload inside
+            // handle_relay_task → relay_client::send_heartbeat(server_id).
             "relay.heartbeat"           => relay::handle_relay_task(task).await,
+            // Phase 68: DNS cleanup on tunnel disconnect. No server_id needed —
+            // the task payload contains zone_id + record_id directly.
             "relay.remove_cname_record" => dns::handle_remove_record(task.clone()).await,
 
             // Unknown
@@ -319,11 +324,11 @@ fn get_task_config(task_type: &str) -> TaskConfig {
             timeout: Duration::from_secs(15),
             max_retries: 0, retry_delay_ms: 0, max_retry_delay_ms: 0, backoff_multiplier: 1.0,
         },
-        // Phase 68 (Plan 02): Relay tunnel task configs. The connect /
-        // disconnect are fire-and-forget — they just spawn / cancel the
-        // background reconnect loop. The heartbeat is short. The
-        // remove_cname_record is a single Cloudflare DELETE call, also
-        // short-lived.
+        // Phase 69: Per-server relay tunnel task configs.
+        // connect/disconnect are per-server fire-and-forget — they spawn/cancel
+        // the per-server reconnect loop. The heartbeat is a short-lived write
+        // to the per-server control_tx channel. remove_cname_record is a
+        // single Cloudflare DELETE call.
         "relay.connect" => TaskConfig {
             timeout: Duration::from_secs(30),
             max_retries: 0, retry_delay_ms: 0, max_retry_delay_ms: 0, backoff_multiplier: 1.0,
