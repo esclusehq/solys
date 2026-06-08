@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Phase 68 context gathered
-last_updated: "2026-06-07T06:31:46.327Z"
+stopped_at: Phase 69 context gathered
+last_updated: "2026-06-08T20:17:31.823Z"
 last_activity: 2026-06-07 -- Phase 68 execution started
 progress:
-  total_phases: 23
-  completed_phases: 22
-  total_plans: 77
-  completed_plans: 70
-  percent: 91
+  total_phases: 25
+  completed_phases: 2
+  total_plans: 12
+  completed_plans: 12
+  percent: 100
 ---
 
 # Project State: Esluce
@@ -169,6 +169,8 @@ Progress: [██████████] 100% (Phase 68 plans ready)
 - Phase 67 added: Agent auto-resolve Minecraft port reachability issues (CGN/firewall/Docker port exposure)
 - Phase 68 added: Escluse Relay Infrastructure — automatic fallback connectivity path (Relay Gateway on AWS, agent tunnel client, DNS routing via play.esluce.net, dashboard integration).
 - Phase 68 edited: Regenerated to Strategy C (relay-first): *.play.esluce.net is always-on primary, *.play.esluce.com Direct Mode A record is conditional best-effort. Title, Goal, Requirements (1-9), Success Criteria, Security, Monitoring all updated. Depends on Phase 67 preserved.
+- Phase 69 added: Multiple RelayClient instances (satu per server) dan Tiap server butuh subdomain unik biar gateway bisa route lewat Handshake parser
+- Phase 70 added: Auto-fetch relay_token + server_ids via WS after agent auth
 
 ### Decisions
 
@@ -806,6 +808,6 @@ None yet.
 
 Last activity: 2026-05-31 — Phase 62 Plan 01 complete
 
-Last session: 2026-06-06T18:34:36.210Z
-Stopped at: Phase 68 context gathered
-Resume file: .planning/phases/68-escluse-relay-infrastructure-objective-implement-esluce-rela/68-CONTEXT.md
+Last session: 2026-06-08T20:17:31.600Z
+Stopped at: Phase 69 context gathered
+Resume file: .planning/phases/69-multiple-relayclient-instances-satu-per-server-dan-tiap-serv/69-CONTEXT.md
