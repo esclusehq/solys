@@ -21,6 +21,7 @@ services:
       - ./relay-gateway.toml:/etc/relay-gateway/relay-gateway.toml:ro
     ports:
       - "25565:25565"   # NLB-targeted raw TCP for MC Java
+      - "8080:8080"     # Tunnel listener (for direct WS without Caddy)
       - "9100:9100"     # Prometheus /metrics (D-22; NOT 9090)
     networks:
       - relay-net

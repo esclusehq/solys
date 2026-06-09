@@ -60,6 +60,7 @@ pub enum TunnelMessage {
 }
 
 pub async fn run_tunnel_session(socket: WebSocket, state: Arc<AppState>) {
+    info!("[TUNNEL] run_tunnel_session ENTERED");
     // Phase 69 (multi-server): The gateway accepts N concurrent WS connections
     // from the same agent IP, each authenticating with the same relay_token
     // but a different server_id. There is NO agent-IP uniqueness enforcement
