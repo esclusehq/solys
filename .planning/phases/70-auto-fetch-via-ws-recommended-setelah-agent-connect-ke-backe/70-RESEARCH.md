@@ -575,23 +575,13 @@ async fn bootstrap_relay_client(
 
 **If this table is empty:** All claims in this research were verified or cited — no user confirmation needed.
 
-## Open Questions
+## Open Questions (RESOLVED)
 
-1. **How does the agent currently process `RelayConnect`/`RelayDisconnect` from backend?**
-   - What we know: Backend sends `NodeMessage::RelayConnect` via WS (proven in `relay_service.rs:304-309`). Agent's `BackendMessage` enum has no matching variant.
-   - What's unclear: Whether these messages are silently dropped (agent ignores them) or the agent handles them through the `ExecuteCommand` task dispatch path (backend sends `ExecuteCommand { command: "relay.connect" }` instead).
-   - **Recommendation:** Check if the existing Phase 69 per-server tunnels actually work. If yes, they must arrive via `ExecuteCommand` tasks and the `RelayConnect` NodeMessage variant is a parallel path that Phase 70 should either remove or align. If Phase 69 tunnels don't work (silently dropped), Phase 70 must fix this.
-   - **Resolution path:** Grep backend code for where `ExecuteCommand` with `command: "relay.connect"` is sent. If found, the task dispatch path is proven. If not found, the backend only sends `NodeMessage::RelayConnect` and the agent's parse fails silently.
+1. **How does the agent currently process `RelayConnect`/`RelayDisconnect` from backend?** — **RESOLVED: via per-server `relay.connect`/`relay.disconnect` `ExecuteCommand` tasks, NOT via dedicated `NodeMessage` variants.** Grep of the Phase 69 backend code confirms `relay_service.rs::push_all_servers()` sends `NodeMessage::RelayConnect` to the agent, but the agent's `BackendMessage` enum has no matching variant — these would be silently dropped if sent directly. However, Phase 69 also dispatches per-server `ExecuteCommand { command: "relay.connect"/"relay.disconnect" }` tasks via the task dispatch in `handlers/mod.rs`. The agent processes these through its existing `ExecuteCommand` handler. Phase 70 removes this dual-path complexity by replacing `push_all_servers()` with a single `RelayConfigSync` message that the agent handles natively via the new `BackendMessage::RelayConfigSync` variant.
 
-2. **Should the backend read `gateway_url` and `region` from its own env vars?**
-   - What we know: D-07 says "Backend owns authoritative gateway_url and region — can override env defaults." The agent's defaults are hardcoded in `main.rs:411-414`.
-   - What's unclear: Whether these values should come from backend env vars (new `RELAY_GATEWAY_URL`, `RELAY_REGION` vars) or be hardcoded in the backend.
-   - **Recommendation:** Read from env vars with hardcoded defaults matching the agent's current defaults. This ensures consistency and allows ops override without code changes.
+2. **Should the backend read `gateway_url` and `region` from its own env vars?** — **RESOLVED: Yes, read from `RELAY_GATEWAY_URL` and `RELAY_REGION` env vars with hardcoded defaults matching the agent's current defaults.** Implemented in `relay_service.rs::push_relay_config()` (70-01-PLAN.md Task 2). This ensures consistency and allows ops override without code changes. Defaults: `wss://relay.esluce.com/relay/tunnel` and `ap-southeast-1`.
 
-3. **What happens to `agent_public_ip` in the backward compat path?**
-   - What we know: Current `RelayConfig.agent_public_ip` is auto-detected at startup. In the new design, it stays in `GlobalRelayConfig`.
-   - What's unclear: The backward compat path (when `AGENT_RELAY_TOKEN` is set) still sets the old `RelayConfig` via `state::set_relay_config()`. But the new code path (WS push) won't set `RelayConfig` at all. Will `run_relay_client()` still read `state::relay_config()`?
-   - **Recommendation:** Modify `run_relay_client()` to read from `GlobalRelayConfig` + `RelaySessionState` instead of the old `RelayConfig`. The backward compat path should also set both global and session state for code consistency.
+3. **What happens to `agent_public_ip` in the backward compat path?** — **RESOLVED: `agent_public_ip` stays in `GlobalRelayConfig` (OnceCell). The backward compat path (when `AGENT_RELAY_TOKEN` is set) also populates the legacy `RelayConfig` for existing `run_relay_client()` consumers. When the WS push path is active (no env var), the `RelayConfigSync` handler in `agent_connection.rs` bridges the legacy `RelayConfig` by combining `GlobalRelayConfig.agent_public_ip` + `RelaySessionState.relay_token` into the old struct. This ensures `run_relay_client()` works in both paths without modification.**
 
 ## Environment Availability
 
