@@ -921,6 +921,11 @@ pub async fn run(
                                             }
                                             _ => {}
                                         }
+                                    } else {
+                                        let err = serde_json::from_str::<serde_json::Value>(&text_str)
+                                            .map(|v| format!("raw json type field: {}", v["type"]))
+                                            .unwrap_or_else(|_| "not valid json".into());
+                                        warn!(text = %text_str, "Failed to parse BackendMessage — {}", err);
                                     }
                                 }
                                 Err(e) => {

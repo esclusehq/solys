@@ -17,6 +17,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **`RelayConfigSync` silently ignored by agent** — `serde_json::from_str::<BackendMessage>` falls through silently on parse failure (no error log in `else` branch). Added `warn!` logging with raw JSON to diagnose why the relay config sync message is not being processed.
+
+
+
 - **Windows x86_64 cross-compile fails with "cannot find -lPacket"** — `pnet_sys` (transitive dep via `upnp-rs`) links `Packet.lib` from Npcap/WinPcap, which is not available in the cross-compilation toolchain. Added a CI step that downloads the Npcap SDK, creates a MingW-compatible `libPacket.a` via `dlltool`, and sets `RUSTFLAGS=-L /tmp/npcap-lib` so the linker resolves `-lPacket`. Applied to all 3 workflows (canary, ci, release).
 - **DnsWatcher never syncs DNS when config arrives after first tick** — `check_and_update` returned early when IP did not change, so if `CloudflareDnsConfig` was received from the backend *after* the initial DnsWatcher tick (which is the normal startup sequence), the per-server A records were never created and existing records were never refreshed until the next IP change. Removed the IP-change guard so DNS records are always synced on every polling cycle (every 300s).
 - **RelayClient default gateway URL uses unregistered domain `esluce.net`** — `bootstrap_relay_client` defaulted to `wss://relay.esluce.net/relay/tunnel`, but `esluce.net` is not registered (NXDOMAIN). Changed default to `wss://relay.esluce.com/relay/tunnel`.
