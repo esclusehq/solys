@@ -1,4 +1,16 @@
-# TEMP_CHANGELOG — v0.4.3 + v0.4.4
+# TEMP_CHANGELOG — v0.4.3 + v0.4.4 + Unreleased (solys Phase 70)
+
+## Unreleased — solys Phase 70 + CI fixes
+
+### Added
+- [solys] **Auto-fetch relay config via WebSocket (Phase 70)** — Backend sends single `RelayConfigSync` message after `RegisterAck` (replaces N-per-server `RelayConnect`), carrying `relay_token`, `gateway_url`, `region`, and all server relay info. Agent splits config into `GlobalRelayConfig` (env/TOML, immutable) and `RelaySessionState` (WS push, dynamic replace). Agent `apply_relay_config()` implements diff-based hot update: cancels tunnels for removed servers, starts new servers, restarts tunnels with changed config (subdomain/public_port/local_mc_addr). Agent WS message loop handles `RelayConfigSync` natively with backward compat for legacy env-var bootstrap.
+
+### Fixed
+- [ci] **Windows x86_64 cross-compile fails with "cannot find -lPacket"** — `pnet_sys` (transitive dep via `upnp-rs`) links `Packet.lib` from Npcap/WinPcap, unavailable in cross-compile toolchain. Added CI step: download Npcap SDK, create MingW-compatible `libPacket.a` via `dlltool`, set `RUSTFLAGS=-L /tmp/npcap-lib`. Applied to canary.yml, ci.yml, release.yml. Verified: all 3 platforms green.
+- [solys] **DnsWatcher never syncs DNS when config arrives after first tick** — removed IP-change guard so DNS records sync every polling cycle (300s)
+- [solys] **RelayClient default gateway URL uses unregistered domain `esluce.net`** — changed default to `wss://relay.esluce.com/relay/tunnel`
+
+---
 
 ## v0.4.4 (2026-06-08) — Patch
 

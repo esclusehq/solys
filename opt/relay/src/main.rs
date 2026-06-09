@@ -84,7 +84,9 @@ async fn tunnel_upgrade(
     ws: WebSocketUpgrade,
     State(state): State<Arc<AppState>>,
 ) -> impl IntoResponse {
+    info!("[TUNNEL] tunnel_upgrade called (about to upgrade WS)");
     ws.on_upgrade(move |socket: WebSocket| async move {
+        info!("[TUNNEL] WS upgraded, calling run_tunnel_session");
         tunnel::run_tunnel_session(socket, state).await;
     })
 }
