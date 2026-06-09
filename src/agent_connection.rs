@@ -831,6 +831,58 @@ pub async fn run(
                                                 drop(guard);
                                                 info!("DNS configuration updated from backend ({} per-server subdomains)", per_server_count);
                                             }
+                                            BackendMessage::RelayConfigSync { relay_token, gateway_url, region, servers } => {
+                                                info!(
+                                                    "RelayConfigSync received: token={}..., gateway={}, {} servers",
+                                                    &relay_token[..relay_token.len().min(8)],
+                                                    gateway_url,
+                                                    servers.len(),
+                                                );
+
+                                                // Store in RelaySessionState for diagnostic access
+                                                let session = crate::state::RelaySessionState {
+                                                    relay_token: relay_token.clone(),
+                                                    servers: servers.iter().map(|s| crate::state::ServerRelayInfo {
+                                                        server_id: s.server_id,
+                                                        subdomain: s.subdomain.clone(),
+                                                        local_mc_addr: s.local_mc_addr.clone(),
+                                                        public_port: s.public_port,
+                                                    }).collect(),
+                                                };
+                                                crate::state::set_relay_session_state(session).await;
+
+                                                // D-01: If legacy RelayConfig has not been set (no AGENT_RELAY_TOKEN
+                                                // env var), construct it from the combined global config + WS push
+                                                // so that existing run_relay_client() can read the shared config.
+                                                if crate::state::relay_config().is_none() {
+                                                    if let Some(global) = crate::state::global_relay_config() {
+                                                        let legacy = crate::state::RelayConfig {
+                                                            gateway_url,
+                                                            token: relay_token,
+                                                            agent_public_ip: global.agent_public_ip.clone(),
+                                                            region,
+                                                            dns_api_token: global.dns_api_token.clone(),
+                                                            dns_zone_id: global.dns_zone_id.clone(),
+                                                        };
+                                                        crate::state::set_relay_config(legacy);
+                                                        info!("RelayConfigSync: set legacy RelayConfig from WS push (no env var)");
+                                                    }
+                                                }
+
+                                                // Apply diff-based hot update
+                                                let state_servers: Vec<crate::state::ServerRelayInfo> = servers.iter().map(|s| crate::state::ServerRelayInfo {
+                                                    server_id: s.server_id,
+                                                    subdomain: s.subdomain.clone(),
+                                                    local_mc_addr: s.local_mc_addr.clone(),
+                                                    public_port: s.public_port,
+                                                }).collect();
+                                                if let Err(e) = crate::handlers::relay_client::apply_relay_config(state_servers).await {
+                                                    warn!(
+                                                        "RelayConfigSync apply failed: {} — existing tunnels continue",
+                                                        e
+                                                    );
+                                                }
+                                            }
                                             BackendMessage::Ping => {
                                                 let node_id_value = *node_id.lock().unwrap();
                                                 if let Some(id) = node_id_value {
