@@ -9,7 +9,7 @@ hmac_secret_env = "GATEWAY_HMAC_SECRET"  # read from env at startup
 request_timeout_secs = 5
 
 [redis]
-url = "redis://localhost:6379"     # for nonce dedup
+url = "redis://redis:6379"     # for nonce dedup
 
 [tunnel]
 heartbeat_interval_secs = 10

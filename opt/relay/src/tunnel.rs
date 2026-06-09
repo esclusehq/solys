@@ -366,6 +366,7 @@ async fn ws_bridge(socket: WebSocket, mut yamux_side: DuplexStream) {
             msg = ws_stream.next() => {
                 match msg {
                     Some(Ok(Message::Binary(data))) => {
+                        info!("[TUNNEL] bridge — WS recv {} bytes", data.len());
                         if let Err(e) = yamux_side.write_all(&data).await {
                             warn!(error = %e, "[TUNNEL] bridge — yamux write failed");
                             break;
@@ -375,8 +376,16 @@ async fn ws_bridge(socket: WebSocket, mut yamux_side: DuplexStream) {
                         info!("[TUNNEL] bridge — WS closed");
                         break;
                     }
+                    Some(Ok(Message::Ping(_))) => {
+                        info!("[TUNNEL] bridge — WS Ping");
+                        continue;
+                    }
+                    Some(Ok(Message::Pong(_))) => {
+                        info!("[TUNNEL] bridge — WS Pong");
+                        continue;
+                    }
                     Some(Ok(_)) => {
-                        // Text / Ping / Pong — skip.
+                        info!("[TUNNEL] bridge — WS other message");
                         continue;
                     }
                     Some(Err(e)) => {
