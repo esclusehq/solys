@@ -470,11 +470,11 @@ Plans:
 **Goal:** Auto-fetch via WS — setelah agent connect ke backend pakai AGENT_API_KEY, backend kirim relay_token + server_ids langsung via WebSocket
 **Requirements**: None
 **Depends on:** Phase 69
-**Plans:** 3 plans
+**Plans:** 3/3 plans complete
 
 **Wave 1**
-- [ ] 70-01-PLAN.md — Backend: RelayConfigSync protocol variant + push_relay_config() + wire in Register handler
-- [ ] 70-02-PLAN.md — Agent: config storage split (GlobalRelayConfig + RelaySessionState) + apply_relay_config() + bootstrap changes
+- [x] 70-01-PLAN.md — Backend: RelayConfigSync protocol variant + push_relay_config() + wire in Register handler
+- [x] 70-02-PLAN.md — Agent: config storage split (GlobalRelayConfig + RelaySessionState) + apply_relay_config() + bootstrap changes
 
 **Wave 2** *(blocked on Wave 1 completion)*
-- [ ] 70-03-PLAN.md — Agent: BackendMessage::RelayConfigSync handler in agent_connection.rs
+- [x] 70-03-PLAN.md — Agent: BackendMessage::RelayConfigSync handler in agent_connection.rs
