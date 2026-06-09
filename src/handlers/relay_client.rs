@@ -55,7 +55,7 @@
 //! 7. [`shutdown_all()`] cancels the parent token → all child tokens fire
 //!    → all reconnect loops exit → HashMap is cleared (D-04).
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, OnceLock};
 use std::time::{Duration, Instant};
@@ -783,4 +783,113 @@ async fn dispatch_remove_cname_record(
             );
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+// Phase 70: Diff-based hot update from RelayConfigSync (D-04)
+// ---------------------------------------------------------------------------
+
+/// Phase 70: Diff-based hot update for relay tunnels.
+///
+/// Called when a `RelayConfigSync` message arrives from the backend.
+/// Compares the incoming server list against currently running tunnels
+/// and applies atomic diffs:
+/// 1. Cancel tunnels for servers no longer in the list
+/// 2. Start tunnels for new servers
+/// 3. Update (disconnect+reconnect) tunnels for servers with changed config
+///    (subdomain, public_port, or local_mc_addr differ — per D-04 step 4)
+///
+/// Per D-02: full state replace semantics — the incoming list is the
+/// complete desired state.
+///
+/// Per D-04, step 4: "Update tunnels for existing servers if config
+/// changed (stagger jitter per Phase 69 D-17)". Config comparison uses
+/// field-level equality on subdomain, public_port, local_mc_addr.
+/// dns_record_id is NOT compared — it is an agent-internal field not
+/// part of the backend config sync.
+///
+/// Important: Must drop the RwLock write guard before calling connect()
+/// or disconnect() to avoid deadlock (they also acquire the lock).
+pub async fn apply_relay_config(
+    new_servers: Vec<crate::state::ServerRelayInfo>,
+) -> Result<()> {
+    let rt = runtime();
+    let new_ids: HashSet<Uuid> =
+        new_servers.iter().map(|s| s.server_id).collect();
+
+    // Step 1: Cancel removed tunnels.
+    // Step 3a: Detect config changes for existing servers (D-04 step 4).
+    let mut to_restart: Vec<Uuid> = Vec::new();
+    {
+        let mut tunnels = rt.tunnels.write().await;
+        let current_ids: HashSet<Uuid> =
+            tunnels.keys().copied().collect();
+
+        // Cancel tunnels for removed servers
+        for removed_id in current_ids.difference(&new_ids) {
+            if let Some(psr) = tunnels.remove(removed_id) {
+                info!(
+                    "RelayConfigSync: stopping tunnel for server_id={}",
+                    removed_id
+                );
+                psr.cancel.cancel();
+            }
+        }
+
+        // Detect and stop tunnels with changed config (D-04 step 4)
+        // Compare subdomain, public_port, local_mc_addr across old and new.
+        for new_server in &new_servers {
+            if let Some(existing) = tunnels.get(&new_server.server_id) {
+                let cfg = &existing.config;
+                let config_changed = cfg.subdomain != new_server.subdomain
+                    || cfg.public_port != new_server.public_port
+                    || cfg.local_mc_addr != new_server.local_mc_addr;
+                if config_changed {
+                    info!(
+                        "RelayConfigSync: config changed for server_id={}, restarting",
+                        new_server.server_id
+                    );
+                    if let Some(psr) = tunnels.remove(&new_server.server_id) {
+                        psr.cancel.cancel();
+                        to_restart.push(new_server.server_id);
+                    }
+                }
+            }
+        }
+    } // write lock dropped here — prevents deadlock on connect/disconnect
+
+    // Step 2 & 3b: Start new tunnels / restart config-changed ones.
+    // Stagger jitter per Phase 69 D-17: connect() already applies
+    // per-server jitter internally (randomized delay on first connect).
+    for server in &new_servers {
+        let per_server_cfg = PerServerRelayConfig {
+            server_id: server.server_id,
+            subdomain: server.subdomain.clone(),
+            public_port: server.public_port,
+            local_mc_addr: server.local_mc_addr.clone(),
+            dns_record_id: None,
+        };
+
+        let needs_restart = to_restart.contains(&server.server_id);
+
+        if !needs_restart {
+            // Skip if tunnel already exists and config unchanged
+            let exists = {
+                let tunnels = rt.tunnels.read().await;
+                tunnels.contains_key(&server.server_id)
+            };
+            if exists {
+                continue;
+            }
+        }
+
+        // Start (or restart) tunnel — connect() acquires its own write lock
+        info!(
+            "RelayConfigSync: starting tunnel for server_id={}",
+            server.server_id
+        );
+        connect(server.server_id, per_server_cfg).await?;
+    }
+
+    Ok(())
 }
