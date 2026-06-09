@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Auto-fetch relay config via WebSocket (Phase 70)** — Backend sends single `RelayConfigSync` message after `RegisterAck` (replaces N-per-server `RelayConnect`), carrying `relay_token`, `gateway_url`, `region`, and all server relay info. Agent splits config into `GlobalRelayConfig` (env/TOML, immutable) and `RelaySessionState` (WS push, dynamic replace). Agent `apply_relay_config()` implements diff-based hot update: cancels tunnels for removed servers, starts new servers, and restarts tunnels with changed config (subdomain/public_port/local_mc_addr). Agent WS message loop handles `RelayConfigSync` natively with backward compat for legacy env-var bootstrap.
+
+### Added
+
 - **Per-server DNS records (`<server>.<global_subdomain>.<wildcard_domain>`)** — `CloudflareDnsConfig` now carries `extra_subdomains: Vec<String>` and the DDNS watcher keeps every record in sync alongside the global one. Backend computes the per-server subdomains from `servers.public_host` and ships them in `NodeMessage::DnsConfig` on every Cloudflare save and on every reconnect. Watcher creates/updates each A record (`<sub>.<global_sub>.<wildcard>`) on every IP change, not just the global one. Example: server "mantap wou" gets `mantap-wou.play.esluce.com` while the global `play.esluce.com` continues to update. Status task (`dns.status`) now reports `per_server_domains` for the dashboard.
 
 ### Fixed
