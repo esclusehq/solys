@@ -76,7 +76,14 @@ pub async fn run_tunnel_session(socket: WebSocket, state: Arc<AppState>) {
     let mut bridge_handle = tokio::spawn(ws_bridge(socket, ws_byte_side));
 
     // 2. Create the yamux server session over the duplex side.
-    let yamux_cfg = YamuxConfig::default();
+    //    Disable keepalive on the gateway side — the heartbeat watcher
+    //    (heartbeat.rs) already detects dead tunnels via the periodic
+    //    TunnelHeartbeat messages. Letting the yamux session also send
+    //    keepalive pings creates bidirectional ping-pong overhead and
+    //    can cause the agent's keepalive to time out if the gateway's
+    //    session.next() polling is delayed (e.g. by backend HTTP reports).
+    let mut yamux_cfg = YamuxConfig::default();
+    yamux_cfg.enable_keepalive = false;
     let mut session = Session::new_server(yamux_side, yamux_cfg);
 
     // 3. Wait for the first inbound yamux stream (the agent's control
@@ -218,15 +225,9 @@ pub async fn run_tunnel_session(socket: WebSocket, state: Arc<AppState>) {
     loop {
         tokio::select! {
             next = session.next() => {
-                // Poll the yamux session to process incoming frames (Ping,
-                // Data, WindowUpdate). Without continuous polling, the
-                // session never sends Pong responses to the agent's
-                // keepalive Pings, causing the agent's yamux to time out
-                // after 90s (3 × 30s keepalive_interval).
                 match next {
                     Some(Ok(_stream)) => {
-                        warn!("[TUNNEL] Unexpected inbound yamux stream from agent: server_id={}", handle.server_id);
-                        // Drop the stream handle — its Drop impl sends RST.
+                        info!("[TUNNEL] session.next → inbound stream (player): server_id={}", handle.server_id);
                     }
                     Some(Err(e)) => {
                         warn!("[TUNNEL] yamux session error: server_id={}: {}", handle.server_id, e);
@@ -239,17 +240,13 @@ pub async fn run_tunnel_session(socket: WebSocket, state: Arc<AppState>) {
                 }
             }
             _ = ticker.tick() => {
-                // Server-initiated ping is not required; the heartbeat is
-                // a liveness check based on the agent's last message
-                // timestamp, which the read_control_stream task updates.
+                info!("[TUNNEL] Ticker fired for heartbeat report: server_id={}", handle.server_id);
                 if let Err(e) = state.backend.report_tunnel_event(handle.server_id, "heartbeat", "ok").await {
                     warn!("[TUNNEL] Heartbeat backend report failed: {}", e);
                 }
+                info!("[TUNNEL] Ticker handler done: server_id={}", handle.server_id);
             }
             _ = &mut bridge_handle => {
-                // The WS bridge returned (agent disconnected or yamux
-                // session died — yamux_side hits EOF when the agent's
-                // WS closes, which the bridge sees).
                 info!("[TUNNEL] WS bridge ended: server_id={}", handle.server_id);
                 break;
             }
