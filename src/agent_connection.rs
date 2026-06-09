@@ -141,6 +141,23 @@ enum BackendMessage {
         #[serde(default)]
         extra_subdomains: Vec<String>,
     },
+    // Phase 70: Backend pushes complete relay configuration after RegisterAck.
+    // Matches NodeMessage::RelayConfigSync on the backend side.
+    #[serde(rename = "relay_config_sync")]
+    RelayConfigSync {
+        relay_token: String,
+        gateway_url: String,
+        region: String,
+        servers: Vec<ServerRelayInfo>,
+    },
+}
+
+#[derive(Debug, Clone, serde::Deserialize)]
+struct ServerRelayInfo {
+    server_id: Uuid,
+    subdomain: String,
+    local_mc_addr: String,
+    public_port: u16,
 }
 
 #[derive(Debug, Clone, serde::Deserialize, Default)]
