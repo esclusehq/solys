@@ -2,7 +2,7 @@
 phase: 70
 slug: auto-fetch-via-ws-recommended-setelah-agent-connect-ke-backe
 status: draft
-nyquist_compliant: false
+nyquist_compliant: true
 wave_0_complete: false
 created: 2026-06-09
 ---
@@ -71,6 +71,6 @@ Existing test infrastructure covers all phase requirements. The Rust compiler pr
 - [ ] Wave 0 covers all MISSING references
 - [ ] No watch-mode flags
 - [ ] Feedback latency < 60s
-- [ ] `nyquist_compliant: true` set in frontmatter
+- [x] `nyquist_compliant: true` set in frontmatter
 
-**Approval:** pending
+**Approval:** approved 2026-06-09
