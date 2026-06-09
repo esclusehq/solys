@@ -205,7 +205,11 @@ pub async fn run_tunnel_session(socket: WebSocket, state: Arc<AppState>) {
         read_control_stream(hb_state, hb_handle, control_stream).await;
     });
 
-    // 10. 10s ticker for backend liveness reports + bridge-end detection.
+    // 10. Poll yamux session + 10s ticker + bridge-end detection.
+    //     session.next() must be polled continuously to process incoming
+    //     frames (Ping → Pong, Data → stream delivery, WindowUpdate).
+    //     Without this, the agent's keepalive Pings go unanswered and the
+    //     agent's yamux session times out after 90s (3 × 30s).
     let mut ticker = tokio::time::interval(Duration::from_secs(
         state.config.tunnel.heartbeat_interval_secs,
     ));
@@ -213,6 +217,27 @@ pub async fn run_tunnel_session(socket: WebSocket, state: Arc<AppState>) {
 
     loop {
         tokio::select! {
+            next = session.next() => {
+                // Poll the yamux session to process incoming frames (Ping,
+                // Data, WindowUpdate). Without continuous polling, the
+                // session never sends Pong responses to the agent's
+                // keepalive Pings, causing the agent's yamux to time out
+                // after 90s (3 × 30s keepalive_interval).
+                match next {
+                    Some(Ok(_stream)) => {
+                        warn!("[TUNNEL] Unexpected inbound yamux stream from agent: server_id={}", handle.server_id);
+                        // Drop the stream handle — its Drop impl sends RST.
+                    }
+                    Some(Err(e)) => {
+                        warn!("[TUNNEL] yamux session error: server_id={}: {}", handle.server_id, e);
+                        break;
+                    }
+                    None => {
+                        info!("[TUNNEL] yamux session ended: server_id={}", handle.server_id);
+                        break;
+                    }
+                }
+            }
             _ = ticker.tick() => {
                 // Server-initiated ping is not required; the heartbeat is
                 // a liveness check based on the agent's last message
