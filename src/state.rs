@@ -185,6 +185,67 @@ pub fn relay_config() -> Option<Arc<RelayConfig>> {
     RELAY_CONFIG.get().cloned()
 }
 
+// ---------------------------------------------------------------------------
+// Phase 70: Split relay config sources — GlobalRelayConfig (env/TOML,
+// immutable) + RelaySessionState (WS push, dynamic replace).
+// ---------------------------------------------------------------------------
+
+/// Immutable global relay config from env/TOML.
+/// Set once at startup by `bootstrap_relay_client()` (main.rs).
+/// Contains fields that rarely change: gateway URL, region, DNS creds.
+#[derive(Debug, Clone)]
+pub struct GlobalRelayConfig {
+    pub gateway_url: String,
+    pub region: String,
+    pub dns_api_token: Option<String>,
+    pub dns_zone_id: Option<String>,
+    pub agent_public_ip: String,
+}
+
+/// Dynamic relay session state pushed from backend via WebSocket.
+/// Fully replaced on every `RelayConfigSync` message (D-02).
+#[derive(Debug, Clone, Default)]
+pub struct RelaySessionState {
+    pub relay_token: String,
+    pub servers: Vec<ServerRelayInfo>,
+}
+
+/// Per-server relay info from the backend's RelayConfigSync.
+#[derive(Debug, Clone)]
+pub struct ServerRelayInfo {
+    pub server_id: Uuid,
+    pub subdomain: String,
+    pub local_mc_addr: String,
+    pub public_port: u16,
+}
+
+static GLOBAL_RELAY_CONFIG: OnceCell<Arc<GlobalRelayConfig>> = OnceCell::const_new();
+
+/// Set the global relay config. Called once at startup from main.rs.
+/// Subsequent calls are no-ops (first wins).
+pub fn set_global_relay_config(cfg: GlobalRelayConfig) {
+    let _ = GLOBAL_RELAY_CONFIG.set(Arc::new(cfg));
+}
+
+/// Borrow the global relay config, or `None` if not yet initialized.
+pub fn global_relay_config() -> Option<Arc<GlobalRelayConfig>> {
+    GLOBAL_RELAY_CONFIG.get().cloned()
+}
+
+static RELAY_SESSION_STATE: tokio::sync::RwLock<Option<RelaySessionState>> =
+    tokio::sync::RwLock::const_new(None);
+
+/// Store the relay session state from a WS push. Replaces any prior value (D-02).
+pub async fn set_relay_session_state(state: RelaySessionState) {
+    let mut guard = RELAY_SESSION_STATE.write().await;
+    *guard = Some(state);
+}
+
+/// Read the current relay session state.
+pub async fn relay_session_state() -> Option<RelaySessionState> {
+    RELAY_SESSION_STATE.read().await.clone()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
