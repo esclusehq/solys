@@ -90,8 +90,12 @@ pub async fn run_tunnel_session(socket: WebSocket, state: Arc<AppState>) {
     // 3. Wait for the first inbound yamux stream (the agent's control
     //    stream — the one on which it sends TunnelConnect, then
     //    TunnelHeartbeat every 10s).
+    info!("[TUNNEL] Waiting for first yamux stream...");
     let mut control_stream: StreamHandle = match session.next().await {
-        Some(Ok(s)) => s,
+        Some(Ok(s)) => {
+            info!("[TUNNEL] First yamux stream received");
+            s
+        }
         Some(Err(e)) => {
             warn!("[TUNNEL] yamux session error: {}", e);
             return;
@@ -102,8 +106,44 @@ pub async fn run_tunnel_session(socket: WebSocket, state: Arc<AppState>) {
         }
     };
 
+    // Drain any pending frames from the transport into the stream's
+    // frame_receiver. The yamux Session polls framed_stream at most once
+    // per poll_next call, so the TunnelConnect DATA frame may still be
+    // buffered in the codec even after the SYN is processed and the
+    // stream handle is returned.  A brief poll-back drains it.
+    match tokio::time::timeout(
+        std::time::Duration::from_millis(500),
+        session.next(),
+    )
+    .await
+    {
+        Ok(Some(Ok(mut extra))) => {
+            // Another stream arrived — unexpected for the control
+            // stream handshake, but handle it gracefully.
+            info!(
+                "[TUNNEL] Extra yamux stream {} during drain — closing",
+                extra.id()
+            );
+            let _ = extra.shutdown().await;
+        }
+        Ok(Some(Err(e))) => {
+            warn!("[TUNNEL] yamux session error while draining frames: {}", e);
+            return;
+        }
+        Ok(None) => {
+            warn!("[TUNNEL] yamux session ended while draining frames");
+            return;
+        }
+        Err(_) => {
+            // Timeout — no new streams, but the pending DATA frame
+            // should now be in the control stream's channel.
+            info!("[TUNNEL] Pending frames drained (timeout)");
+        }
+    }
+
     // 4. Read the TunnelConnect JSON from the control stream. NDJSON
     //    framing: agent appends '\n' to the connect message.
+    info!("[TUNNEL] Reading TunnelConnect from control stream...");
     let connect: TunnelConnect = match read_json_message(&mut control_stream).await {
         Ok(bytes) => match serde_json::from_slice(&bytes) {
             Ok(c) => c,
@@ -316,13 +356,15 @@ async fn handle_tunnel_message(state: &AppState, handle: &Arc<TunnelHandle>, msg
 }
 
 fn validate_subdomain(s: &str) -> Result<(), String> {
-    if s.is_empty() || s.len() > 63 {
-        return Err("subdomain must be 1-63 chars".into());
+    if s.len() > 63 {
+        return Err("subdomain must be ≤63 chars".into());
     }
-    if !s.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-') {
+    if !s.is_empty()
+        && !s.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
+    {
         return Err("subdomain has invalid characters".into());
     }
-    if s.starts_with('-') || s.ends_with('-') {
+    if !s.is_empty() && (s.starts_with('-') || s.ends_with('-')) {
         return Err("subdomain cannot start or end with '-'".into());
     }
     Ok(())

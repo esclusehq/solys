@@ -42,6 +42,7 @@ services:
       REDIS_URL: redis://:dU4J99CaxFSQti9jqucZ@redis:6379
       SERVER_HOST: 0.0.0.0
       SERVER_PORT: "3000"
+      GATEWAY_HMAC_SECRET: d3f89ef2c4a1088214e6587f85a394e00cfb72b3711c5d58ec6f22a7259bd637
     ports:
       - "3000:3000"
     depends_on:
