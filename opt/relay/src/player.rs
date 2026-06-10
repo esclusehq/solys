@@ -6,8 +6,8 @@ use tokio::net::TcpStream;
 use tracing::{debug, error, info, warn};
 use crate::state::AppState;
 
-/// The suffix every relay subdomain has on `*.play.esluce.net`.
-const RELAY_SUFFIX: &str = ".play.esluce.net";
+/// The suffix every relay subdomain has on `*.play.esluce.com`.
+const RELAY_SUFFIX: &str = ".play.esluce.com";
 /// Max length of a Minecraft Java String per protocol spec (VarInt-prefixed, 32767 chars max, but DNS labels cap at 253).
 const MAX_MC_STRING_BYTES: usize = 255;
 /// How long to wait for the Handshake packet to arrive before giving up.
@@ -140,7 +140,7 @@ pub async fn read_mc_handshake_subdomain(
     _peer: SocketAddr,
 ) -> anyhow::Result<(String, Vec<u8>)> {
     // Read up to 1 KiB — the Handshake packet for typical MC clients is
-    // ~30-100 bytes (server address is short: "abc12345.play.esluce.net").
+    // ~30-100 bytes (server address is short: "abc12345.play.esluce.com").
     let mut buf = vec![0u8; 1024];
     let mut total_read = 0usize;
     let read_fut = async {
@@ -164,11 +164,11 @@ pub async fn read_mc_handshake_subdomain(
     let (subdomain, consumed) = try_parse_handshake(&buf[..total_read])
         .ok_or_else(|| anyhow::anyhow!("Incomplete or invalid Handshake"))?;
 
-    // Sanity check: the address must end in `.play.esluce.net`
+    // Sanity check: the address must end in `.play.esluce.com`
     if !subdomain.ends_with(RELAY_SUFFIX) {
         anyhow::bail!("Server address does not end in {}: {}", RELAY_SUFFIX, subdomain);
     }
-    // Extract the subdomain (everything before `.play.esluce.net`)
+    // Extract the subdomain (everything before `.play.esluce.com`)
     let subdomain = subdomain[..subdomain.len() - RELAY_SUFFIX.len()].to_string();
     if subdomain.is_empty() || subdomain.len() > 63 {
         anyhow::bail!("Subdomain length out of range: '{}'", subdomain);
