@@ -324,14 +324,6 @@ async fn run_agent_core(config: agent_config::AgentConfig) -> Result<()> {
         monitor_for_shutdown.stop().await;
     });
 
-    // 9c. Start RelayClient (Phase 68 Plan 02) if AGENT_RELAY_TOKEN is set.
-    //     The token is per-node and is provisioned out-of-band by the
-    //     backend when the agent first registers. We read the rest of
-    //     the relay config from the same env-var namespace.
-    if let Err(e) = bootstrap_relay_client(&config, shutdown.clone()).await {
-        error!(error = %e, "Failed to bootstrap RelayClient");
-    }
-
     // 10. Run agent with shutdown handling
     let shutdown_for_agent = shutdown.clone();
     let agent_id = tokio::select! {
@@ -351,8 +343,8 @@ async fn run_agent_core(config: agent_config::AgentConfig) -> Result<()> {
 
     info!(agent_id = %agent_id, "Web Agent stopped");
 
-    // Phase 69 (Plan 02): shut down all relay tunnels
-    crate::handlers::relay_client::shutdown_all().await;
+    // Phase 70: shut down all relay tunnels
+    crate::state::relay_manager().stop_all().await;
 
     // D-23: Save final state on shutdown
     // Capture any error from the agent run
@@ -375,90 +367,3 @@ async fn run_agent_core(config: agent_config::AgentConfig) -> Result<()> {
     Ok(())
 }
 
-// ---------------------------------------------------------------------------
-// Phase 68 (Plan 02): RelayClient bootstrap
-// ---------------------------------------------------------------------------
-
-/// Read the relay config from env vars and set the global shared config.
-/// No-op if `AGENT_RELAY_TOKEN` is not set.
-///
-/// Phase 69: Per-server fields (server_id, subdomain, public_port,
-/// local_mc_addr) arrive in `relay.connect` task payloads, not env vars.
-/// This function only sets the shared env-var-based config (D-15).
-///
-/// Env vars consumed (shared only):
-///   - `AGENT_RELAY_TOKEN`         (required, per-node bearer token)
-///   - `AGENT_RELAY_GATEWAY_URL`   (optional, default: `wss://relay.esluce.net/relay/tunnel`)
-///   - `AGENT_RELAY_REGION`        (optional, default: `ap-southeast-1`)
-///   - `AGENT_RELAY_DNS_API_TOKEN` (optional, used for the
-///     `relay.remove_cname_record` self-loop)
-///   - `AGENT_RELAY_DNS_ZONE_ID`   (optional, ditto)
-///
-/// Per-server tunnels are started/stopped via task dispatch
-/// (`relay.connect` / `relay.disconnect`) from the backend.
-async fn bootstrap_relay_client(
-    _config: &agent_config::AgentConfig,
-    _shutdown: Arc<AtomicBool>,
-) -> Result<()> {
-    // Always load global config from env/TOML (gateway_url, region, DNS creds, public IP).
-    let gateway_url = std::env::var("AGENT_RELAY_GATEWAY_URL")
-        .unwrap_or_else(|_| "wss://relay.esluce.com/relay/tunnel".to_string());
-    let region = std::env::var("AGENT_RELAY_REGION")
-        .unwrap_or_else(|_| "ap-southeast-1".to_string());
-    let dns_api_token = std::env::var("AGENT_RELAY_DNS_API_TOKEN").ok();
-    let dns_zone_id = std::env::var("AGENT_RELAY_DNS_ZONE_ID").ok();
-
-    // Best-effort public IP detection for TunnelConnect payload.
-    let agent_public_ip = match crate::handlers::dns_watch::detect_public_ip().await {
-        Ok(ip) => ip,
-        Err(_) => "0.0.0.0".to_string(),
-    };
-
-    // IMPORTANT: All fields MUST be .clone()'d here because they are
-    // reused in the backward-compat legacy RelayConfig branch below.
-    // Without cloning, region, dns_api_token, etc. would be moved into
-    // global_cfg and cause use-after-move compile errors in the legacy path.
-    let global_cfg = state::GlobalRelayConfig {
-        gateway_url: gateway_url.clone(),
-        region: region.clone(),
-        dns_api_token: dns_api_token.clone(),
-        dns_zone_id: dns_zone_id.clone(),
-        agent_public_ip: agent_public_ip.clone(),
-    };
-    state::set_global_relay_config(global_cfg);
-
-    // Phase 70 (D-03): Backward compat — if AGENT_RELAY_TOKEN is set,
-    // also set the legacy RelayConfig so existing deployments continue
-    // to work without WS push. Otherwise, relay_client waits for the
-    // first RelayConfigSync to arrive from backend.
-    if let Some(token) = std::env::var("AGENT_RELAY_TOKEN").ok().filter(|t| !t.is_empty()) {
-        info!(
-            "[RELAY] AGENT_RELAY_TOKEN set — using legacy bootstrap (Phase 70 WS push will replace this)"
-        );
-
-        let relay_cfg = state::RelayConfig {
-            gateway_url: gateway_url.clone(),
-            token,
-            agent_public_ip,
-            region,
-            dns_api_token,
-            dns_zone_id,
-        };
-        state::set_relay_config(relay_cfg);
-
-        info!(
-            "[RELAY] Shared relay config set (token starts with: {}..., gateway={})",
-            &gateway_url[..gateway_url.len().min(8)],
-            gateway_url,
-        );
-    } else {
-        info!(
-            "[RELAY] No AGENT_RELAY_TOKEN — waiting for WS push (Phase 70)"
-        );
-        // relay_client won't start until first RelayConfigSync arrives
-        // via WS; the agent_connection handler calls apply_relay_config()
-        // which calls relay_client::connect() for each server.
-    }
-
-    Ok(())
-}
