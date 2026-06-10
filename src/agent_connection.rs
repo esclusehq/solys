@@ -859,6 +859,19 @@ pub async fn run(
                                                     .collect();
 
                                                 crate::state::relay_manager().set_servers(configs).await;
+
+                                                // Remove relay subdomains from DNS extra_subdomains so the
+                                                // DnsWatcher doesn't create A records pointing to the agent's
+                                                // local IP (which would override the wildcard
+                                                // *.play.esluce.com → relay VPS).
+                                                let relay_subs: Vec<String> = servers.iter().map(|s| s.subdomain.clone()).collect();
+                                                if !relay_subs.is_empty() {
+                                                    let mut dns_guard = crate::handlers::dns::DNS_CONFIG.write().await;
+                                                    if let Some(ref mut cfg) = *dns_guard {
+                                                        cfg.extra_subdomains.retain(|sub| !relay_subs.contains(sub));
+                                                    }
+                                                    drop(dns_guard);
+                                                }
                                             }
                                             BackendMessage::Ping => {
                                                 let node_id_value = *node_id.lock().unwrap();

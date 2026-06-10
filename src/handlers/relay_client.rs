@@ -286,6 +286,14 @@ async fn drive_inbound_streams(
     server_id: Uuid,
     shutdown: &CancellationToken,
 ) -> Result<()> {
+    // Resolve container IP via Docker so multiple servers on the same port
+    // don't collide on 127.0.0.1.
+    let resolved_addr = resolve_container_addr(&server_id, local_mc_addr).await
+        .unwrap_or_else(|| local_mc_addr.to_string());
+    if resolved_addr != local_mc_addr {
+        info!(from = %local_mc_addr, to = %resolved_addr, "RelayClient: resolved container address");
+    }
+
     loop {
         tokio::select! {
             biased;
@@ -296,7 +304,7 @@ async fn drive_inbound_streams(
             next = session.next() => {
                 match next {
                     Some(Ok(stream)) => {
-                        let local = local_mc_addr.to_string();
+                        let local = resolved_addr.clone();
                         let bytes_counter = {
                             let servers = crate::state::relay_manager().servers.read().await;
                             servers.get(&server_id)
@@ -325,6 +333,56 @@ async fn drive_inbound_streams(
             }
         }
     }
+}
+
+/// Look up a container's IP via Docker and return it as `{ip}:{port}`.
+/// Falls back to `None` if Docker isn't available or the container
+/// isn't running. Uses the same network resolution pattern as rcon.rs.
+///
+/// The port is taken from the container's port bindings — we prefer the
+/// standard Minecraft port (25565), then the first exposed TCP port, and
+/// finally the host port from `local_mc_addr`. This avoids mismatches
+/// where the Docker host port differs from the container's internal port.
+async fn resolve_container_addr(server_id: &Uuid, local_mc_addr: &str) -> Option<String> {
+    let docker = crate::state::docker_global()?;
+    let container_name = format!("mc-{}", server_id);
+    let inspect = docker.inspect_container(&container_name, None).await.ok()?;
+    let ip = inspect
+        .network_settings
+        .as_ref()
+        .and_then(|ns| ns.networks.as_ref())
+        .and_then(|networks| {
+            networks.values().find_map(|ep| {
+                let ip = ep.ip_address.as_ref()?;
+                if !ip.is_empty() && ip != "0.0.0.0" {
+                    Some(ip.clone())
+                } else {
+                    None
+                }
+            })
+        })
+        .or_else(|| {
+            inspect.network_settings.as_ref()?.ip_address.as_ref().filter(|ip| !ip.is_empty() && *ip != "0.0.0.0").cloned()
+        })?;
+    let port = inspect
+        .network_settings
+        .as_ref()
+        .and_then(|ns| ns.ports.as_ref())
+        .and_then(|ports| {
+            if ports.contains_key("25565/tcp") {
+                Some("25565".to_string())
+            } else {
+                ports.keys()
+                    .find(|p| p.ends_with("/tcp"))
+                    .and_then(|p| p.split('/').next())
+                    .map(|p| p.to_string())
+            }
+        })
+        .or_else(|| {
+            local_mc_addr.split(':').nth(1).map(|p| p.to_string())
+        })
+        .unwrap_or_else(|| "25565".to_string());
+    Some(format!("{}:{}", ip, port))
 }
 
 /// 10 s heartbeat ticker + rekey thresholds.
