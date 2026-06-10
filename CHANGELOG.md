@@ -17,6 +17,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **`RelayConfigSync` handler recreates relay A records from DNS config** — `RelayConfigSync` handler now removes relay subdomains from `DNS_CONFIG.extra_subdomains` so the DnsWatcher doesn't delete and recreate the relay's A records on every 300s polling cycle, keeping the relay IP stable.
+- **Docker bridge port collision when host mapping differs from container port** — `resolve_container_addr()` now resolves the container's internal port (25565) via Docker inspect instead of using the Docker host port from `local_mc_addr`, fixing port mismatch when containers use non-standard host port mappings.
 - **`RelayConfigSync` silently ignored by agent** — `serde_json::from_str::<BackendMessage>` falls through silently on parse failure (no error log in `else` branch). Added `warn!` logging with raw JSON to diagnose why the relay config sync message is not being processed.
 
 
