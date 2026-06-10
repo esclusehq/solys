@@ -5,7 +5,6 @@
 //! Per D-21: JSON with atomic write (write to temp, then rename)
 
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::fs;
@@ -125,125 +124,196 @@ pub fn audit_data_dir() -> std::path::PathBuf {
 }
 
 // ---------------------------------------------------------------------------
-// Phase 68: process-global Relay config
+// Phase 70: Multi-server relay tunnel manager + per-server config
 // ---------------------------------------------------------------------------
 
-/// Phase 69 (Plan 02). Shared (global) configuration for the Esluce Relay
-/// tunnel client. Populated once at startup from environment variables (see
-/// `main.rs`) and consumed by `handlers::relay_client`. Per-server fields
-/// (server_id, subdomain, public_port, local_mc_addr) arrive in the task
-/// payload and are stored in `PerServerRelayConfig`.
-///
-/// Phase 68 originally held everything in one struct; Phase 69 splits
-/// shared and per-server fields so the agent can manage multiple tunnel
-/// instances independently (D-15).
+use std::sync::atomic::AtomicU64;
+use std::collections::HashMap;
+use std::sync::OnceLock;
+use std::time::Instant;
+use tokio::sync::RwLock;
+use tokio_util::sync::CancellationToken;
+
+/// Per-server relay config — sent from backend via RelayConfigSync or
+/// used internally by RelayManager.
 #[derive(Debug, Clone)]
-pub struct RelayConfig {
-    /// WSS URL of the Esluce Relay gateway, e.g.
-    /// `wss://relay.esluce.net/relay/tunnel`.
+pub struct RelayServerConfig {
+    pub server_id: Uuid,
+    pub subdomain: String,
+    pub public_port: u16,
+    pub local_mc_addr: String,
     pub gateway_url: String,
-    /// Per-node bearer token (`relay_token` column on `nodes`).
     pub token: String,
-    /// Agent's own public IP (sent inside `TunnelConnect` so the gateway
-    /// can do its own geo / reachability checks).
-    pub agent_public_ip: String,
-    /// Region tag the agent advertises (e.g. `ap-southeast-1`).
     pub region: String,
-    /// Optional DNS credentials used for the `relay.remove_cname_record`
-    /// self-loop. When `None`, the cleanup task is still enqueued but
-    /// fails fast inside `dns::handle_remove_record`.
-    pub dns_api_token: Option<String>,
-    pub dns_zone_id: Option<String>,
-}
-
-/// Per-server portion of the relay config — arrives in task.payload for
-/// `relay.connect` (D-15).  A new instance is created for each tunnel
-/// and stored in the associated `PerServerRuntime`.
-#[derive(Debug, Clone, Default)]
-pub struct PerServerRelayConfig {
-    pub server_id: Uuid,
-    pub subdomain: String,
-    pub public_port: u16,
-    pub local_mc_addr: String,
-    /// DNS record ID from the Cloudflare API response — stored so the
-    /// `relay.remove_cname_record` cleanup can delete by ID rather than
-    /// name. `None` means fall back to subdomain-based lookup (D-15).
-    pub dns_record_id: Option<String>,
-}
-
-static RELAY_CONFIG: OnceCell<Arc<RelayConfig>> = OnceCell::const_new();
-
-/// Set the global Relay config. Called once at startup from `main.rs`.
-/// Subsequent calls are no-ops (the first wins).
-pub fn set_relay_config(cfg: RelayConfig) {
-    let _ = RELAY_CONFIG.set(Arc::new(cfg));
-}
-
-/// Borrow the global Relay config, or `None` if it hasn't been
-/// initialised (no `AGENT_RELAY_TOKEN` env var was set at startup).
-pub fn relay_config() -> Option<Arc<RelayConfig>> {
-    RELAY_CONFIG.get().cloned()
-}
-
-// ---------------------------------------------------------------------------
-// Phase 70: Split relay config sources — GlobalRelayConfig (env/TOML,
-// immutable) + RelaySessionState (WS push, dynamic replace).
-// ---------------------------------------------------------------------------
-
-/// Immutable global relay config from env/TOML.
-/// Set once at startup by `bootstrap_relay_client()` (main.rs).
-/// Contains fields that rarely change: gateway URL, region, DNS creds.
-#[derive(Debug, Clone)]
-pub struct GlobalRelayConfig {
-    pub gateway_url: String,
-    pub region: String,
-    pub dns_api_token: Option<String>,
-    pub dns_zone_id: Option<String>,
     pub agent_public_ip: String,
 }
 
-/// Dynamic relay session state pushed from backend via WebSocket.
-/// Fully replaced on every `RelayConfigSync` message (D-02).
-#[derive(Debug, Clone, Default)]
-pub struct RelaySessionState {
-    pub relay_token: String,
-    pub servers: Vec<ServerRelayInfo>,
-}
-
-/// Per-server relay info from the backend's RelayConfigSync.
-#[derive(Debug, Clone)]
-pub struct ServerRelayInfo {
-    pub server_id: Uuid,
+/// Handle to a running per-server relay tunnel.
+pub struct RelayClientHandle {
+    pub cancel: CancellationToken,
+    pub join: tokio::task::JoinHandle<()>,
+    pub control_tx: tokio::sync::mpsc::UnboundedSender<serde_json::Value>,
+    pub bytes_transferred: Arc<AtomicU64>,
+    pub tunnel_start: Instant,
+    /// Config snapshot for diff comparison in set_servers().
     pub subdomain: String,
-    pub local_mc_addr: String,
     pub public_port: u16,
+    pub local_mc_addr: String,
 }
 
-static GLOBAL_RELAY_CONFIG: OnceCell<Arc<GlobalRelayConfig>> = OnceCell::const_new();
-
-/// Set the global relay config. Called once at startup from main.rs.
-/// Subsequent calls are no-ops (first wins).
-pub fn set_global_relay_config(cfg: GlobalRelayConfig) {
-    let _ = GLOBAL_RELAY_CONFIG.set(Arc::new(cfg));
+/// Multi-server relay tunnel manager.
+/// Singleton accessed via `relay_manager()`.
+pub struct RelayManager {
+    cancel: CancellationToken,
+    pub(crate) servers: RwLock<HashMap<Uuid, RelayClientHandle>>,
 }
 
-/// Borrow the global relay config, or `None` if not yet initialized.
-pub fn global_relay_config() -> Option<Arc<GlobalRelayConfig>> {
-    GLOBAL_RELAY_CONFIG.get().cloned()
+impl RelayManager {
+    fn new() -> Self {
+        Self {
+            cancel: CancellationToken::new(),
+            servers: RwLock::new(HashMap::new()),
+        }
+    }
+
+    /// Start or update tunnels to match the desired config list (diff-based).
+    /// Starts tunnels for new servers, stops tunnels for removed ones, and
+    /// restarts tunnels with changed config.
+    pub async fn set_servers(&self, configs: Vec<RelayServerConfig>) {
+        use std::collections::HashSet;
+
+        let new_ids: HashSet<Uuid> = configs.iter().map(|s| s.server_id).collect();
+        let mut to_start: Vec<RelayServerConfig> = Vec::new();
+
+        // Phase 1: stop removed / config-changed tunnels
+        {
+            let mut servers = self.servers.write().await;
+            let current_ids: HashSet<Uuid> = servers.keys().copied().collect();
+
+            for removed_id in current_ids.difference(&new_ids) {
+                if let Some(handle) = servers.remove(removed_id) {
+                    tracing::info!("RelayManager: stopping tunnel for server_id={}", removed_id);
+                    handle.cancel.cancel();
+                }
+            }
+
+            for new_cfg in &configs {
+                if let Some(existing) = servers.get(&new_cfg.server_id) {
+                    let changed = existing.subdomain != new_cfg.subdomain
+                        || existing.public_port != new_cfg.public_port
+                        || existing.local_mc_addr != new_cfg.local_mc_addr;
+                    if changed {
+                        tracing::info!(
+                            "RelayManager: config changed for server_id={}, restarting",
+                            new_cfg.server_id
+                        );
+                        if let Some(handle) = servers.remove(&new_cfg.server_id) {
+                            handle.cancel.cancel();
+                            to_start.push(new_cfg.clone());
+                        }
+                    }
+                } else {
+                    to_start.push(new_cfg.clone());
+                }
+            }
+        }
+
+        // Phase 2: start new / restarted tunnels
+        for cfg in to_start {
+            if cfg.token.is_empty() || cfg.gateway_url.is_empty() {
+                tracing::warn!(
+                    server_id = %cfg.server_id,
+                    "RelayManager: skipping tunnel — missing token or gateway_url"
+                );
+                continue;
+            }
+            let child_cancel = self.cancel.child_token();
+            let cancel_for_task = child_cancel.clone();
+            let config_for_task = cfg.clone();
+            let join = tokio::spawn(async move {
+                crate::handlers::relay_client::run_relay_client(config_for_task, cancel_for_task).await;
+            });
+            let handle = RelayClientHandle {
+                cancel: child_cancel,
+                join,
+                control_tx: tokio::sync::mpsc::unbounded_channel::<serde_json::Value>().0,
+                bytes_transferred: Arc::new(AtomicU64::new(0)),
+                tunnel_start: Instant::now(),
+                subdomain: cfg.subdomain.clone(),
+                public_port: cfg.public_port,
+                local_mc_addr: cfg.local_mc_addr.clone(),
+            };
+            self.servers.write().await.insert(cfg.server_id, handle);
+            tracing::info!("RelayManager: started tunnel for server_id={}", cfg.server_id);
+        }
+    }
+
+    /// Stop a single server tunnel.
+    pub async fn stop_server(&self, server_id: &Uuid) {
+        let handle = self.servers.write().await.remove(server_id);
+        if let Some(h) = handle {
+            tracing::info!("RelayManager: stopping tunnel for server_id={}", server_id);
+            h.cancel.cancel();
+        }
+    }
+
+    /// Stop all tunnels.
+    pub async fn stop_all(&self) {
+        tracing::info!("RelayManager: stop_all — cancelling parent token");
+        self.cancel.cancel();
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        self.servers.write().await.clear();
+        tracing::info!("RelayManager: all tunnels stopped");
+    }
+
+    /// Send a heartbeat on the specified server's control stream.
+    pub async fn send_heartbeat(
+        &self,
+        server_id: &Uuid,
+    ) -> Result<serde_json::Value, String> {
+        use serde_json::json;
+
+        let servers = self.servers.read().await;
+        if let Some(handle) = servers.get(server_id) {
+            let uptime = handle.tunnel_start.elapsed().as_secs();
+            let payload = json!({
+                "type": "tunnel_heartbeat",
+                "server_id": server_id,
+                "tunnel_uptime_secs": uptime,
+            });
+            if handle.control_tx.send(payload).is_err() {
+                return Err("RelayManager: control_tx closed for server".into());
+            }
+            Ok(json!({
+                "action": "heartbeat",
+                "status": "sent",
+                "server_id": server_id,
+                "tunnel_uptime_secs": uptime,
+            }))
+        } else {
+            Ok(json!({
+                "action": "heartbeat",
+                "status": "no_tunnel_for_server",
+                "server_id": server_id,
+            }))
+        }
+    }
+
+    /// List active server IDs and their uptime.
+    pub async fn active_servers(&self) -> Vec<(Uuid, u64, std::time::Duration)> {
+        let servers = self.servers.read().await;
+        servers
+            .iter()
+            .map(|(id, h)| (*id, h.bytes_transferred.load(std::sync::atomic::Ordering::Relaxed), h.tunnel_start.elapsed()))
+            .collect()
+    }
 }
 
-static RELAY_SESSION_STATE: tokio::sync::RwLock<Option<RelaySessionState>> =
-    tokio::sync::RwLock::const_new(None);
+static RELAY_MANAGER: OnceLock<RelayManager> = OnceLock::new();
 
-/// Store the relay session state from a WS push. Replaces any prior value (D-02).
-pub async fn set_relay_session_state(state: RelaySessionState) {
-    let mut guard = RELAY_SESSION_STATE.write().await;
-    *guard = Some(state);
-}
-
-/// Read the current relay session state.
-pub async fn relay_session_state() -> Option<RelaySessionState> {
-    RELAY_SESSION_STATE.read().await.clone()
+/// Access the global RelayManager singleton.
+pub fn relay_manager() -> &'static RelayManager {
+    RELAY_MANAGER.get_or_init(RelayManager::new)
 }
 
 #[cfg(test)]

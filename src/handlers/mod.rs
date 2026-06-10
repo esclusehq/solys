@@ -174,15 +174,16 @@ async fn execute_single(
             "upnp.add_mapping"        => connectivity::upnp::add(task.clone()).await,
             "upnp.remove_mapping"     => connectivity::upnp::remove(task.clone()).await,
 
-            // Phase 69: Per-server relay tunnel dispatch
-            // All relay.* tasks go through relay::handle_relay_task which extracts
-            // server_id from task.payload and dispatches to the correct
-            // PerServerRuntime in relay_client's RwLock<HashMap<...>>.
-            "relay.connect"             => relay::handle_relay_task(task).await,
-            "relay.disconnect"          => relay::handle_relay_task(task).await,
+            // Phase 70: relay.connect and relay.disconnect are DEPRECATED.
+            // Tunnel lifecycle is driven entirely by RelayConfigSync WS push.
+            // These return a "deprecated" response so the backend knows to
+            // stop sending them.
+            "relay.connect"             => Err(anyhow::anyhow!("DEPRECATED: relay.connect is no longer supported — use RelayConfigSync")),
+            // Ditto for relay.disconnect.
+            "relay.disconnect"          => Err(anyhow::anyhow!("DEPRECATED: relay.disconnect is no longer supported — use RelayConfigSync")),
             // On-demand heartbeat: forces an immediate TunnelHeartbeat on the
             // per-server control stream. server_id extracted from payload inside
-            // handle_relay_task → relay_client::send_heartbeat(server_id).
+            // handle_relay_task → state::relay_manager().send_heartbeat(server_id).
             "relay.heartbeat"           => relay::handle_relay_task(task).await,
             // Phase 68: DNS cleanup on tunnel disconnect. No server_id needed —
             // the task payload contains zone_id + record_id directly.
