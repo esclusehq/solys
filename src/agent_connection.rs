@@ -87,6 +87,56 @@ pub(crate) enum AgentMessage {
     },
 }
 
+fn redact(s: &str) -> String {
+    if s.len() <= 8 {
+        "****".to_string()
+    } else {
+        format!("{}****{}", &s[..4], &s[s.len()-4..])
+    }
+}
+
+pub fn redact_json(s: &str) -> String {
+    if let Ok(mut v) = serde_json::from_str::<serde_json::Value>(s) {
+        let sensitive_keys = ["api_token", "api_key", "relay_token"];
+        if let Some(map) = v.as_object_mut() {
+            for key in &sensitive_keys {
+                if let Some(val) = map.get(*key) {
+                    if let Some(s_val) = val.as_str() {
+                        map.insert(key.to_string(), serde_json::Value::String(redact(s_val)));
+                    }
+                }
+            }
+        }
+        v.to_string()
+    } else {
+        s.to_string()
+    }
+}
+
+fn redact_url(url: &str) -> String {
+    if let Some(pos) = url.find("?api_key=") {
+        format!("{}{}", &url[..pos], "?api_key=****")
+    } else if let Some(pos) = url.find("&api_key=") {
+        format!("{}{}", &url[..pos], "&api_key=****")
+    } else {
+        url.to_string()
+    }
+}
+
+impl BackendMessage {
+    fn type_name(&self) -> &'static str {
+        match self {
+            BackendMessage::RegisterAck { .. } => "register_ack",
+            BackendMessage::ExecuteCommand { .. } => "execute_command",
+            BackendMessage::GetMetrics { .. } => "get_metrics",
+            BackendMessage::Ping => "ping",
+            BackendMessage::Error { .. } => "error",
+            BackendMessage::DnsConfig { .. } => "dns_config",
+            BackendMessage::RelayConfigSync { .. } => "relay_config_sync",
+        }
+    }
+}
+
 #[derive(Debug, Clone, serde::Deserialize)]
 #[serde(tag = "type")]
 enum BackendMessage {
@@ -309,7 +359,7 @@ pub async fn run(
     loop {
         reconnect_attempt = reconnect_attempt.saturating_add(1);
         info!(
-            url = %ws_url,
+            url = %redact_url(&ws_url),
             attempt = reconnect_attempt,
             delay_secs = initial_delay.as_secs(),
             "Connecting to backend (reconnect loop)"
@@ -405,7 +455,7 @@ pub async fn run(
                 let ack_result = ws_receiver.next().await;
                 match ack_result {
                     Some(Ok(Message::Text(text))) => {
-                        info!(msg = %text, "Received message");
+                        info!("Received message (register_ack)");
                         
                         match serde_json::from_str::<BackendMessage>(&text) {
                             Ok(backend_msg) => {
@@ -618,13 +668,10 @@ pub async fn run(
                                 Ok(Message::Pong(_)) | Ok(Message::Binary(_)) | Ok(Message::Frame(_)) => {}
                                 Ok(Message::Text(text)) => {
                                     let text_str = text.to_string();
-                                    info!(msg = %text_str, "=== RECEIVED TEXT MESSAGE ===");
-                                    
-                                    // Also print to stderr for debugging
-                                    eprintln!("[DEBUG] Raw message received: {}", text_str);
                                     
                                     if let Ok(backend_msg) = serde_json::from_str::<BackendMessage>(&text_str) {
-                                        eprintln!("[DEBUG] Parsed message type: {:?}", std::mem::discriminant(&backend_msg));
+                                        info!("=== RECEIVED TEXT MESSAGE: {} ===", backend_msg.type_name());
+                                        eprintln!("[DEBUG] Received message type: {}", backend_msg.type_name());
                                         match backend_msg {
                                             BackendMessage::ExecuteCommand { request_id, command, server_id, params, deploy_config } => {
                                                 info!(request_id = %request_id, command = %command, "Executing task");
@@ -833,8 +880,8 @@ pub async fn run(
                                             }
                                             BackendMessage::RelayConfigSync { relay_token, gateway_url, region, servers } => {
                                                 info!(
-                                                    "RelayConfigSync received: token={}..., gateway={}, {} servers",
-                                                    &relay_token[..relay_token.len().min(8)],
+                                                    "RelayConfigSync received: token={}, gateway={}, {} servers",
+                                                    redact(&relay_token),
                                                     gateway_url,
                                                     servers.len(),
                                                 );
@@ -915,7 +962,8 @@ pub async fn run(
                                         let err = serde_json::from_str::<serde_json::Value>(&text_str)
                                             .map(|v| format!("raw json type field: {}", v["type"]))
                                             .unwrap_or_else(|_| "not valid json".into());
-                                        warn!(text = %text_str, "Failed to parse BackendMessage — {}", err);
+                                        eprintln!("[DEBUG] Failed to parse BackendMessage — {}", redact_json(&text_str));
+                                        warn!("Failed to parse BackendMessage — {}", err);
                                     }
                                 }
                                 Err(e) => {

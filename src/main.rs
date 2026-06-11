@@ -241,7 +241,9 @@ async fn run_agent_core(config: agent_config::AgentConfig) -> Result<()> {
     // hook is exposed, the orchestrator's OUTBOUND_TX stays None and reports
     // are audit-logged only.
     let tx_handle: Arc<dyn Fn(serde_json::Value) + Send + Sync> = Arc::new(move |payload| {
-        tracing::info!("[OUTBOUND_WIRED] Would send: {}", payload);
+        let text = serde_json::to_string(&payload).unwrap_or_default();
+        tracing::info!("[OUTBOUND] Payload type: {}", payload.get("type").and_then(|v| v.as_str()).unwrap_or("unknown"));
+        eprintln!("[DEBUG] Outbound payload: {}", crate::agent_connection::redact_json(&text));
     });
     crate::handlers::connectivity::set_outbound_sender(tx_handle);
 
