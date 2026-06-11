@@ -115,43 +115,52 @@ jobs:
       - name: Create archives
         run: |
           mkdir -p release
-          if [ -d "binary-x86_64-unknown-linux-gnu" ]; then
-            tar czf release/solys-linux-x86_64.tar.gz \
-              -C binary-x86_64-unknown-linux-gnu escluse-agent
-          fi
-          if [ -d "binary-aarch64-unknown-linux-gnu" ]; then
-            tar czf release/solys-linux-aarch64.tar.gz \
-              -C binary-aarch64-unknown-linux-gnu escluse-agent
-          fi
-          if [ -d "binary-x86_64-pc-windows-gnu" ]; then
-            cd binary-x86_64-pc-windows-gnu
-            zip ../release/solys-windows-x86_64.zip escluse-agent.exe
-            cd ..
-          fi
+          HOST_ARCH=$(uname -m)
+          case "$HOST_ARCH" in
+            x86_64|amd64)
+              tar czf release/solys-linux-x86_64.tar.gz \
+                -C binary-x86_64-unknown-linux-gnu escluse-agent
+              if [ -d "binary-x86_64-pc-windows-gnu" ]; then
+                cd binary-x86_64-pc-windows-gnu
+                zip ../release/solys-windows-x86_64.zip escluse-agent.exe
+                cd ..
+              fi
+              ;;
+            aarch64|arm64)
+              tar czf release/solys-linux-aarch64.tar.gz \
+                -C binary-aarch64-unknown-linux-gnu escluse-agent
+              ;;
+          esac
       - name: Build Debian packages
         run: |
-          if [ -d "binary-x86_64-unknown-linux-gnu" ]; then
-            bash .github/scripts/package-deb.sh \
-              binary-x86_64-unknown-linux-gnu escluse-agent amd64 \
-              "${{ needs.validate.outputs.version }}" release
-          fi
-          if [ -d "binary-aarch64-unknown-linux-gnu" ]; then
-            bash .github/scripts/package-deb.sh \
-              binary-aarch64-unknown-linux-gnu escluse-agent arm64 \
-              "${{ needs.validate.outputs.version }}" release
-          fi
+          HOST_ARCH=$(uname -m)
+          case "$HOST_ARCH" in
+            x86_64|amd64)
+              bash .github/scripts/package-deb.sh \
+                binary-x86_64-unknown-linux-gnu escluse-agent amd64 \
+                "${{ needs.validate.outputs.version }}" release
+              ;;
+            aarch64|arm64)
+              bash .github/scripts/package-deb.sh \
+                binary-aarch64-unknown-linux-gnu escluse-agent arm64 \
+                "${{ needs.validate.outputs.version }}" release
+              ;;
+          esac
       - name: Build RPM packages
         run: |
-          if [ -d "binary-x86_64-unknown-linux-gnu" ]; then
-            bash .github/scripts/package-rpm.sh \
-              binary-x86_64-unknown-linux-gnu escluse-agent x86_64 \
-              "${{ needs.validate.outputs.version }}" release
-          fi
-          if [ -d "binary-aarch64-unknown-linux-gnu" ]; then
-            bash .github/scripts/package-rpm.sh \
-              binary-aarch64-unknown-linux-gnu escluse-agent aarch64 \
-              "${{ needs.validate.outputs.version }}" release
-          fi
+          HOST_ARCH=$(uname -m)
+          case "$HOST_ARCH" in
+            x86_64|amd64)
+              bash .github/scripts/package-rpm.sh \
+                binary-x86_64-unknown-linux-gnu escluse-agent x86_64 \
+                "${{ needs.validate.outputs.version }}" release
+              ;;
+            aarch64|arm64)
+              bash .github/scripts/package-rpm.sh \
+                binary-aarch64-unknown-linux-gnu escluse-agent aarch64 \
+                "${{ needs.validate.outputs.version }}" release
+              ;;
+          esac
       - name: Build NSIS installer
         run: |
           if [ -d "binary-x86_64-pc-windows-gnu" ]; then
