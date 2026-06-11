@@ -16,6 +16,9 @@ coverage/
 # Playwright
 .playwright-mcp/
 
+# opencode local config
+.opencode/
+
 # IDE
 .vscode/
 .idea/
