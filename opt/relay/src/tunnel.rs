@@ -36,8 +36,6 @@ pub struct TunnelConnect {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TunnelHeartbeat {
-    #[serde(rename = "type")]
-    pub msg_type: String,
     /// `server_id` is optional: the agent's heartbeat JSON (relay_client.rs
     /// Part D) does NOT include `server_id` — the gateway already knows
     /// which server owns the control stream via `handle.server_id` (which
