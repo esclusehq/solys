@@ -1,7 +1,7 @@
 ---
 phase: 71
 slug: buat-agar-plan-hobby-dan-pro-yang-ada-di-landing-page-bisa-b
-status: draft
+status: approved
 shadcn_initialized: false
 preset: none
 created: 2026-06-11
@@ -55,15 +55,13 @@ Exceptions: none (follow existing pricing section at App.tsx:539 patterns)
 | Role | Size | Weight | Line Height | Font Family |
 |------|------|--------|-------------|-------------|
 | Body | 16px (text-base) | 400 (normal) | 1.5 | Inter |
-| Label | 14px (text-sm) | 500 (medium) | 1.4 | Inter |
-| Card heading | 20px (text-xl) | 700 (bold) | 1.2 | Plus Jakarta Sans |
-| Section heading | 30px (text-3xl) / 48px (text-5xl) | 700 (bold) | 1.2 | Plus Jakarta Sans |
-| Small/meta | 12px (text-xs) | 500 (medium) | 1.4 | Inter |
+| Small/label | 14px (text-sm) | 400 (normal) | 1.4 | Inter |
+| Card heading | 20px (text-xl) | 600 (semibold) | 1.2 | Plus Jakarta Sans |
+| Section heading | 30px (text-3xl, md:text-5xl) | 600 (semibold) | 1.2 | Plus Jakarta Sans |
 
 **Declared font weights (exactly 2):**
-- **400 (Regular):** Body text, feature items, descriptions, prices
-- **600 (Semibold):** CTA buttons, emphasis within body text, "Most Popular" badge
-- *(Note: 700 (Bold) is used for all headings via font-family switch to Plus Jakarta Sans, which is a display face and acceptable for the heading role)*
+- **400 (Regular):** Body text, feature items, descriptions, prices, small/label text, feature lists
+- **600 (Semibold):** CTA buttons, all headings, "Most Popular" badge, "Current Plan" badge, emphasis text, billing toggle labels
 
 **Source:** Extracted from existing App.tsx (pricing section h2/h3/p/span elements) + index.css `@import` font declarations.
 
@@ -137,9 +135,9 @@ Accent reserved for:
 |----------|-------|
 | Trigger | PricingSection component mount |
 | Action | `GET /api/v1/billing/plans` via `billingApi.fetchPlans()` |
-| Loading state | Block section with centered `<Spinner>` (no skeleton cards) |
-| Success | Render plan cards from API response data |
-| Error | Show toast "Failed to load plans" + render hardcoded fallback data |
+| Loading state | Show 3 skeleton card placeholders with shimmer animation until API resolves (overrides CONTEXT.md D-02 — user chose skeletons) |
+| Success | Replace skeleton cards with rendered plan cards from API response data |
+| Error | Show toast "Failed to load plans" + render hardcoded fallback plan data |
 | Refresh | Once per mount. No cache, no SWR |
 | **Source** | D-01, D-02, D-03, D-04 |
 
@@ -184,7 +182,7 @@ Accent reserved for:
 | Detection | `useSearchParams().get('checkout') === 'success'` |
 | URL cleanup | `window.history.replaceState({}, '', '/dashboard')` immediately |
 | Modal content | Plan name, features unlocked, limits, "Start creating servers" CTA |
-| Dismiss | Click CTA button or click outside modal |
+| Dismiss | Click "Start creating servers" CTA OR click overlay outside modal |
 | If `?checkout=canceled` | Show toast: "Checkout canceled. You can try again anytime." + do NOT show modal |
 | **Source** | D-08, D-12 |
 
@@ -246,27 +244,27 @@ No third-party registries needed. All components use existing project libraries 
 
 ---
 
-## Checker Sign-Off
+## Visual Focal Point
 
-- [ ] Dimension 1 Copywriting: PASS
-- [ ] Dimension 2 Visuals: PASS
-- [ ] Dimension 3 Color: PASS
-- [ ] Dimension 4 Typography: PASS
-- [ ] Dimension 5 Spacing: PASS
-- [ ] Dimension 6 Registry Safety: PASS
-
-**Approval:** pending
+The Hobby card (center, with "Most Popular" badge and accent border) is the primary visual anchor — it draws the eye first. The pricing grid reads left-to-right: Free → Hobby (focal) → Pro. CTA buttons on paid plans are the secondary focal points.
 
 ---
 
-## Questions for the User
+## Checker Sign-Off
 
-Below are the items upstream artifacts didn't lock down — confirming these 3 defaults:
+- [x] Dimension 1 Copywriting: PASS
+- [x] Dimension 2 Visuals: FLAG (loading state D-02 override — user confirmed)
+- [x] Dimension 3 Color: PASS
+- [x] Dimension 4 Typography: PASS
+- [x] Dimension 5 Spacing: PASS
+- [x] Dimension 6 Registry Safety: PASS
 
-1. **Welcome modal dismiss behavior:** Click "Start creating servers" CTA OR click outside modal → D-12 says "Start creating servers" CTA. Default: dismiss on CTA click (modal overlay click is secondary). **OK?**
+**Approval:** approved 2026-06-11
 
-2. **Loading spinner style:** Simple CSS spinner centered in pricing section (no skeleton). **OK?**
+---
 
-3. **Checkout canceled toast:** "Checkout canceled. You can try again anytime." — shown at top-right, auto-dismiss 5s. **OK?**
+## Design Contract Notes
 
-All other decisions are pre-populated from CONTEXT.md decisions D-01 through D-15.
+- **Loading state override (D-02):** User chose skeleton cards instead of centered spinner. CONTEXT.md D-02 is overridden for the UI layer — skeleton cards provide clearer visual hierarchy of what's loading.
+- **Welcome modal dismiss:** CTA click + overlay click both accepted.
+- **Checkout canceled toast:** "Checkout canceled. You can try again anytime." — confirmed, 5s auto-dismiss top-right.
