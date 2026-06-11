@@ -1,0 +1,169 @@
+name: Canary
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+  BINARY_NAME: escluse-agent
+  R2_BUCKET: solys-release
+
+concurrency:
+  group: canary-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+            ext: ""
+          - target: aarch64-unknown-linux-gnu
+            os: ubuntu-24.04-arm
+            ext: ""
+          - target: x86_64-pc-windows-gnu
+            os: ubuntu-latest
+            ext: ".exe"
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - name: Install cross-compilation tools
+        uses: taiki-e/setup-cross-toolchain-action@v1
+        with:
+          target: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+      - name: Install Windows cross-compile libraries (Npcap SDK)
+        if: matrix.target == 'x86_64-pc-windows-gnu'
+        run: |
+          curl -sL "https://npcap.com/dist/npcap-sdk-1.13.zip" -o /tmp/npcap-sdk.zip
+          unzip -q -o /tmp/npcap-sdk.zip -d /tmp/npcap-sdk/
+          mkdir -p /tmp/npcap-lib
+          printf '%s\n' EXPORTS PacketOpenAdapter PacketCloseAdapter PacketRequest PacketSendPacket PacketSetBuff PacketGetNetInfo PacketGetAdapterNames > /tmp/packet.def
+          x86_64-w64-mingw32-dlltool -d /tmp/packet.def -l /tmp/npcap-lib/libPacket.a -k -A
+          echo "LIB_FOR_XWIN=/tmp/npcap-lib" >> "$GITHUB_ENV"
+      - name: Build
+        if: matrix.target == 'x86_64-pc-windows-gnu'
+        run: |
+          RUSTFLAGS="-L ${LIB_FOR_XWIN}" cargo build --release --manifest-path Cargo.toml \
+            --target ${{ matrix.target }}
+      - name: Build (Linux)
+        if: matrix.target != 'x86_64-pc-windows-gnu'
+        run: |
+          cargo build --release --manifest-path Cargo.toml \
+            --target ${{ matrix.target }}
+      - name: Stage binary
+        run: |
+          mkdir -p staging
+          SRC="target/${{ matrix.target }}/release/${{ env.BINARY_NAME }}${{ matrix.ext }}"
+          cp "$SRC" "staging/${{ env.BINARY_NAME }}${{ matrix.ext }}"
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: binary-${{ matrix.target }}
+          path: staging/
+          compression-level: 0
+
+  package:
+    needs: [build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: binary-*
+          merge-multiple: false
+      - name: Create archives
+        run: |
+          mkdir -p release
+          # Linux x86_64
+          if [ -d "binary-x86_64-unknown-linux-gnu" ]; then
+            tar czf release/solys-linux-x86_64.tar.gz \
+              -C binary-x86_64-unknown-linux-gnu escluse-agent
+          fi
+          # Linux aarch64
+          if [ -d "binary-aarch64-unknown-linux-gnu" ]; then
+            tar czf release/solys-linux-aarch64.tar.gz \
+              -C binary-aarch64-unknown-linux-gnu escluse-agent
+          fi
+          # Windows x86_64
+          if [ -d "binary-x86_64-pc-windows-gnu" ]; then
+            cd binary-x86_64-pc-windows-gnu
+            zip ../release/solys-windows-x86_64.zip escluse-agent.exe
+            cd ..
+          fi
+      - name: Generate SHA256 checksums
+        working-directory: release/
+        run: |
+          for f in *; do
+            [ -f "$f" ] && sha256sum "$f"
+          done > SHA256SUMS.tmp
+          mv SHA256SUMS.tmp SHA256SUMS.txt
+      - name: Upload release artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: release
+          path: release/
+          compression-level: 0
+
+  sign:
+    needs: [package]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: release
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v4.1.0
+      - name: Sign checksums with cosign
+        env:
+          COSIGN_EXPERIMENTAL: 1
+        run: |
+          cosign sign-blob SHA256SUMS.txt \
+            --bundle SHA256SUMS.txt.bundle
+      - name: Upload signed artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-signed
+          path: .
+          include-hidden-files: true
+          compression-level: 0
+
+  upload:
+    needs: [sign]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+      AWS_DEFAULT_REGION: auto
+      R2_ENDPOINT: https://${{ secrets.CLOUDFLARE_ACCOUNT_ID }}.r2.cloudflarestorage.com
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-signed
+      - name: Create version.json for canary
+        run: |
+          echo "{\"version\": \"${GITHUB_SHA::7}\", \"date\": \"$(date -u +%Y-%m-%d)\"}" > version.json
+      - name: Upload to R2 (canary)
+        run: |
+          aws s3 cp . "s3://${R2_BUCKET}/canary/" \
+            --endpoint-url "${R2_ENDPOINT}" \
+            --recursive \
+            --exclude ".git/*"
