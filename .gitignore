@@ -76,7 +76,12 @@ SEMVER.md
 TEMP_CHANGELOG.md
 DEPLOY.md
 docker-compose.yml
-.github/
+.github/PULL_REQUEST_TEMPLATE.md
+.github/profile/
+.github/scripts/
+.github/workflows/canary.yml
+.github/workflows/ci.yml
+# release.yml is explicitly tracked (CI/CD for agent builds)
 docs/
 
 API_KEY_EMAIL
