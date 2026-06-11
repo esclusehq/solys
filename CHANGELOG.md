@@ -27,6 +27,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **DnsWatcher never syncs DNS when config arrives after first tick** — `check_and_update` returned early when IP did not change, so if `CloudflareDnsConfig` was received from the backend *after* the initial DnsWatcher tick (which is the normal startup sequence), the per-server A records were never created and existing records were never refreshed until the next IP change. Removed the IP-change guard so DNS records are always synced on every polling cycle (every 300s).
 - **RelayClient default gateway URL uses unregistered domain `esluce.net`** — `bootstrap_relay_client` defaulted to `wss://relay.esluce.net/relay/tunnel`, but `esluce.net` is not registered (NXDOMAIN). Changed default to `wss://relay.esluce.com/relay/tunnel`.
 - **`install.sh` prompts for API key even when `AGENT_API_KEY` is set** — `generate_config()` always called `_prompt` for the API key, ignoring `$AGENT_API_KEY`. Added a `$AGENT_API_KEY` check before falling through to `_prompt`, so `sudo env AGENT_API_KEY=xxx bash -c "$(curl -fsSL https://get.esluce.com/latest/install.sh)"` works non-interactively.
+- **Monorepo separation** — `compose/`, `docker/`, `opt/` moved to `esclusehq/escluse-infra`. Orphaned gitlink `migration` and leftover `api/` file removed from tracking. `.gitignore` updated. See PUSH_COMMIT.md for full repo mapping.
 
 ## [v0.4.6] - 2026-06-06
 
