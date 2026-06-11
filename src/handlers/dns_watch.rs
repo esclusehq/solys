@@ -6,7 +6,7 @@ use tokio::sync::RwLock;
 use tokio::time::interval;
 use tracing::{error, info, warn};
 
-use super::dns::{self, CloudflareDnsConfig};
+use super::dns::{self, redact_ip, CloudflareDnsConfig};
 
 static IP_CHECK_URLS: &[&str] = &[
     "https://api.ipify.org",
@@ -87,7 +87,7 @@ async fn check_and_update() -> Result<()> {
         if *ip_guard != current_ip {
             let old_ip = ip_guard.clone();
             *ip_guard = current_ip.clone();
-            info!("Public IP changed: {} -> {}", old_ip, current_ip);
+            info!("Public IP changed: {} -> {}", redact_ip(&old_ip), redact_ip(&current_ip));
         }
     }
 

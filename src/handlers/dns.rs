@@ -8,6 +8,15 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use tracing::{error, info, warn};
 
+pub fn redact_ip(ip: &str) -> String {
+    let parts: Vec<&str> = ip.split('.').collect();
+    if parts.len() == 4 {
+        format!("{}.{}.***.***", parts[0], parts[1])
+    } else {
+        "***.***.***.***".to_string()
+    }
+}
+
 static CLOUDFLARE_API_BASE: &str = "https://api.cloudflare.com/client/v4";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -56,10 +65,10 @@ pub async fn handle_configure(task: Task) -> Result<serde_json::Value, anyhow::E
     drop(guard);
 
     info!(
-        "DNS configured for zone: {} (global={:?}, per_server={:?})",
+        "DNS configured for zone: {} ({} global subdomain, {} per-server subdomains)",
         config.zone_name,
-        config.subdomain,
-        config.extra_subdomains
+        config.subdomain.as_deref().unwrap_or("none"),
+        config.extra_subdomains.len()
     );
 
     Ok(json!({
@@ -86,7 +95,7 @@ pub async fn handle_create_record(task: Task) -> Result<serde_json::Value, anyho
     let full_name = format!("{}.{}", name, cfg.wildcard_domain);
     let record_id = create_dns_record(&cfg.api_token, &cfg.zone_id, &full_name, ip).await?;
 
-    info!("DNS record created: {} -> {}", full_name, ip);
+    info!("DNS record created: {} -> {}", full_name, redact_ip(ip));
 
     Ok(json!({
         "status": "created",
@@ -115,17 +124,17 @@ pub async fn handle_update_record(task: Task) -> Result<serde_json::Value, anyho
 
     if let Some(rid) = record_id {
         update_dns_record(&cfg.api_token, &cfg.zone_id, rid, &full_name, ip).await?;
-        info!("DNS record updated: {} -> {} (record: {})", full_name, ip, rid);
+        info!("DNS record updated: {} -> {} (record: {})", full_name, redact_ip(ip), rid);
     } else {
         let existing = find_dns_record(&cfg.api_token, &cfg.zone_id, &full_name).await?;
         match existing {
             Some((rid, _)) => {
                 update_dns_record(&cfg.api_token, &cfg.zone_id, &rid, &full_name, ip).await?;
-                info!("DNS record found & updated: {} -> {} (record: {})", full_name, ip, rid);
+                info!("DNS record found & updated: {} -> {} (record: {})", full_name, redact_ip(ip), rid);
             }
             None => {
                 let new_rid = create_dns_record(&cfg.api_token, &cfg.zone_id, &full_name, ip).await?;
-                info!("DNS record not found, created new: {} -> {} (record: {})", full_name, ip, new_rid);
+                info!("DNS record not found, created new: {} -> {} (record: {})", full_name, redact_ip(ip), new_rid);
             }
         }
     }
