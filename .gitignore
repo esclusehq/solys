@@ -57,8 +57,12 @@ agent/agent-core/
 agent/solys/
 api/
 app/
+compose/
+docker/
 landing-page-escluse/
 gateway/
+migration/
+opt/
 packages/
 migration/tools/db-schema-gen/target/
 API_KEY_EMAIL
@@ -69,3 +73,4 @@ manifest.json
 DEPLOY.md
 PUSH_COMMIT.md
 SEMVER.md
+signin.png
