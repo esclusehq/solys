@@ -1,14 +1,47 @@
-# TEMP_CHANGELOG — v0.4.3 + v0.4.4 + Unreleased (solys Phase 70)
+# TEMP_CHANGELOG — v0.4.3 + v0.4.4 + v0.5.0 + Unreleased
 
-## Unreleased — solys Phase 70 + CI fixes
+## v0.5.0 (2026-06-11) — Minor / Subscription Checkout (Phase 71)
 
 ### Added
-- [solys] **Auto-fetch relay config via WebSocket (Phase 70)** — Backend sends single `RelayConfigSync` message after `RegisterAck` (replaces N-per-server `RelayConnect`), carrying `relay_token`, `gateway_url`, `region`, and all server relay info. Agent splits config into `GlobalRelayConfig` (env/TOML, immutable) and `RelaySessionState` (WS push, dynamic replace). Agent `apply_relay_config()` implements diff-based hot update: cancels tunnels for removed servers, starts new servers, restarts tunnels with changed config (subdomain/public_port/local_mc_addr). Agent WS message loop handles `RelayConfigSync` natively with backward compat for legacy env-var bootstrap.
+- [landing] **Billing API module** — `billing.ts` with API key / plan types, `/api/plans` fetch, subscription endpoints
+- [landing] **Pricing section with API-driven plans** — `PlanCard`, `PricingSection`, `BillingToggle` components fetching live plans from API
+- [landing] **Wire pricing into App, SignIn, OAuth pages** — subscription flow through auth gates
+- [landing] **VerifyEmailPage rewritten** — full email verification + redirect to pricing after sign-up
+- [app] **WelcomeModal component** — post-checkout welcome modal displayed after subscription
+- [app] **createPortal in billingApi** — portal session creation for subscription management
+- [gateway] **docker-compose.yml env vars** — added `RESEND_API_KEY`, `LEMON_SQUEEZY_API_KEY`, `EMAIL_FROM`, `APP_URL`, `COOKIE_DOMAIN` for backend
+- [api] **CreateServer port default 25565** — `server_dtos.rs` port field with `#[serde(default = "default_port")]`
+- [api] **RelayService subdomain fallback** — derives from server name when subdomain/public_host missing
+- [api] **CreateServer auto-derives `public_host`** — from server name when not provided
+
+### Changed
+- [landing] **Minecraft icon replaced** — `/assets/ikon-minecraft.jpg` → `/assets/minecraft-1.svg`
+- [landing] **Rust icon replaced** — `/assets/rust-icon.png` → `/assets/icons8-rust.svg`
+- [landing] **Terraria icon replaced** — `/assets/terraria-icon.jpg` → `/assets/terraria-logo.png`
+- [landing] **Pricing buttons now navigate to sign in** — `Get Started Free`, `Start for Hobby`, `Upgrade to Pro` all have `onClick` handlers navigating to `/signin`
+- [landing] **Pricing section scroll animations** — header, all 3 plan cards, and BYO infra section wrapped in `motion.div` with `whileInView` and staggered delays (0.1s–0.4s)
+- [app] **Connectivity section address display** — removed port from relay address; both relay/direct use `*.play.esluce.com` without port
+- [app] **ServerDetailsPage address display** — removed port suffix from `public_host` display (was showing `host:25565`)
 
 ### Fixed
+- [landing] **Pricing "Save ~17%" badge overlaps with "Most Popular" badge on desktop yearly** — Hobby card `lg:-translate-y-4` + "Most Popular" `-translate-y-1/2` pushed badge into "Save ~17%" text above. Added `pt-8` to desktop grid for clearance.
+- [api] **CreateServer defaults port to 25565** — `server_dtos.rs` added `#[serde(default = "default_port")]` so port isn't required
+- [api] **RelayService subdomain fallback** — derives subdomain from server name when both `subdomain` and `public_host` are missing
+- [api] **CreateServer auto-derives public_host** — from server name (lowercased, hyphenated) when not provided
+- [api] **ResendTracker first-resend delay** — `last_sent` initialised to `Instant::now() - 120s` so first resend isn't rate-limited
+- [gateway] **TunnelHeartbeat serde conflict with internally tagged enum** — `TunnelHeartbeat.msg_type` with `#[serde(rename = "type")]` conflicted with `TunnelMessage` enum's `#[serde(tag = "type")]`. The tag consumed the `type` field, making it unavailable to the struct, causing `missing field type` on every heartbeat. `last_heartbeat` never updated, marking all tunnels stale after heartbeat_missed_threshold (30s). Fixed by removing `msg_type` from `TunnelHeartbeat` (only ever deserialized via `TunnelMessage`).
+- [solys] **DnsWatcher recreates A records overriding relay wildcard** — Agent's DnsWatcher periodically created A records for `{subdomain}.play.esluce.com → agent_local_ip` via Cloudflare API, overriding the wildcard `*.play.esluce.com → relay VPS`. Fixed in `RelayConfigSync` handler: relay subdomains are removed from DNS config's `extra_subdomains` so DnsWatcher skips them.
 - [ci] **Windows x86_64 cross-compile fails with "cannot find -lPacket"** — `pnet_sys` (transitive dep via `upnp-rs`) links `Packet.lib` from Npcap/WinPcap, unavailable in cross-compile toolchain. Added CI step: download Npcap SDK, create MingW-compatible `libPacket.a` via `dlltool`, set `RUSTFLAGS=-L /tmp/npcap-lib`. Applied to canary.yml, ci.yml, release.yml. Verified: all 3 platforms green.
 - [solys] **DnsWatcher never syncs DNS when config arrives after first tick** — removed IP-change guard so DNS records sync every polling cycle (300s)
 - [solys] **RelayClient default gateway URL uses unregistered domain `esluce.net`** — changed default to `wss://relay.esluce.com/relay/tunnel`
+- [solys] **Docker bridge port collision when host mapping differs from container port** — `resolve_container_addr()` resolves container's internal port (25565) via Docker inspect instead of using Docker host port from `local_mc_addr`
+- [app] **Address field in ServerDetailsPage shows port 25565** — removed `${server.port}` from Address display; only shows `server.public_host`
+
+### Removed
+- [landing] **Valheim game card removed** — full entry deleted from SupportedGames (image, title, badge)
+
+### Docs
+- [planning] **Phase 71 artifacts** — CONTEXT, UI-SPEC, PATTERNS, PLAN, RESEARCH, REVIEW, VALIDATION, VERIFICATION, DISCUSSION-LOG, SUMMARY docs for subscription checkout flow
 
 ---
 
