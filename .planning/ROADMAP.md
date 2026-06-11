@@ -484,8 +484,8 @@ Plans:
 **Goal:** Wire the landing page pricing section to the backend billing/subscription system so Hobby and Pro plan buttons create real Lemon Squeezy checkout flows with auth gating, monthly/yearly toggle, auto-checkout after sign-in, welcome modal on the dashboard, and current plan badge for logged-in users.
 **Requirements**: REQ-01, REQ-02, REQ-03, REQ-04, REQ-05, REQ-06, REQ-07, REQ-08, REQ-09, REQ-10
 **Depends on:** Phase 70
-**Plans:** 2 plans
+**Plans:** 2/2 plans complete
 
 **Wave 1** *(parallel — no file overlap)*
-- [ ] 71-01-PLAN.md — Landing Page Pricing & Checkout: billing API module, API-driven PricingSection with toggle, PlanCard, auth-gated checkout, sign-in auto-checkout, OAuth plan context, current plan badge
-- [ ] 71-02-PLAN.md — Dashboard Welcome Modal: post-checkout welcome modal on /dashboard?checkout=success, checkout=canceled toast, createPortal API method
+- [x] 71-01-PLAN.md — Landing Page Pricing & Checkout: billing API module, API-driven PricingSection with toggle, PlanCard, auth-gated checkout, sign-in auto-checkout, OAuth plan context, current plan badge
+- [x] 71-02-PLAN.md — Dashboard Welcome Modal: post-checkout welcome modal on /dashboard?checkout=success, checkout=canceled toast, createPortal API method
