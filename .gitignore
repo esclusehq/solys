@@ -65,6 +65,16 @@ migration/
 opt/
 packages/
 migration/tools/db-schema-gen/target/
+# Sensitive — public repo should not expose these
+.planning/
+ANCHORED_SUMMARY.md
+FIX-BACKEND-525.md
+Dockerfile.landing
+PUSH_COMMIT.md
+CHANGELOG.md
+SEMVER.md
+TEMP_CHANGELOG.md
+
 API_KEY_EMAIL
 ERROR_DATABASE_EC2
 manifest.json
