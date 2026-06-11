@@ -286,7 +286,11 @@ generate_config() {
     mkdir -p "$config_dir" 2>/dev/null || return
 
     info "Configuring Escluse agent..."
-    _prompt "API Key: " ak_val
+    if [ -n "${AGENT_API_KEY:-}" ]; then
+        ak_val="$AGENT_API_KEY"
+    else
+        _prompt "API Key: " ak_val
+    fi
 
     cat > "${config_dir}/config.toml" <<-CONFIGEOF
 # Escluse Agent Configuration
