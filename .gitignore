@@ -76,6 +76,8 @@ SEMVER.md
 TEMP_CHANGELOG.md
 DEPLOY.md
 docker-compose.yml
+.github/
+docs/
 
 API_KEY_EMAIL
 ERROR_DATABASE_EC2
