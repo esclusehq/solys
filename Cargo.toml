@@ -1,5 +1,5 @@
 [workspace]
-members = [".", "opt/relay"]
+members = ["."]
 exclude = ["api"]
 
 [package]
