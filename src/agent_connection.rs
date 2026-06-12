@@ -261,7 +261,7 @@ pub struct DeployConfig {
     #[serde(default)]
     pub loader: Option<String>,
     #[serde(default)]
-    pub env: Option<std::collections::HashMap<String, String>>,
+    pub env_vars: std::collections::HashMap<String, String>,
     #[serde(default)]
     pub volume_path: Option<String>,
     #[serde(default)]
@@ -279,7 +279,7 @@ impl Default for DeployConfig {
             ram_mb: None,
             version: None,
             loader: None,
-            env: None,
+            env_vars: std::collections::HashMap::new(),
             volume_path: None,
             memory_limit: None,
             cpu_limit: None,
@@ -770,9 +770,9 @@ pub async fn run(
                                                          payload["ports"] = serde_json::json!({ port.to_string(): [port.to_string()] });
                                                          payload["container_port"] = serde_json::json!(port);
                                                      }
-                                                     if let Some(env) = config.env {
-                                                         payload["env"] = serde_json::json!(env);
-                                                     }
+                                                    if !config.env_vars.is_empty() {
+                                                        payload["env_vars"] = serde_json::json!(config.env_vars);
+                                                    }
                                                      if let Some(mem) = config.ram_mb {
                                                          payload["memory_limit"] = serde_json::json!(mem * 1024 * 1024);
                                                      }
