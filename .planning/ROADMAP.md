@@ -495,12 +495,12 @@ Plans:
 **Goal:** Menambahkan Minecraft Bedrock Edition sebagai first-class server type — user dapat memilih Bedrock saat membuat server, API menggunakan Docker image yang benar (`itzg/minecraft-bedrock-server`), agent membuat container dengan UDP port binding, dan server dapat diakses oleh Minecraft Bedrock client
 **Requirements**: REQ-01 to REQ-08
 **Depends on:** Phase 71
-**Plans:** 4 plans
+**Plans:** 3/4 plans executed
 
 **Wave 1** *(parallel — no file overlap)*
-- [ ] 72-01-PLAN.md — DB Migration + API Backend: bedrock game_types row, dynamic image dispatch, game_type→mc_loader mapping
-- [ ] 72-02-PLAN.md — Agent Runtime: UDP port binding for Bedrock, dynamic port map key, loader field forwarding
-- [ ] 72-03-PLAN.md — Frontend UI: Bedrock option in CreateServerModal, conditional field rendering
+- [x] 72-01-PLAN.md — DB Migration + API Backend: bedrock game_types row, dynamic image dispatch, game_type→mc_loader mapping
+- [x] 72-02-PLAN.md — Agent Runtime: UDP port binding for Bedrock, dynamic port map key, loader field forwarding
+- [x] 72-03-PLAN.md — Frontend UI: Bedrock option in CreateServerModal, conditional field rendering
 
 **Wave 2** *(blocked on Wave 1 completion)*
 - [ ] 72-04-PLAN.md — End-to-End Verification: compilation tests, code presence checks, visual verification, limitation documentation
