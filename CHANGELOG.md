@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Bedrock UDP relay via TLV framing (Phase 73)** — Agent's `run_udp_relay_session` sends/receives UDP datagrams framed as TLV (type `0x01` for data) to/from the relay gateway. `TunnelConnect` and `RelayServerConfig` carry a `loader` field so the agent can distinguish Bedrock (UDP) from Java (TCP) relays. `drive_inbound_streams` passes `is_udp = (loader == "bedrock")` so the relay session opens a `UdpSocket` toward the gateway instead of a TCP tunnel. `relay_client.rs` maps the `loader` string to the `bedrock` boolean for the relay gateway's tunnel request.
+
 - **Multi-server relay tunnel manager (Phase 70, revised)** — Agent replaced singleton `RelayRuntime` + per-server `PerServerRuntime` with `RelayManager` (process-global via `OnceLock`). `RelayManager::set_servers()` implements diff-based lifecycle: starts/stops/restarts tunnels atomically from `RelayConfigSync` WS push. No more `AGENT_RELAY_TOKEN` env-var bootstrap; all relay config arrives via backend WS. `relay.connect` and `relay.disconnect` tasks deprecated — `RelayConfigSync` is the single source of truth. `run_relay_client()` takes `RelayServerConfig` directly (no shared config lookup). Backend `create_server` / `delete_server` call `push_relay_config()` to notify agent.
 
 ### Added
