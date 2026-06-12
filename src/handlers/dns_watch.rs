@@ -149,7 +149,7 @@ async fn check_and_update() -> Result<()> {
                     Ok(()) => {
                         info!(
                             "DNS record updated via auto-refresh: {} -> {}",
-                            full_name, current_ip
+                            full_name, redact_ip(&current_ip)
                         );
                         updated += 1;
                     }
@@ -167,11 +167,11 @@ async fn check_and_update() -> Result<()> {
             )
             .await
             {
-                Ok(rid) => {
-                    info!(
-                        "DNS record created via auto-refresh: {} -> {} (id: {})",
-                        full_name, current_ip, rid
-                    );
+                    Ok(rid) => {
+                        info!(
+                            "DNS record created via auto-refresh: {} -> {} (id: {})",
+                            full_name, redact_ip(&current_ip), rid
+                        );
                     created += 1;
                 }
                 Err(e) => {
