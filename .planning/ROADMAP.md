@@ -504,3 +504,38 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1 completion)*
 - [x] 72-04-PLAN.md — End-to-End Verification: compilation tests, code presence checks, visual verification, limitation documentation
+
+### Phase 73: Approach 1: Per-Server UDP Port (⭐ Recommended MVP)
+Cara: Alokasikan satu port UDP unik per Bedrock server di relay EC2. Player connect langsung ke <relay-ip>:<dedicated-port> — port-nya yang identify server, bukan subdomain.
+Apa yang perlu diubah:
+Layer	Perubahan
+Relay Gateway	Tambah UdpSocket listener di port range (19132-19xxx). Setiap kali agent TunnelConnect dengan loader: "bedrock", gateway buka port UDP baru dan simpan mapping port → server_id. Tiap datagram UDP yang masuk, wrap dengan length-prefix, kirim lewat yamux stream baru ke agent.
+Agent	relay_session.rs perlu handle UDP: baca length-prefixed datagram dari yamux, forward ke UDP socket lokal (127.0.0.1:19132), baca balik, kirim balik ke yamux.
+Backend API	Port pool perlu support UDP ports. port_pools table tambah kolom protocol (tcp/udp). Alokasi port Bedrock dari pool UDP.
+NLB / Infra	Security group tambah rule UDP port range. NLB bisa handle UDP listener. Caddy nggak perlu diubah (UDP langsung ke gateway, bukan lewat Caddy).
+Agent → Gateway tunnel	Yang existing (WSS → yamux) tetap untuk TCP control + heartbeat. Bedrock data stream perlu yamux stream terpisah khusus UDP datagram dengan framing length-prefix.
+
+**Goal:** Add UDP relay support for Minecraft Bedrock Edition via per-server dedicated UDP ports on the relay gateway — backend allocates from a new UDP port pool (19132-19231), agent declares `loader: "bedrock"` in TunnelConnect and runs a TLV-framed datagram session, gateway binds UdpSocket per port with 30-second grace period, and dashboard shows Bedrock address (IP:port + DNS SRV record).
+**Requirements**: None
+**Depends on:** Phase 72
+**Plans:** 1/4 plans executed
+
+**Wave 1** *(Backend — no upstream deps)*:
+- [x] 73-01-PLAN.md — Backend: UDP port pool seed migration + protocol-aware port allocation + loader field pipeline (ServerRelayInfo → RelayServerConfig)
+
+**Wave 2** *(blocked on Wave 1)*:
+- [ ] 73-02-PLAN.md — Agent: TunnelConnect loader field + `run_udp_relay_session()` with TLV framing + `drive_inbound_streams` Bedrock dispatch
+
+**Wave 3** *(blocked on Wave 2)*:
+- [ ] 73-03-PLAN.md — Gateway: UdpPortRegistry + UdpSocket lifecycle + TunnelConnect Bedrock dispatch + config/state extensions
+
+**Wave 4** *(blocked on Wave 1 — can start after Wave 1)*:
+- [ ] 73-04-PLAN.md — Dashboard: Bedrock address display + TunnelHealthCard UDP label + Route 53 SRV record methods + infra docs
+
+**Cross-cutting constraints:**
+- D-01: Backend allocates from port_pools (protocol='udp')
+- D-03: Agent declares loader in TunnelConnect; gateway derives protocol from loader
+- D-05: 30-second grace period on port release
+- D-08: TLV wire format: [1-byte type][4-byte big-endian length][payload]
+- D-10: Agent UdpSocket with send_to/recv_from (connectionless)
+- D-13: Dashboard shows IP:port + DNS SRV record
