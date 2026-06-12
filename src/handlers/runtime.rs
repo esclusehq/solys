@@ -120,8 +120,13 @@ pub async fn handle_create(task: Task, runtime: &RuntimeDetector) -> Result<serd
     let mut port_bindings = std::collections::HashMap::new();
     let mut exposed_ports = std::collections::HashMap::new();
     if let Some(ports) = &payload.ports {
+        let is_bedrock = payload.loader
+            .as_deref()
+            .map(|l| l.eq_ignore_ascii_case("bedrock"))
+            .unwrap_or(false);
+        let protocol = if is_bedrock { "udp" } else { "tcp" };
         for (container_port, host_ports) in ports {
-            let port_key = format!("{}/tcp", container_port);
+            let port_key = format!("{}/{}", container_port, protocol);
             let mut bindings = vec![];
             for host_port in host_ports {
                 bindings.push(bollard::models::PortBinding {
@@ -271,7 +276,12 @@ pub async fn handle_start(task: Task, runtime: &RuntimeDetector) -> Result<serde
     let mut port_bindings = std::collections::HashMap::new();
     let mut exposed_ports = std::collections::HashMap::new();
     
-    let port_key = format!("{}/tcp", container_port);
+    let is_bedrock = payload.get("loader")
+        .and_then(|v| v.as_str())
+        .map(|l| l.eq_ignore_ascii_case("bedrock"))
+        .unwrap_or(false);
+    let protocol = if is_bedrock { "udp" } else { "tcp" };
+    let port_key = format!("{}/{}", container_port, protocol);
     exposed_ports.insert(port_key.clone(), std::collections::HashMap::new());
     port_bindings.insert(port_key, Some(vec![bollard::models::PortBinding {
         host_ip: Some("0.0.0.0".to_string()),
