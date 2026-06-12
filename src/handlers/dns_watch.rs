@@ -147,14 +147,10 @@ async fn check_and_update() -> Result<()> {
                 .await
                 {
                     Ok(()) => {
-                        info!(
-                            "DNS record updated via auto-refresh: {} -> {}",
-                            full_name, redact_ip(&current_ip)
-                        );
                         updated += 1;
                     }
                     Err(e) => {
-                        error!("DNS update failed for {}: {}", full_name, e);
+                        error!("DNS update failed: {}", e);
                         failed += 1;
                     }
                 }
@@ -168,19 +164,15 @@ async fn check_and_update() -> Result<()> {
             .await
             {
                     Ok(rid) => {
-                        info!(
-                            "DNS record created via auto-refresh: {} -> {} (id: {})",
-                            full_name, redact_ip(&current_ip), rid
-                        );
-                    created += 1;
+                        created += 1;
                 }
                 Err(e) => {
-                    error!("DNS create failed for {}: {}", full_name, e);
+                    error!("DNS create failed: {}", e);
                     failed += 1;
                 }
             },
             Err(e) => {
-                error!("DNS lookup failed for {}: {}", full_name, e);
+                error!("DNS lookup failed: {}", e);
                 failed += 1;
             }
         }
