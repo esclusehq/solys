@@ -1,6 +1,6 @@
 [workspace]
 members = ["."]
-exclude = ["api"]
+exclude = ["api", "opt/relay"]
 
 [package]
 name    = "solys"

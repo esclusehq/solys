@@ -518,19 +518,19 @@ Agent → Gateway tunnel	Yang existing (WSS → yamux) tetap untuk TCP control +
 **Goal:** Add UDP relay support for Minecraft Bedrock Edition via per-server dedicated UDP ports on the relay gateway — backend allocates from a new UDP port pool (19132-19231), agent declares `loader: "bedrock"` in TunnelConnect and runs a TLV-framed datagram session, gateway binds UdpSocket per port with 30-second grace period, and dashboard shows Bedrock address (IP:port + DNS SRV record).
 **Requirements**: None
 **Depends on:** Phase 72
-**Plans:** 1/4 plans executed
+**Plans:** 4/4 plans complete
 
 **Wave 1** *(Backend — no upstream deps)*:
 - [x] 73-01-PLAN.md — Backend: UDP port pool seed migration + protocol-aware port allocation + loader field pipeline (ServerRelayInfo → RelayServerConfig)
 
 **Wave 2** *(blocked on Wave 1)*:
-- [ ] 73-02-PLAN.md — Agent: TunnelConnect loader field + `run_udp_relay_session()` with TLV framing + `drive_inbound_streams` Bedrock dispatch
+- [x] 73-02-PLAN.md — Agent: TunnelConnect loader field + `run_udp_relay_session()` with TLV framing + `drive_inbound_streams` Bedrock dispatch
 
 **Wave 3** *(blocked on Wave 2)*:
-- [ ] 73-03-PLAN.md — Gateway: UdpPortRegistry + UdpSocket lifecycle + TunnelConnect Bedrock dispatch + config/state extensions
+- [x] 73-03-PLAN.md — Gateway: UdpPortRegistry + UdpSocket lifecycle + TunnelConnect Bedrock dispatch + config/state extensions
 
 **Wave 4** *(blocked on Wave 1 — can start after Wave 1)*:
-- [ ] 73-04-PLAN.md — Dashboard: Bedrock address display + TunnelHealthCard UDP label + Route 53 SRV record methods + infra docs
+- [x] 73-04-PLAN.md — Route 53 SRV record upsert/list/delete/resolve methods + auto-delete SRV on Bedrock server deletion (dashboard UI skipped per decision: SRV fully automatic, no user-facing toggle)
 
 **Cross-cutting constraints:**
 - D-01: Backend allocates from port_pools (protocol='udp')
