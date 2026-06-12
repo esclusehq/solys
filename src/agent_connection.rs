@@ -763,22 +763,27 @@ pub async fn run(
                                                          payload["host"] = serde_json::json!(h);
                                                      }
 
-                                                 if let Some(config) = deploy_config {
-                                                    payload["image"] = serde_json::json!(config.image);
-                                                    if let Some(port) = config.game_port {
-                                                        payload["ports"] = serde_json::json!({ "25565": [port.to_string()] });
-                                                        payload["container_port"] = serde_json::json!(port);
-                                                    }
-                                                    if let Some(env) = config.env {
-                                                        payload["env"] = serde_json::json!(env);
-                                                    }
-                                                    if let Some(mem) = config.ram_mb {
-                                                        payload["memory_limit"] = serde_json::json!(mem * 1024 * 1024);
-                                                    }
-                                                    if let Some(cpu) = config.cpu_limit {
-                                                        payload["cpu_limit"] = serde_json::json!(cpu);
-                                                    }
-                                                }
+                                                    if let Some(config) = deploy_config {
+                                                     payload["image"] = serde_json::json!(config.image);
+                                                     if let Some(port) = config.game_port {
+                                                         // Use dynamic port key instead of hardcoded "25565" — Bedrock uses port 19132
+                                                         payload["ports"] = serde_json::json!({ port.to_string(): [port.to_string()] });
+                                                         payload["container_port"] = serde_json::json!(port);
+                                                     }
+                                                     if let Some(env) = config.env {
+                                                         payload["env"] = serde_json::json!(env);
+                                                     }
+                                                     if let Some(mem) = config.ram_mb {
+                                                         payload["memory_limit"] = serde_json::json!(mem * 1024 * 1024);
+                                                     }
+                                                     if let Some(cpu) = config.cpu_limit {
+                                                         payload["cpu_limit"] = serde_json::json!(cpu);
+                                                     }
+                                                     // Forward loader to payload so runtime.rs can determine protocol (TCP vs UDP)
+                                                     if let Some(loader) = &config.loader {
+                                                         payload["loader"] = serde_json::json!(loader);
+                                                     }
+                                                 }
                                                 
                                                 let task = agent_proto::Task::new(
                                                     task_type.to_string(),
