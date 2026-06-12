@@ -255,11 +255,13 @@ async fn connect_and_run(
     });
 
     // 9. Drive incoming streams until the session ends.
+    let is_udp = cfg.loader.as_deref() == Some("bedrock");
     let session_result = drive_inbound_streams(
         &mut session,
         &cfg.local_mc_addr,
         cfg.server_id,
         shutdown,
+        is_udp,
     ).await;
 
     // 10. Cleanup: clear control_tx, abort bridge + heartbeat.
@@ -286,11 +288,17 @@ async fn drive_inbound_streams(
     local_mc_addr: &str,
     server_id: Uuid,
     shutdown: &CancellationToken,
+    is_udp: bool,
 ) -> Result<()> {
     // Resolve container IP via Docker so multiple servers on the same port
-    // don't collide on 127.0.0.1.
-    let resolved_addr = resolve_container_addr(&server_id, local_mc_addr).await
-        .unwrap_or_else(|| local_mc_addr.to_string());
+    // don't collide on 127.0.0.1. For UDP (Bedrock), use local_mc_addr
+    // directly — no Docker resolve needed (D-11).
+    let resolved_addr = if is_udp {
+        local_mc_addr.to_string()
+    } else {
+        resolve_container_addr(&server_id, local_mc_addr).await
+            .unwrap_or_else(|| local_mc_addr.to_string())
+    };
     if resolved_addr != local_mc_addr {
         info!(from = %local_mc_addr, to = %resolved_addr, "RelayClient: resolved container address");
     }
@@ -314,10 +322,18 @@ async fn drive_inbound_streams(
                         if let Some(counter) = bytes_counter {
                             let local_for_task = local.clone();
                             tokio::spawn(async move {
-                                if let Err(e) = relay_session::run_relay_session(
-                                    stream, local_for_task.clone(), counter,
-                                ).await {
-                                    warn!(error = %e, local = %local_for_task, "Relay session error");
+                                if is_udp {
+                                    if let Err(e) = relay_session::run_udp_relay_session(
+                                        stream, local_for_task.clone(), counter,
+                                    ).await {
+                                        warn!(error = %e, local = %local_for_task, "UDP relay session error");
+                                    }
+                                } else {
+                                    if let Err(e) = relay_session::run_relay_session(
+                                        stream, local_for_task.clone(), counter,
+                                    ).await {
+                                        warn!(error = %e, local = %local_for_task, "Relay session error");
+                                    }
                                 }
                             });
                         }
