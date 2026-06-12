@@ -116,6 +116,32 @@ None — no external service configuration required.
 - Ready for Plan 73-03 (gateway tunnel handler consuming the loader field)
 - Ready for Plan 73-04 (integration testing)
 
+## Verification Results
+
+### Plan-level Verification
+
+1. ✅ TunnelConnect JSON contains `"loader"` field — line 183 of relay_client.rs
+2. ✅ `drive_inbound_streams` accepts `is_udp` and branches correctly — line 291/325
+3. ✅ Docker resolve skipped for UDP path — `if is_udp { local_mc_addr.to_string() }` at line 296
+4. ✅ `run_udp_relay_session` exists with TLV framing + UdpSocket — relay_session.rs line 188
+5. ✅ `cargo check` and `cargo build` pass for agent/solys
+6. ✅ Bidirectional forwarding: yamux→UdpSocket AND UdpSocket→yamux (yamux_to_udp + udp_to_yamux tasks)
+
+### TDD Gate Compliance
+
+Not applicable — plan type is `execute`, not `tdd`.
+
+## Self-Check: PASSED
+
+- ✅ SUMMARY.md exists at `.planning/phases/73-approach-1-per-server-udp-port-recommended-mvp-cara-alokasik/73-02-SUMMARY.md`
+- ✅ Task 1 commit found (`1c2682f`) — feat(73-02): add loader field to TunnelConnect JSON
+- ✅ Task 2 commit found (`cdfebc4`) — feat(73-02): wire is_udp flag for Bedrock detection
+- ✅ Task 3 commit found (`d2fb255`) — feat(73-02): add run_udp_relay_session with TLV framing
+- ✅ Parent repo summary commit found (`669a405`)
+- ✅ All 2 modified key files exist at expected paths
+- ✅ All plan-level acceptance criteria pass
+- ✅ cargo check and cargo build pass
+
 ---
 
 *Phase: 73-approach-1-per-server-udp-port-recommended-mvp-cara-alokasik*
