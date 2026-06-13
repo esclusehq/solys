@@ -7,7 +7,7 @@ name    = "solys"
 version = "0.4.12"
 edition = "2021"
 authors = ["Founder <founder.escluse@gmail.com>"]
-license = "MIT"
+license = "AGPL-3.0"
 description = "Escluse Agent - Background service for managing game servers"
 repository = "https://github.com/esclusehq/solys"
 
