@@ -1,0 +1,10 @@
+target/
+node_modules/
+.git/
+api/target/
+agent/
+opt/
+docs/
+landing/
+.planning/
+*.md

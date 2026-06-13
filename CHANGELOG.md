@@ -31,6 +31,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`install.sh` prompts for API key even when `AGENT_API_KEY` is set** — `generate_config()` always called `_prompt` for the API key, ignoring `$AGENT_API_KEY`. Added a `$AGENT_API_KEY` check before falling through to `_prompt`, so `sudo env AGENT_API_KEY=xxx bash -c "$(curl -fsSL https://get.esluce.com/latest/install.sh)"` works non-interactively.
 - **Monorepo separation** — `compose/`, `docker/`, `opt/` moved to `esclusehq/escluse-infra`. Orphaned gitlink `migration` and leftover `api/` file removed from tracking. `.gitignore` updated. See PUSH_COMMIT.md for full repo mapping.
 
+### Fixed
+
+- **Relay gateway not binding UDP port for Bedrock servers** — `TunnelConnect` message in the relay client was not including the `loader` field, so the relay gateway never detected the server as Bedrock and skipped UDP port binding. Added `loader: Option<String>` to `RelayServerConfig` (state.rs), `ServerRelayInfo` (agent_connection.rs), and the `TunnelConnect` payload (relay_client.rs). The relay gateway now correctly binds UDP port 19132 when the agent sends `"loader": "bedrock"`.
+
 ## [v0.4.6] - 2026-06-06
 
 ### Fixed

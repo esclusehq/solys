@@ -18,3 +18,8 @@
 ### Fixed
 - [install] install.sh binary extraction: removed `|| true` that silently hid gzip CRC errors, causing corrupted binary install (was `gzip -dc | tar xf - || true`, now `tar xzf`)
 - [onboarding] Full flow tested end-to-end: Retry button, 2-min timeout, agent reconnection, all working
+- [cloud] All plans (free, hobby, pro) now have `max_ram_mb`, `max_cpu_cores`, `max_disk_gb` set to -1 (unlimited) — was missing from limits JSONB causing quota rejections
+- [dashboard] CreateServerModal no longer sets `server_type: undefined` for bedrock; sends correct `image` and `template_id` from selected variant
+- [cloud] Added `template_id` to CreateServerRequest domain DTO; stored in config on server create
+- [cloud] `NodeMessage` enum now includes `TaskResult` variant — agent's `task_result` messages no longer cause `PARSE_ERROR`
+- [solys] Added `loader` field to `RelayServerConfig`, `ServerRelayInfo`, and `TunnelConnect` message — relay gateway now correctly binds UDP port for Bedrock servers
