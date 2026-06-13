@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **`install.sh` binary extraction: removed `|| true` that silently hid gzip CRC errors** — was `gzip -dc | tar xf - || true`, now `tar xzf`. Corrupted binary installs no longer pass silently.
+
+## [v0.4.12] - 2026-06-13
+
 ### Added
 
 - **Bedrock UDP relay via TLV framing (Phase 73)** — Agent's `run_udp_relay_session` sends/receives UDP datagrams framed as TLV (type `0x01` for data) to/from the relay gateway. `TunnelConnect` and `RelayServerConfig` carry a `loader` field so the agent can distinguish Bedrock (UDP) from Java (TCP) relays. `drive_inbound_streams` passes `is_udp = (loader == "bedrock")` so the relay session opens a `UdpSocket` toward the gateway instead of a TCP tunnel. `relay_client.rs` maps the `loader` string to the `bedrock` boolean for the relay gateway's tunnel request.
@@ -24,17 +30,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`RelayConfigSync` handler recreates relay A records from DNS config** — `RelayConfigSync` handler now removes relay subdomains from `DNS_CONFIG.extra_subdomains` so the DnsWatcher doesn't delete and recreate the relay's A records on every 300s polling cycle, keeping the relay IP stable.
 - **Docker bridge port collision when host mapping differs from container port** — `resolve_container_addr()` now resolves the container's internal port (25565) via Docker inspect instead of using the Docker host port from `local_mc_addr`, fixing port mismatch when containers use non-standard host port mappings.
 - **`RelayConfigSync` silently ignored by agent** — `serde_json::from_str::<BackendMessage>` falls through silently on parse failure (no error log in `else` branch). Added `warn!` logging with raw JSON to diagnose why the relay config sync message is not being processed.
-
-
-
 - **Windows x86_64 cross-compile fails with "cannot find -lPacket"** — `pnet_sys` (transitive dep via `upnp-rs`) links `Packet.lib` from Npcap/WinPcap, which is not available in the cross-compilation toolchain. Added a CI step that downloads the Npcap SDK, creates a MingW-compatible `libPacket.a` via `dlltool`, and sets `RUSTFLAGS=-L /tmp/npcap-lib` so the linker resolves `-lPacket`. Applied to all 3 workflows (canary, ci, release).
 - **DnsWatcher never syncs DNS when config arrives after first tick** — `check_and_update` returned early when IP did not change, so if `CloudflareDnsConfig` was received from the backend *after* the initial DnsWatcher tick (which is the normal startup sequence), the per-server A records were never created and existing records were never refreshed until the next IP change. Removed the IP-change guard so DNS records are always synced on every polling cycle (every 300s).
 - **RelayClient default gateway URL uses unregistered domain `esluce.net`** — `bootstrap_relay_client` defaulted to `wss://relay.esluce.net/relay/tunnel`, but `esluce.net` is not registered (NXDOMAIN). Changed default to `wss://relay.esluce.com/relay/tunnel`.
 - **`install.sh` prompts for API key even when `AGENT_API_KEY` is set** — `generate_config()` always called `_prompt` for the API key, ignoring `$AGENT_API_KEY`. Added a `$AGENT_API_KEY` check before falling through to `_prompt`, so `sudo env AGENT_API_KEY=xxx bash -c "$(curl -fsSL https://get.esluce.com/latest/install.sh)"` works non-interactively.
 - **Monorepo separation** — `compose/`, `docker/`, `opt/` moved to `esclusehq/escluse-infra`. Orphaned gitlink `migration` and leftover `api/` file removed from tracking. `.gitignore` updated. See PUSH_COMMIT.md for full repo mapping.
-
-### Fixed
-
 - **Relay gateway not binding UDP port for Bedrock servers** — `TunnelConnect` message in the relay client was not including the `loader` field, so the relay gateway never detected the server as Bedrock and skipped UDP port binding. Added `loader: Option<String>` to `RelayServerConfig` (state.rs), `ServerRelayInfo` (agent_connection.rs), and the `TunnelConnect` payload (relay_client.rs). The relay gateway now correctly binds UDP port 19132 when the agent sends `"loader": "bedrock"`.
 
 ## [v0.4.6] - 2026-06-06
