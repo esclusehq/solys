@@ -13,7 +13,7 @@ use anyhow::{Context, Result};
 use serde::Deserialize;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
-use tracing::{info, warn};
+use tracing::{debug, info, warn};
 
 #[derive(Debug, Deserialize)]
 pub struct ServerCommandPayload {
@@ -126,7 +126,7 @@ async fn resolve_rcon_host(
     {
         for (net_name, endpoint) in networks {
             if let Some(ip) = endpoint.ip_address.as_ref().filter(|s| !s.is_empty()) {
-                info!(
+                debug!(
                     container = %container_ref,
                     network = %net_name,
                     ip = %ip,

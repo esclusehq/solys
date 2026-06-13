@@ -11,7 +11,7 @@ use bollard::image::CreateImageOptions;
 use bollard::models::HostConfig;
 use futures_util::StreamExt;
 use serde::Deserialize;
-use tracing::{error, info, warn};
+use tracing::{debug, error, info, warn};
 
 #[derive(Debug, Deserialize)]
 pub struct ServerCreatePayload {
@@ -499,7 +499,7 @@ pub async fn handle_logs(task: Task, _runtime: &RuntimeDetector) -> Result<serde
         .and_then(|s| uuid::Uuid::parse_str(s).ok())
         .unwrap_or_else(|| uuid::Uuid::nil());
 
-    info!(container_id = %container_id, follow = follow, tail = tail, "Getting container logs");
+    debug!(container_id = %container_id, follow = follow, tail = tail, "Getting container logs");
 
     if follow {
         info!("Starting live log streaming for server {}", server_id);
@@ -557,7 +557,7 @@ pub async fn handle_logs(task: Task, _runtime: &RuntimeDetector) -> Result<serde
                             }
                             None => {
                                 // Stream ended, break to switch to polling
-                                info!("Log stream ended, switching to polling fallback");
+                                debug!("Log stream ended, switching to polling fallback");
                                 break;
                             }
                         }
@@ -567,7 +567,7 @@ pub async fn handle_logs(task: Task, _runtime: &RuntimeDetector) -> Result<serde
                         if last_log_time.elapsed().as_secs() > 10 {
                             consecutive_empty += 1;
                             if consecutive_empty > 3 {
-                                info!("No logs for 30 seconds, switching to polling fallback");
+                                debug!("No logs for 30 seconds, switching to polling fallback");
                                 break;
                             }
                         }
@@ -576,7 +576,7 @@ pub async fn handle_logs(task: Task, _runtime: &RuntimeDetector) -> Result<serde
             }
             
             // Fallback: Poll docker logs periodically
-            info!("Starting polling fallback for server {}", server_id_clone);
+            debug!("Starting polling fallback for server {}", server_id_clone);
             let poll_options = LogsOptions::<String> {
                 stdout: true,
                 stderr: true,

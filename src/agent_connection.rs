@@ -10,7 +10,7 @@ use anyhow::Result;
 use futures_util::{SinkExt, StreamExt};
 use tokio::sync::mpsc;
 use tokio_tungstenite::{connect_async, tungstenite::Message};
-use tracing::{error, info, warn};
+use tracing::{debug, error, info, trace, warn};
 use uuid::Uuid;
 
 use crate::handlers;
@@ -360,7 +360,7 @@ pub async fn run(
 
     loop {
         reconnect_attempt = reconnect_attempt.saturating_add(1);
-        info!(
+        debug!(
             url = %redact_url(&ws_url),
             attempt = reconnect_attempt,
             delay_secs = initial_delay.as_secs(),
@@ -432,7 +432,7 @@ pub async fn run(
                             }
                         }
                     }
-                    info!("Writer exiting: channel closed");
+                    trace!("Writer exiting: channel closed");
                 });
 
                 // Build the Register message; now send it via the channel so it
@@ -672,7 +672,7 @@ pub async fn run(
                                     let text_str = text.to_string();
                                     
                                     if let Ok(backend_msg) = serde_json::from_str::<BackendMessage>(&text_str) {
-                                        info!("=== RECEIVED TEXT MESSAGE: {} ===", backend_msg.type_name());
+                                        trace!("=== RECEIVED TEXT MESSAGE: {} ===", backend_msg.type_name());
                                         eprintln!("[DEBUG] Received message type: {}", backend_msg.type_name());
                                         match backend_msg {
                                             BackendMessage::ExecuteCommand { request_id, command, server_id, params, deploy_config } => {
@@ -825,7 +825,7 @@ pub async fn run(
                                                 let _ = ws_tx.send(response).await;
                                             }
                                             BackendMessage::GetMetrics { request_id, container_id } => {
-                                                info!(request_id = %request_id, "Getting metrics");
+                                                debug!(request_id = %request_id, "Getting metrics");
                                                 
                                                 let payload = serde_json::json!({
                                                     "container_id": container_id,

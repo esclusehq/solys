@@ -29,7 +29,7 @@ use std::sync::Arc;
 use anyhow::{Context, Result};
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use tokio::net::{TcpStream, UdpSocket};
-use tracing::{debug, info, warn};
+use tracing::{debug, warn};
 
 /// Run one inbound yamux stream's lifecycle.
 ///
@@ -82,7 +82,7 @@ where
         }
     }
 
-    info!(local = %local_addr, "Relay session ended");
+    debug!(local = %local_addr, "Relay session ended");
     Ok(())
 }
 
@@ -297,6 +297,6 @@ where
 
     let total = total_bytes.load(Ordering::Relaxed);
     bytes_counter.fetch_add(total, Ordering::Relaxed);
-    info!("UDP relay session ended, forwarded {} bytes", total);
+    debug!("UDP relay session ended, forwarded {} bytes", total);
     Ok(())
 }

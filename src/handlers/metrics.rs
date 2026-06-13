@@ -7,7 +7,7 @@ use bollard::container::{ListContainersOptions, Stats};
 use bollard::Docker;
 use futures_util::StreamExt;
 use serde::Serialize;
-use tracing::info;
+use tracing::trace;
 
 #[derive(Debug, Serialize)]
 pub struct SystemMetrics {
@@ -117,7 +117,7 @@ pub async fn handle_report(_task: Task) -> anyhow::Result<serde_json::Value> {
 }
 
 pub async fn collect_full_metrics() -> anyhow::Result<MetricsReport> {
-    info!("Collecting metrics");
+    trace!("Collecting metrics");
 
     // Get system metrics
     let sys = agent_metrics::collect_system_metrics();

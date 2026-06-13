@@ -125,7 +125,14 @@ async fn run_agent_core(config: agent_config::AgentConfig) -> Result<()> {
     // Setup logging
     // Default: log to both stdout AND file (terminal for interactivity, file for persistence)
     // --quiet / -q: log to file only (headless/daemon)
-    use tracing_subscriber::{Registry, layer::SubscriberExt, Layer, filter::LevelFilter};
+    use tracing_subscriber::{
+        Registry, layer::SubscriberExt, Layer,
+        filter::EnvFilter,
+    };
+
+    // Build filter: respect RUST_LOG env var, fall back to configured log_level
+    let log_filter = EnvFilter::try_from_default_env()
+        .unwrap_or_else(|_| EnvFilter::new(log_level.to_string().to_lowercase()));
 
     let mut layers: Vec<Box<dyn Layer<Registry> + Send + Sync>> = Vec::new();
 
@@ -135,7 +142,7 @@ async fn run_agent_core(config: agent_config::AgentConfig) -> Result<()> {
             tracing_subscriber::fmt::layer()
                 .with_writer(std::io::stdout)
                 .with_ansi(false)
-                .with_filter(LevelFilter::from_level(log_level)),
+                .with_filter(log_filter.clone()),
         ));
     }
 
@@ -171,7 +178,7 @@ async fn run_agent_core(config: agent_config::AgentConfig) -> Result<()> {
                 tracing_subscriber::fmt::layer()
                     .with_writer(non_blocking)
                     .with_ansi(false)
-                    .with_filter(LevelFilter::from_level(log_level)),
+                    .with_filter(log_filter.clone()),
             ));
 
             _file_guard = Some(std::mem::ManuallyDrop::new(guard));
@@ -242,7 +249,7 @@ async fn run_agent_core(config: agent_config::AgentConfig) -> Result<()> {
     // are audit-logged only.
     let tx_handle: Arc<dyn Fn(serde_json::Value) + Send + Sync> = Arc::new(move |payload| {
         let text = serde_json::to_string(&payload).unwrap_or_default();
-        tracing::info!("[OUTBOUND] Payload type: {}", payload.get("type").and_then(|v| v.as_str()).unwrap_or("unknown"));
+        tracing::trace!("[OUTBOUND] Payload type: {}", payload.get("type").and_then(|v| v.as_str()).unwrap_or("unknown"));
         eprintln!("[DEBUG] Outbound payload: {}", crate::agent_connection::redact_json(&text));
     });
     crate::handlers::connectivity::set_outbound_sender(tx_handle);

@@ -6,7 +6,7 @@ use anyhow::{anyhow, Context};
 use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use tracing::{error, info, warn};
+use tracing::{debug, error, trace, warn};
 
 pub fn redact_ip(ip: &str) -> String {
     let parts: Vec<&str> = ip.split('.').collect();
@@ -64,7 +64,7 @@ pub async fn handle_configure(task: Task) -> Result<serde_json::Value, anyhow::E
     *guard = Some(config.clone());
     drop(guard);
 
-    info!(
+    debug!(
         "DNS configured for zone: {} ({} global subdomain, {} per-server subdomains)",
         config.zone_name,
         config.subdomain.as_deref().unwrap_or("none"),
@@ -95,7 +95,7 @@ pub async fn handle_create_record(task: Task) -> Result<serde_json::Value, anyho
     let full_name = format!("{}.{}", name, cfg.wildcard_domain);
     let record_id = create_dns_record(&cfg.api_token, &cfg.zone_id, &full_name, ip).await?;
 
-    info!("DNS record created: {} -> {}", full_name, redact_ip(ip));
+    debug!("DNS record created: {} -> {}", full_name, redact_ip(ip));
 
     Ok(json!({
         "status": "created",
@@ -124,17 +124,17 @@ pub async fn handle_update_record(task: Task) -> Result<serde_json::Value, anyho
 
     if let Some(rid) = record_id {
         update_dns_record(&cfg.api_token, &cfg.zone_id, rid, &full_name, ip).await?;
-        info!("DNS record updated: {} -> {} (record: {})", full_name, redact_ip(ip), rid);
+        debug!("DNS record updated: {} -> {} (record: {})", full_name, redact_ip(ip), rid);
     } else {
         let existing = find_dns_record(&cfg.api_token, &cfg.zone_id, &full_name).await?;
         match existing {
             Some((rid, _)) => {
                 update_dns_record(&cfg.api_token, &cfg.zone_id, &rid, &full_name, ip).await?;
-                info!("DNS record found & updated: {} -> {} (record: {})", full_name, redact_ip(ip), rid);
+                debug!("DNS record found & updated: {} -> {} (record: {})", full_name, redact_ip(ip), rid);
             }
             None => {
                 let new_rid = create_dns_record(&cfg.api_token, &cfg.zone_id, &full_name, ip).await?;
-                info!("DNS record not found, created new: {} -> {} (record: {})", full_name, redact_ip(ip), new_rid);
+                debug!("DNS record not found, created new: {} -> {} (record: {})", full_name, redact_ip(ip), new_rid);
             }
         }
     }
@@ -162,7 +162,7 @@ pub async fn handle_delete_record(task: Task) -> Result<serde_json::Value, anyho
     match existing {
         Some((rid, _)) => {
             delete_dns_record(&cfg.api_token, &cfg.zone_id, &rid).await?;
-            info!("DNS record deleted: {} (record: {})", full_name, rid);
+            debug!("DNS record deleted: {} (record: {})", full_name, rid);
         }
         None => {
             warn!("DNS record not found for deletion: {}", full_name);
@@ -214,7 +214,7 @@ pub async fn handle_remove_record(task: Task) -> Result<serde_json::Value, anyho
 
     // 404 → record already gone, treat as success per the plan's contract.
     if status.as_u16() == 404 {
-        info!(
+        trace!(
             subdomain = %subdomain,
             record_id = %record_id,
             "DNS record already absent (404), treating as success"
@@ -238,7 +238,7 @@ pub async fn handle_remove_record(task: Task) -> Result<serde_json::Value, anyho
         return Err(anyhow!("Cloudflare API error ({}): {}", status, text));
     }
 
-    info!(
+    debug!(
         subdomain = %subdomain,
         record_id = %record_id,
         "DNS record removed (CNAME/A cleanup after tunnel disconnect)"

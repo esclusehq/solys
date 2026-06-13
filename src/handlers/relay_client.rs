@@ -45,7 +45,7 @@ use tokio_tungstenite::tungstenite::{
     Message,
 };
 use tokio_util::sync::CancellationToken;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, info, warn};
 use uuid::Uuid;
 
 use rand::Rng;
@@ -94,7 +94,7 @@ pub async fn run_relay_client(
     let server_id = cfg.server_id;
     let mut backoff_ms: u64 = BACKOFF_INITIAL_MS;
 
-    info!(
+    debug!(
         server_id = %server_id,
         subdomain = %cfg.subdomain,
         "PerServer tunnel: entering reconnect loop"
@@ -296,7 +296,7 @@ async fn drive_inbound_streams(
     let resolved_addr = resolve_container_addr(&server_id, local_mc_addr).await
         .unwrap_or_else(|| local_mc_addr.to_string());
     if resolved_addr != local_mc_addr {
-        info!(from = %local_mc_addr, to = %resolved_addr, "RelayClient: resolved container address");
+        debug!(from = %local_mc_addr, to = %resolved_addr, "RelayClient: resolved container address");
     }
 
     loop {
@@ -339,7 +339,7 @@ async fn drive_inbound_streams(
                         return Err(anyhow!("yamux stream error: {}", e));
                     }
                     None => {
-                        info!("RelayClient: yamux session ended (no more streams)");
+                        debug!("RelayClient: yamux session ended (no more streams)");
                         return Ok(());
                     }
                 }
@@ -561,7 +561,7 @@ async fn dispatch_remove_cname_record(cfg: &RelayServerConfig) {
     let task = agent_proto::Task::new("relay.remove_cname_record".to_string(), payload);
     match dns::handle_remove_record(task).await {
         Ok(v) => {
-            info!(
+            debug!(
                 result = %v,
                 server_id = %cfg.server_id,
                 "RelayClient: remove_cname_record self-loop completed"
