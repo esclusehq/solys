@@ -146,6 +146,7 @@ pub struct RelayServerConfig {
     pub token: String,
     pub region: String,
     pub agent_public_ip: String,
+    pub loader: Option<String>,
 }
 
 /// Handle to a running per-server relay tunnel.

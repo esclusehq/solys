@@ -180,6 +180,7 @@ async fn connect_and_run(
         "public_port": cfg.public_port,
         "agent_public_ip": cfg.agent_public_ip,
         "region": cfg.region,
+        "loader": cfg.loader,
     });
     let mut connect_bytes = serde_json::to_vec(&connect_msg)?;
     connect_bytes.push(b'\n');

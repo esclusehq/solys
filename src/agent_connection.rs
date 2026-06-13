@@ -208,6 +208,8 @@ struct ServerRelayInfo {
     subdomain: String,
     local_mc_addr: String,
     public_port: u16,
+    #[serde(default)]
+    loader: Option<String>,
 }
 
 #[derive(Debug, Clone, serde::Deserialize, Default)]
@@ -907,6 +909,7 @@ pub async fn run(
                                                         token: relay_token.clone(),
                                                         region: region.clone(),
                                                         agent_public_ip: agent_public_ip.clone(),
+                                                        loader: s.loader.clone(),
                                                     })
                                                     .collect();
 

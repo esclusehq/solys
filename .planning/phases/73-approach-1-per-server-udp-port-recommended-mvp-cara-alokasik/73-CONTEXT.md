@@ -19,7 +19,7 @@ Add UDP relay support for Minecraft Bedrock Edition servers via dedicated per-se
 
 **Out of scope:**
 - Multi-region relay failover (deferred from Phase 68)
-- UDP relay on the existing *.play.esluce.net subdomain system (port-based, not subdomain-based)
+- UDP relay on the existing *.play.esluce.com subdomain system (port-based, not subdomain-based)
 - RakNet protocol parsing at the gateway (blind forwarding)
 - Java Edition UDP support (not applicable)
 </domain>
@@ -50,8 +50,8 @@ Add UDP relay support for Minecraft Bedrock Edition servers via dedicated per-se
 ### Player Connection UX
 - **D-13 (Bedrock address display):** **Dashboard + DNS SRV record** — Dashboard shows both:
   - Direct IP:port (`esluce.com:{port}` or relay IP:port) for manual entry
-  - A friendly DNS name backed by an SRV record: `bedrock-{subdomain}.play.esluce.net`
-  - Bedrock client uses the SRV record (`_minecraft._udp.bedrock-xxx.play.esluce.net → port`) for cleaner UX
+  - A friendly DNS name backed by an SRV record: `bedrock-{subdomain}.play.esluce.com`
+  - Bedrock client uses the SRV record (`_minecraft._udp.bedrock-xxx.play.esluce.com → port`) for cleaner UX
 - **D-14 (DNS SRV management):** Backend or agent needs Route 53 SRV record creation capability (extends existing A-record DNS automation).
 
 ### the agent's Discretion
@@ -136,7 +136,7 @@ None — no todos matched Phase 73.
 - **relay_client.rs** (agent) — `drive_inbound_streams` currently spawns `run_relay_session` for each incoming yamux stream. For Bedrock, the single long-lived UDP stream is spawned at tunnel connect.
 - **Backend server creation** — When creating a server with game_type=bedrock, backend allocates from UDP port pool.
 - **Dashboard** (app/) — Server details page shows Bedrock address (IP:port + SRV name). Extends ConnectivitySection to show bedrock-style addresses.
-- **DNS module** (agent/handlers/dns.rs or new module) — SRV record creation for `_minecraft._udp.bedrock-{subdomain}.play.esluce.net`.
+- **DNS module** (agent/handlers/dns.rs or new module) — SRV record creation for `_minecraft._udp.bedrock-{subdomain}.play.esluce.com`.
 - **NLB + Security Group** — AWS config: add UDP listener on port range 19132-19231 to existing NLB, add UDP rules to security group.
 </code_context>
 
@@ -177,7 +177,7 @@ For Bedrock player discovery:
 ```
 Service: _minecraft
 Protocol: _udp
-Name: bedrock-{subdomain}.play.esluce.net
+Name: bedrock-{subdomain}.play.esluce.com
 TTL: 60
 Target: relay.esluce.net
 Port: {allocated-udp-port}
@@ -185,7 +185,7 @@ Priority: 0
 Weight: 0
 ```
 
-Minecraft Bedrock client resolves `bedrock-xxx.play.esluce.net` → queries SRV → connects to `relay.esluce.net:{port}` via UDP.
+Minecraft Bedrock client resolves `bedrock-xxx.play.esluce.com` → queries SRV → connects to `relay.esluce.net:{port}` via UDP.
 
 ### Port allocation pool initialization
 ```sql

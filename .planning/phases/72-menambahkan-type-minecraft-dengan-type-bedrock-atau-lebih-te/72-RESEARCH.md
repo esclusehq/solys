@@ -446,7 +446,7 @@ fn build_deploy_config(&self, server: &Server) -> DeployConfig {
 | A4 | Relay tunnel yamux/WebSocket cannot forward UDP | Architecture | MEDIUM — if relay can do UDP, add relay support; if not, direct mode only for Bedrock |
 | A5 | Setting `rcon_port: None` in DeployConfig won't break agent | Code Examples | LOW — agent handles `Option<u16>` already |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **Does `loader` from `DeployConfig` reach the agent runtime's handlers?**
    - What we know: `build_deploy_config` sets `loader`, `agent_connection.rs` maps deploy_config fields to payload JSON (line 766-781). But only `image`, `ports`, `container_port`, `env`, `memory_limit`, `cpu_limit` are mapped — `loader` is NOT forwarded.
