@@ -291,14 +291,10 @@ async fn drive_inbound_streams(
     is_udp: bool,
 ) -> Result<()> {
     // Resolve container IP via Docker so multiple servers on the same port
-    // don't collide on 127.0.0.1. For UDP (Bedrock), use local_mc_addr
-    // directly — no Docker resolve needed (D-11).
-    let resolved_addr = if is_udp {
-        local_mc_addr.to_string()
-    } else {
-        resolve_container_addr(&server_id, local_mc_addr).await
-            .unwrap_or_else(|| local_mc_addr.to_string())
-    };
+    // don't collide on 127.0.0.1. Also needed for UDP (Bedrock) because
+    // the container port is not published to the Docker host (D-11 fix).
+    let resolved_addr = resolve_container_addr(&server_id, local_mc_addr).await
+        .unwrap_or_else(|| local_mc_addr.to_string());
     if resolved_addr != local_mc_addr {
         info!(from = %local_mc_addr, to = %resolved_addr, "RelayClient: resolved container address");
     }
