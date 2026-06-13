@@ -5,11 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [v0.4.13] - 2026-06-13
 
 ### Fixed
 
-- **`install.sh` binary extraction: removed `|| true` that silently hid gzip CRC errors** — was `gzip -dc | tar xf - || true`, now `tar xzf`. Corrupted binary installs no longer pass silently.
+- **UDP (Bedrock) tunnel disconnected in loop after relay gateway restart** — Agent's `drive_inbound_streams` used `127.0.0.1:19132` for UDP (skipped Docker container IP resolution), but Bedrock container UDP ports are not published to the Docker host. Fixed by always resolving the container IP via Docker inspect for both TCP and UDP, so UDP datagrams reach the Bedrock server via the Docker bridge network.
 
 ## [v0.4.12] - 2026-06-13
 
