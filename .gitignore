@@ -73,11 +73,6 @@ migration/tools/db-schema-gen/target/
 ANCHORED_SUMMARY.md
 FIX-BACKEND-525.md
 Dockerfile.landing
-PUSH_COMMIT.md
-CHANGELOG.md
-SEMVER.md
-TEMP_CHANGELOG.md
-DEPLOY.md
 docker-compose.yml
 .github/PULL_REQUEST_TEMPLATE.md
 .github/profile/
