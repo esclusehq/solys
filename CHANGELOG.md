@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- **Log verbosity reduced for dev** — Demoted 38 noisy `info!()` calls to `debug!()` or `trace!()` across 14 files (heartbeat audit, metrics, DNS ops, yamux, reconnect backoff, writer exit, log polling, task results, connectivity probes). Added `EnvFilter` support (`RUST_LOG` env var) for runtime control — default `info` shows only useful messages, `RUST_LOG=debug` shows internal details, `RUST_LOG=trace` shows everything. See `tools/logsum/` for a standalone log filter/summarizer.
+
 ## [v0.4.13] - 2026-06-13
 
 ### Fixed

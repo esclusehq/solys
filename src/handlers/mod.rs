@@ -25,7 +25,7 @@ use agent_capability::CapabilityRegistry;
 use agent_proto::{Task, TaskError, TaskResult};
 use agent_runtime::RuntimeDetector;
 use tokio::time::timeout;
-use tracing::{error, info};
+use tracing::{debug, error};
 
 use crate::task_state::TASK_STATE_TRACKER;
 use crate::audit;
@@ -101,7 +101,7 @@ async fn execute_with_timeout_and_retry(
             Err(e) => {
                 let delay = config.retry_delay_ms * (config.backoff_multiplier.powi((attempt - 1) as i32)) as u64;
                 let delay = delay.min(config.max_retry_delay_ms);
-                info!(
+                debug!(
                     task_type = %task_type,
                     attempt = attempt,
                     delay_ms = delay,

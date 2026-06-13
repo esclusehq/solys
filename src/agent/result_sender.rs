@@ -11,7 +11,7 @@ use anyhow::{Context, Result};
 use bytes::Bytes;
 use tokio::fs;
 use tokio::sync::{mpsc, Mutex};
-use tracing::{error, info, warn};
+use tracing::{error, info, trace, warn};
 
 use agent_proto::TaskResult;
 use uuid::Uuid;
@@ -143,7 +143,7 @@ impl ResultSender {
             if let Some(sender) = self.get_sender().await {
                 match sender.send(AgentToBackend::TaskResult(result.clone())).await {
                     Ok(_) => {
-                        info!(task_id = %result.task_id, "Task result sent immediately");
+                        trace!(task_id = %result.task_id, "Task result sent immediately");
                         return;
                     }
                     Err(_) => {
@@ -228,7 +228,7 @@ impl ResultSender {
             error!(error = %e, "Failed to persist buffer to disk");
         }
 
-        info!(
+        trace!(
             task_id = %result.task_id,
             buffer_size = buffer.len(),
             "Task result buffered"
@@ -300,7 +300,7 @@ impl ResultSender {
             }
         }
 
-        info!(flushed, remaining = buffer.len(), "Flushed buffered results");
+        trace!(flushed, remaining = buffer.len(), "Flushed buffered results");
     }
 
     /// Initialize - load any existing buffered results from disk

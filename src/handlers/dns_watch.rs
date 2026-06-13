@@ -4,7 +4,7 @@ use std::time::Duration;
 use anyhow::Result;
 use tokio::sync::RwLock;
 use tokio::time::interval;
-use tracing::{error, info, warn};
+use tracing::{debug, error, trace, warn};
 
 use super::dns::{self, redact_ip, CloudflareDnsConfig};
 
@@ -31,7 +31,7 @@ impl DnsWatcher {
     pub async fn start(&self) {
         let mut guard = self.running.write().await;
         if *guard {
-            info!("DnsWatcher already running");
+            debug!("DnsWatcher already running");
             return;
         }
         *guard = true;
@@ -41,7 +41,7 @@ impl DnsWatcher {
         let check_interval = self.check_interval.clone();
 
         tokio::spawn(async move {
-            info!("DnsWatcher started — monitoring public IP every {:?}", *check_interval.read().await);
+            debug!("DnsWatcher started — monitoring public IP every {:?}", *check_interval.read().await);
 
             // Immediate first check
             if let Err(e) = check_and_update().await {
@@ -53,7 +53,7 @@ impl DnsWatcher {
                 ticker.tick().await;
 
                 if !*running.read().await {
-                    info!("DnsWatcher stopped");
+                    debug!("DnsWatcher stopped");
                     break;
                 }
 
@@ -87,7 +87,7 @@ async fn check_and_update() -> Result<()> {
         if *ip_guard != current_ip {
             let old_ip = ip_guard.clone();
             *ip_guard = current_ip.clone();
-            info!("Public IP changed: {} -> {}", redact_ip(&old_ip), redact_ip(&current_ip));
+            trace!("Public IP changed: {} -> {}", redact_ip(&old_ip), redact_ip(&current_ip));
         }
     }
 
@@ -97,20 +97,20 @@ async fn check_and_update() -> Result<()> {
     // periodic re-probe (5 min) pick it up. The actual cross-component call
     // requires deeper wiring into the WS outbound, so this is an
     // audit-only trigger point.
-    tracing::info!("[CONNECTIVITY_TRIGGER] Public IP changed; backend probe will re-evaluate");
+        tracing::trace!("[CONNECTIVITY_TRIGGER] Public IP changed; backend probe will re-evaluate");
 
     let config_guard = dns::DNS_CONFIG.read().await;
     let config = match config_guard.as_ref() {
         Some(cfg) => cfg.clone(),
         None => {
-            info!("DNS not configured yet, skipping DNS record update");
+            debug!("DNS not configured yet, skipping DNS record update");
             return Ok(());
         }
     };
     drop(config_guard);
 
     if !config.auto_refresh {
-        info!("Auto-refresh disabled, skipping DNS record update");
+            debug!("Auto-refresh disabled, skipping DNS record update");
         return Ok(());
     }
 
@@ -178,7 +178,7 @@ async fn check_and_update() -> Result<()> {
         }
     }
 
-    info!(
+    debug!(
         "DDNS cycle complete: {} updated, {} created, {} failed (of {} total)",
         updated,
         created,

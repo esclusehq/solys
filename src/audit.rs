@@ -108,7 +108,7 @@ pub async fn log_relay_tunnel_event(
         "[RELAY_TUNNEL_AUDIT] node={} server={} event=relay.tunnel.{} detail={} @{}",
         node_id, server_id, event_type, detail, Utc::now().to_rfc3339()
     );
-    tracing::info!("{}", line);
+    tracing::trace!("{}", line);
 
     // Append to the local audit file (audit_data_dir/relay-tunnel-audit.log).
     if let Ok(mut f) = tokio::fs::OpenOptions::new()

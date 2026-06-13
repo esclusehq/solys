@@ -27,7 +27,7 @@ use std::sync::Arc;
 use agent_proto::Task;
 use anyhow::Result;
 use serde_json::{json, Value};
-use tracing::{error, info};
+use tracing::{error, trace};
 
 use crate::handlers::connectivity::diagnostics::collect_diagnostics;
 
@@ -107,7 +107,7 @@ pub async fn handle_diagnostics(task: Task) -> Result<Value, anyhow::Error> {
         tx(report);
     } else {
         // No outbound channel yet (very early startup); buffer in audit log only
-        info!(server_id = %server_id, "ConnectivityReport dropped: outbound channel not wired");
+        trace!(server_id = %server_id, "ConnectivityReport dropped: outbound channel not wired");
     }
 
     Ok(json!({
@@ -136,13 +136,13 @@ impl ConnectivityMonitor {
     }
     pub async fn start(&self) {
         let mut g = self.running.write().await;
-        if *g { tracing::info!("ConnectivityMonitor already running"); return; }
+        if *g { tracing::debug!("ConnectivityMonitor already running"); return; }
         *g = true; drop(g);
         let running = self.running.clone();
         let interval = self.check_interval.clone();
         let last_sig = self.last_signature.clone();
         tokio::spawn(async move {
-            tracing::info!("ConnectivityMonitor started ({} min)", 5);
+            tracing::debug!("ConnectivityMonitor started ({} min)", 5);
             let mut ticker = tokio::time::interval(*interval.read().await);
             loop {
                 ticker.tick().await;
