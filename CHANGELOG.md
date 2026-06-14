@@ -7,13 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Changed
-
-- **Log verbosity reduced for dev** — Demoted 38 noisy `info!()` calls to `debug!()` or `trace!()` across 14 files (heartbeat audit, metrics, DNS ops, yamux, reconnect backoff, writer exit, log polling, task results, connectivity probes). Added `EnvFilter` support (`RUST_LOG` env var) for runtime control — default `info` shows only useful messages, `RUST_LOG=debug` shows internal details, `RUST_LOG=trace` shows everything. See `tools/logsum/` for a standalone log filter/summarizer.
+## [v0.4.15] - 2026-06-14
 
 ### Fixed
 
 - **Relay tunnel flapping when Docker container not ready** — `run_relay_client()` now calls `wait_for_container_ready()` before starting the relay tunnel, polling Docker container status up to 30s (every 2s) until the container is running. Prevents "Connection reset without closing handshake" loop when the relay tunnel starts before the Minecraft server container has finished creating.
+
+## [v0.4.14] - 2026-06-13
+
+### Changed
+
+- **Log verbosity reduced for dev** — Demoted 38 noisy `info!()` calls to `debug!()` or `trace!()` across 14 files (heartbeat audit, metrics, DNS ops, yamux, reconnect backoff, writer exit, log polling, task results, connectivity probes). Added `EnvFilter` support (`RUST_LOG` env var) for runtime control — default `info` shows only useful messages, `RUST_LOG=debug` shows internal details, `RUST_LOG=trace` shows everything. See `tools/logsum/` for a standalone log filter/summarizer.
 
 ## [v0.4.13] - 2026-06-13
 
