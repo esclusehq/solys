@@ -92,6 +92,12 @@ pub async fn run_relay_client(
     shutdown: CancellationToken,
 ) {
     let server_id = cfg.server_id;
+
+    // Wait for the Docker container to exist and be running before attempting
+    // the relay tunnel connection. This prevents "Connection reset" flapping
+    // when the container is still being created (e.g. on first server start).
+    wait_for_container_ready(server_id, &shutdown).await;
+
     let mut backoff_ms: u64 = BACKOFF_INITIAL_MS;
 
     debug!(
@@ -131,6 +137,50 @@ pub async fn run_relay_client(
     info!(
         server_id = %server_id,
         "relay tunnel disconnected permanently",
+    );
+}
+
+/// Poll Docker until the container exists and its status is "running".
+/// Returns when the container is ready or `shutdown` is cancelled.
+/// Uses a 30-second overall timeout (checking every 2 s) so the tunnel
+/// doesn't wait indefinitely if the container never starts.
+async fn wait_for_container_ready(server_id: Uuid, shutdown: &CancellationToken) {
+    let container_name = format!("mc-{}", server_id);
+    let poll_interval = Duration::from_secs(2);
+    let max_retries: u32 = 15; // 30 seconds total
+
+    for attempt in 1..=max_retries {
+        if shutdown.is_cancelled() {
+            return;
+        }
+
+        if let Some(docker) = crate::state::docker_global() {
+            match docker.inspect_container(&container_name, None).await {
+                Ok(inspect) => {
+                    if let Some(state) = inspect.state {
+                        if state.running.unwrap_or(false) {
+                            tracing::info!(
+                                server_id = %server_id,
+                                "Container {} is running, proceeding with relay tunnel",
+                                container_name,
+                            );
+                            return;
+                        }
+                    }
+                }
+                Err(_) => {
+                    // Container not found yet — keep waiting
+                }
+            }
+        }
+
+        tokio::time::sleep(poll_interval).await;
+    }
+
+    tracing::warn!(
+        server_id = %server_id,
+        "Container {} did not become running within 30s, starting tunnel anyway",
+        container_name,
     );
 }
 
