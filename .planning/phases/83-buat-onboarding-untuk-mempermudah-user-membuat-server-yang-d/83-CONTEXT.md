@@ -14,20 +14,20 @@ Create a multi-step onboarding wizard that guides first-time users through serve
 ## Implementation Decisions
 
 ### Trigger & Wizard Format
-- **D-01:** Clicking "Create your first server" on dashboard empty state opens a new ServerOnboardingWizard modal (not navigate to /servers)
-- **D-02:** Existing CreateServerModal stays unchanged for experienced users accessing from /servers page
-- **D-03:** Wizard is a multi-step modal with progress bar — not side panel or tooltip overlay
+- [informational] **D-01:** Clicking "Create your first server" on dashboard empty state opens a new ServerOnboardingWizard modal (not navigate to /servers)
+- [informational] **D-02:** Existing CreateServerModal stays unchanged for experienced users accessing from /servers page
+- [informational] **D-03:** Wizard is a multi-step modal with progress bar — not side panel or tooltip overlay
 
 ### Wizard Steps (4 steps)
-- **D-04:** Step 1 (Type): 3 large cards — Java Edition, Bedrock, PocketMine — with icons, descriptions, and recommendations. User clicks one to select.
-- **D-05:** Step 2 (Resources): Show available plan cards (Free/Hobby/Pro) with feature lists. User picks a plan, then can configure RAM/CPU/Disk within the plan's limits.
-- **D-06:** Step 3 (Config): Full server configuration — name, Minecraft version (auto-select latest), port (with random suggest), template (optional).
-- **D-07:** Step 4 (Deploy): Review summary of all choices + "Deploy Server" button. After successful creation, auto-redirect to the new server's detail page.
+- [informational] **D-04:** Step 1 (Type): 3 large cards — Java Edition, Bedrock, PocketMine — with icons, descriptions, and recommendations. User clicks one to select.
+- [informational] **D-05:** Step 2 (Resources): Show available plan cards (Free/Hobby/Pro) with feature lists. User picks a plan, then can configure RAM/CPU/Disk within the plan's limits.
+- [informational] **D-06:** Step 3 (Config): Full server configuration — name, Minecraft version (auto-select latest), port (with random suggest), template (optional).
+- [informational] **D-07:** Step 4 (Deploy): Review summary of all choices + "Deploy Server" button. After successful creation, auto-redirect to the new server's detail page.
 
 ### Component Architecture
-- **D-08:** New component: `ServerOnboardingWizard` — separate from `CreateServerModal`
-- **D-09:** Reuse API create server logic (same fetchApi/serversApi.create call)
-- **D-10:** CreateServerModal remains as-is for experienced users on /servers page
+- [informational] **D-08:** New component: `ServerOnboardingWizard` — separate from `CreateServerModal`
+- [informational] **D-09:** Reuse API create server logic (same fetchApi/serversApi.create call)
+- [informational] **D-10:** CreateServerModal remains as-is for experienced users on /servers page
 
 ### the agent's Discretion
 - Exact visual design of cards in Step 1 (icon size, layout density)

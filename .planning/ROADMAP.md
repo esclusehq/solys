@@ -653,10 +653,10 @@ Plans:
 
 ### Phase 83: buat onboarding untuk mempermudah user membuat server yang di inginkan ketika menekan 'Create your first server' di dashboard utama
 
-**Goal:** [To be planned]
-**Requirements**: TBD
+**Goal:** Multi-step onboarding wizard (ServerOnboardingWizard) that replaces the `navigate('/servers')` behavior when first-time users click "Create your first server" — wizard guides through Type → Resources → Config → Deploy with progress bar, preserves existing CreateServerModal for experienced users
+**Requirements**: ONB-01, ONB-02, ONB-03, ONB-04, ONB-05, ONB-06
 **Depends on:** Phase 82
-**Plans:** 0 plans
+**Plans:** 1 plan
 
 Plans:
-- [ ] TBD (run /gsd-plan-phase 83 to break down)
+- [ ] 83-01-PLAN.md — Create ServerOnboardingWizard component + extract shared constants + wire into DashboardPage
