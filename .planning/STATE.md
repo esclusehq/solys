@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: executing
-stopped_at: Phase 83 UI-SPEC approved
-last_updated: "2026-06-15T21:46:22.689Z"
-last_activity: 2026-06-15 -- Phase 83 planning complete
+status: milestone_complete
+stopped_at: Phase 83 plans ready for execution
+last_updated: "2026-06-15T21:48:16.330Z"
+last_activity: 2026-06-15 -- Phase 83 execution started
 progress:
   total_phases: 37
-  completed_phases: 13
+  completed_phases: 14
   total_plans: 46
   completed_plans: 41
-  percent: 89
+  percent: 38
 ---
 
 # Project State: Esluce
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-09)
 
 **Core value:** Users can deploy game servers to cloud nodes with minimal configuration and manage them via a web control panel.
-**Current focus:** Phase 81 — update-ui-di-halaman-utama-dashboard-app-esluce-com
+**Current focus:** Phase 83 — buat-onboarding-untuk-mempermudah-user-membuat-server-yang-d
 
 ## Current Position
 
-Phase: 81 — COMPLETE
-Plan: 1 of 2
-Status: Ready to execute
-Last activity: 2026-06-15 -- Phase 83 planning complete
+Phase: 83
+Plan: Not started
+Status: Milestone complete
+Last activity: 2026-06-15
 Waves: Wave 1 (79-01 backend: mount UsageHandlers at /api/v1/usage; 79-02 frontend: cosmic restyle, usage progress bars, collapsed subscription states, error-isolated usage fetch)
 Progress: [██████████] 100% (2 plans executed, 0 blockers)
 
@@ -36,7 +36,7 @@ Progress: [██████████] 100% (2 plans executed, 0 blockers)
 
 **Velocity:**
 
-- Total plans completed: 70
+- Total plans completed: 71
 - Average duration: ~5 min/plan
 - Total execution time: ~65 min
 
@@ -84,6 +84,7 @@ Progress: [██████████] 100% (2 plans executed, 0 blockers)
 | 77 | 3 | ~15 min | 5 min |
 | 78 | 3 | ~20 min | 7 min |
 | 79 | 2 | ~18 min | 9 min |
+| 83 | 1 | - | - |
 
 **Recent Trend:**
 
@@ -828,9 +829,9 @@ None yet.
 
 Last activity: 2026-06-15 — Phase 79 execution complete, all plans verified (0 blockers)
 
-Last session: 2026-06-15T21:17:42.845Z
-Stopped at: Phase 83 UI-SPEC approved
-Resume file: .planning/phases/83-buat-onboarding-untuk-mempermudah-user-membuat-server-yang-d/83-UI-SPEC.md
+Last session: 2026-06-15T21:46:39.278Z
+Stopped at: Phase 83 plans ready for execution
+Resume file: .planning/phases/83-buat-onboarding-untuk-mempermudah-user-membuat-server-yang-d/83-01-PLAN.md
 
 ## Session History
 
