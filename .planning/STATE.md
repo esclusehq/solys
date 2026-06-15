@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: completed
-stopped_at: Phase 81 UI-SPEC approved
-last_updated: "2026-06-15T20:38:08.310Z"
-last_activity: 2026-06-15 -- Phase 81 marked complete
+status: executing
+stopped_at: Phase 83 UI-SPEC approved
+last_updated: "2026-06-15T21:46:22.689Z"
+last_activity: 2026-06-15 -- Phase 83 planning complete
 progress:
   total_phases: 37
   completed_phases: 13
-  total_plans: 45
+  total_plans: 46
   completed_plans: 41
-  percent: 91
+  percent: 89
 ---
 
 # Project State: Esluce
@@ -27,8 +27,8 @@ See: .planning/PROJECT.md (updated 2026-04-09)
 
 Phase: 81 — COMPLETE
 Plan: 1 of 2
-Status: Phase 81 complete
-Last activity: 2026-06-15 -- Phase 81 marked complete
+Status: Ready to execute
+Last activity: 2026-06-15 -- Phase 83 planning complete
 Waves: Wave 1 (79-01 backend: mount UsageHandlers at /api/v1/usage; 79-02 frontend: cosmic restyle, usage progress bars, collapsed subscription states, error-isolated usage fetch)
 Progress: [██████████] 100% (2 plans executed, 0 blockers)
 
@@ -828,9 +828,9 @@ None yet.
 
 Last activity: 2026-06-15 — Phase 79 execution complete, all plans verified (0 blockers)
 
-Last session: 2026-06-15T06:10:46.121Z
-Stopped at: Phase 81 UI-SPEC approved
-Resume file: .planning/phases/81-update-ui-di-halaman-utama-dashboard-app-esluce-com/81-UI-SPEC.md
+Last session: 2026-06-15T21:17:42.845Z
+Stopped at: Phase 83 UI-SPEC approved
+Resume file: .planning/phases/83-buat-onboarding-untuk-mempermudah-user-membuat-server-yang-d/83-UI-SPEC.md
 
 ## Session History
 
