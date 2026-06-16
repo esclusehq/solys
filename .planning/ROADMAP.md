@@ -660,3 +660,28 @@ Plans:
 
 Plans:
 - [x] 83-01-PLAN.md — Create ServerOnboardingWizard component + extract shared constants + wire into DashboardPage
+
+### Phase 84: perbaiki layout yang janggal ataupun tidak bagus di app.esluce.com secara menyeluruh
+
+**Goal:** Comprehensive UI layout polish across all pages of app.esluce.com — fix spacing, alignment, consistency issues: sidebar refinement, standardized page layouts, unified table patterns, and consistent header hierarchy.
+**Requirements**: TBD
+**Depends on:** Phase 83
+**Plans:** 3/3 plans complete
+
+**Wave 1**
+- [x] 84-01-PLAN.md — Sidebar Refinement: logo size, NavLink active state, icon-only collapse, lucide-react icons
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [x] 84-02-PLAN.md — Layout Consistency: standardize p-8 padding, heading hierarchy, page width strategy across 9 pages
+
+**Wave 3** *(blocked on Wave 2 completion)*
+- [x] 84-03-PLAN.md — Table Unification: consistent thead, row height, empty state across 4 pages
+
+**Cross-cutting constraints:**
+- D-01: Logo w-8 h-8, mr-2 gap
+- D-02: Sidebar w-56
+- D-03: NavLink active state with cyan accent bar
+- D-04: All pages p-8 standard padding
+- D-05: Unified table thead/hover/empty state pattern
+- D-06: h1 = text-3xl font-semibold, h2 = text-2xl font-semibold
+- D-07: Data pages full-width, other pages max-w-6xl
