@@ -685,3 +685,23 @@ Plans:
 - D-05: Unified table thead/hover/empty state pattern
 - D-06: h1 = text-3xl font-semibold, h2 = text-2xl font-semibold
 - D-07: Data pages full-width, other pages max-w-6xl
+
+### Phase 85: perbaiki edit dan delate template
+
+**Goal:** Perbaiki error 404 saat owner ingin mengedit template official — muncul toast 'Failed to load template' karena endpoint GET /api/v1/templates/:id mengembalikan 404 untuk template official yang tidak terasosiasi dengan user owner.
+**Requirements**: TBD
+**Depends on:** Phase 84
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (run /gsd-plan-phase 85 to break down)
+
+### Phase 86: memperbaiki tombol logout di landing page yang tidak berfungsi dengan baik atau lebih tepatnya tidak bisa logout
+
+**Goal:** Fix the logout button on the landing page that doesn't work properly — users cannot log out from the landing page.
+**Requirements**: TBD
+**Depends on:** Phase 85
+**Plans:** 1/1 plans complete
+
+**Wave 1**
+- [x] 86-01-PLAN.md — Fix landing page logout button (replace inline handleLogout with store.logout())

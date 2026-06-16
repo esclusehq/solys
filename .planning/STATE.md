@@ -7,7 +7,7 @@ stopped_at: Phase 84 context gathered
 last_updated: "2026-06-16T07:20:03.318Z"
 last_activity: 2026-06-16 -- Phase 84 marked complete
 progress:
-  total_phases: 38
+  total_phases: 39
   completed_phases: 15
   total_plans: 49
   completed_plans: 45
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-09)
 
 **Core value:** Users can deploy game servers to cloud nodes with minimal configuration and manage them via a web control panel.
-**Current focus:** Phase 84 — perbaiki-layout-yang-janggal-ataupun-tidak-bagus-di-app-eslu
+**Current focus:** Phase 86 — memperbaiki-tombol-logout-di-landing-page
 
 ## Current Position
 
-Phase: 84 — COMPLETE
-Plan: 1 of 3
-Status: Phase 84 complete
-Last activity: 2026-06-16 -- Phase 84 marked complete
+Phase: 86 — COMPLETE
+Plan: 1 of 1
+Status: Phase 86 complete — fix landing page logout button
+Last activity: 2026-06-16 -- Phase 86 executed
 
 ## Performance Metrics
 
@@ -189,6 +189,10 @@ Last activity: 2026-06-16 -- Phase 84 marked complete
 - Phase 82 added: Membuat theme dan warna keseluruhan menjadi lebih konsisten, dan membuat toggle light/dark berfungsi dengan benar
 - Phase 83 added: buat onboarding untuk mempermudah user membuat server yang di inginkan ketika menekan 'Create your first server' di dashboard utama
 - Phase 84 added: perbaiki layout yang janggal ataupun tidak bagus di app.esluce.com secara menyeluruh
+- Phase 85 added: perbaiki edit dan delate template — 404 saat owner edit template official
+- Phase 86 added: memperbaiki tombol logout di landing page yang tidak berfungsi dengan baik atau lebih tepatnya tidak bisa logout
+- Phase 86 planned: 86-01 — Fix landing page logout button (replace inline handleLogout with store.logout())
+- Phase 86 executed: 86-01 — Fix landing page logout button (root cause: Navbar inline handleLogout bypasses zustand store; fix: replace with store.logout() + navigate())
 
 ### Decisions
 
@@ -824,10 +828,11 @@ None yet.
 | 260611-5m0 | update pricing section with scroll animations and button navigation | 2026-06-10 | a0582ca | [260611-5m0-update-bagian-plans-di-landing-page-agar](./quick/260611-5m0-update-bagian-plans-di-landing-page-agar/) |
 | 260613-5a9 | add PocketMine-MP and Nukkit bedrock variants | 2026-06-12 | 9e7aff6 | [260613-5a9-tambahkan-variant-pocketmine-mp-dan-nukk](./quick/260613-5a9-tambahkan-variant-pocketmine-mp-dan-nukk/) |
 | 260616-42d | disable Subscribe button on Pro plan (Coming Soon) | 2026-06-16 | app:b725692, landing:79f1f5d | [260616-42d-coming-soon-subscribe-disabled](./quick/260616-42d-coming-soon-subscribe-disabled/) |
+| 260616-e5f | sidebar logo links to esluce.com | 2026-06-16 | app:b82de4c | [260616-e5f-sidebar-logo-link-esluce](./quick/260616-e5f-sidebar-logo-link-esluce/) |
 
 ## Session Continuity
 
-Last activity: 2026-06-16 — Completed quick task 260616-42d: disable Subscribe button on Pro plan (Coming Soon)
+Last activity: 2026-06-16 — Added Phase 85: perbaiki edit dan delate template
 
 Last session: 2026-06-16T00:00:00.000Z
 Stopped at: Phase 84 context gathered
