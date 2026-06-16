@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: milestone_complete
-stopped_at: Phase 83 plans ready for execution
-last_updated: "2026-06-15T21:48:16.330Z"
-last_activity: 2026-06-15 -- Phase 83 execution started
+status: completed
+stopped_at: Phase 84 context gathered
+last_updated: "2026-06-16T07:20:03.318Z"
+last_activity: 2026-06-16 -- Phase 84 marked complete
 progress:
-  total_phases: 37
-  completed_phases: 14
-  total_plans: 46
-  completed_plans: 41
-  percent: 38
+  total_phases: 38
+  completed_phases: 15
+  total_plans: 49
+  completed_plans: 45
+  percent: 39
 ---
 
 # Project State: Esluce
@@ -21,16 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-09)
 
 **Core value:** Users can deploy game servers to cloud nodes with minimal configuration and manage them via a web control panel.
-**Current focus:** Phase 83 — buat-onboarding-untuk-mempermudah-user-membuat-server-yang-d
+**Current focus:** Phase 84 — perbaiki-layout-yang-janggal-ataupun-tidak-bagus-di-app-eslu
 
 ## Current Position
 
-Phase: 83
-Plan: Not started
-Status: Milestone complete
-Last activity: 2026-06-15
-Waves: Wave 1 (79-01 backend: mount UsageHandlers at /api/v1/usage; 79-02 frontend: cosmic restyle, usage progress bars, collapsed subscription states, error-isolated usage fetch)
-Progress: [██████████] 100% (2 plans executed, 0 blockers)
+Phase: 84 — COMPLETE
+Plan: 1 of 3
+Status: Phase 84 complete
+Last activity: 2026-06-16 -- Phase 84 marked complete
 
 ## Performance Metrics
 
@@ -190,6 +188,7 @@ Progress: [██████████] 100% (2 plans executed, 0 blockers)
 - Phase 81 added: update UI di halaman utama/dashboard app.esluce.com
 - Phase 82 added: Membuat theme dan warna keseluruhan menjadi lebih konsisten, dan membuat toggle light/dark berfungsi dengan benar
 - Phase 83 added: buat onboarding untuk mempermudah user membuat server yang di inginkan ketika menekan 'Create your first server' di dashboard utama
+- Phase 84 added: perbaiki layout yang janggal ataupun tidak bagus di app.esluce.com secara menyeluruh
 
 ### Decisions
 
@@ -824,14 +823,15 @@ None yet.
 | fast | replace emojis with game icons from assets | 2026-05-12 | 3480715 | - |
 | 260611-5m0 | update pricing section with scroll animations and button navigation | 2026-06-10 | a0582ca | [260611-5m0-update-bagian-plans-di-landing-page-agar](./quick/260611-5m0-update-bagian-plans-di-landing-page-agar/) |
 | 260613-5a9 | add PocketMine-MP and Nukkit bedrock variants | 2026-06-12 | 9e7aff6 | [260613-5a9-tambahkan-variant-pocketmine-mp-dan-nukk](./quick/260613-5a9-tambahkan-variant-pocketmine-mp-dan-nukk/) |
+| 260616-42d | disable Subscribe button on Pro plan (Coming Soon) | 2026-06-16 | app:b725692, landing:79f1f5d | [260616-42d-coming-soon-subscribe-disabled](./quick/260616-42d-coming-soon-subscribe-disabled/) |
 
 ## Session Continuity
 
-Last activity: 2026-06-15 — Phase 79 execution complete, all plans verified (0 blockers)
+Last activity: 2026-06-16 — Completed quick task 260616-42d: disable Subscribe button on Pro plan (Coming Soon)
 
-Last session: 2026-06-15T21:46:39.278Z
-Stopped at: Phase 83 plans ready for execution
-Resume file: .planning/phases/83-buat-onboarding-untuk-mempermudah-user-membuat-server-yang-d/83-01-PLAN.md
+Last session: 2026-06-16T00:00:00.000Z
+Stopped at: Phase 84 context gathered
+Resume file: .planning/phases/83-buat-onboarding-untuk-mempermudah-user-membuat-server-yang-d/83-VERIFICATION.md
 
 ## Session History
 
