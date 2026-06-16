@@ -4,8 +4,8 @@ milestone: v1.0
 milestone_name: milestone
 status: completed
 stopped_at: Phase 84 context gathered
-last_updated: "2026-06-16T07:20:03.318Z"
-last_activity: 2026-06-16 -- Phase 84 marked complete
+last_updated: "2026-06-16T08:30:00.000Z"
+last_activity: 2026-06-16 -- Phase 87 added to roadmap
 progress:
   total_phases: 39
   completed_phases: 15
@@ -21,7 +21,7 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-09)
 
 **Core value:** Users can deploy game servers to cloud nodes with minimal configuration and manage them via a web control panel.
-**Current focus:** Phase 86 — memperbaiki-tombol-logout-di-landing-page
+**Current focus:** Phase 86 — complete
 
 ## Current Position
 
@@ -29,6 +29,8 @@ Phase: 86 — COMPLETE
 Plan: 1 of 1
 Status: Phase 86 complete — fix landing page logout button
 Last activity: 2026-06-16 -- Phase 86 executed
+
+Next: Phase 87 — Selesaikan fitur 'Create server from template' secara menyeluruh
 
 ## Performance Metrics
 
@@ -191,6 +193,7 @@ Last activity: 2026-06-16 -- Phase 86 executed
 - Phase 84 added: perbaiki layout yang janggal ataupun tidak bagus di app.esluce.com secara menyeluruh
 - Phase 85 added: perbaiki edit dan delate template — 404 saat owner edit template official
 - Phase 86 added: memperbaiki tombol logout di landing page yang tidak berfungsi dengan baik atau lebih tepatnya tidak bisa logout
+- Phase 87 added: Selesaikan fitur 'Create server from template' secara menyeluruh
 - Phase 86 planned: 86-01 — Fix landing page logout button (replace inline handleLogout with store.logout())
 - Phase 86 executed: 86-01 — Fix landing page logout button (root cause: Navbar inline handleLogout bypasses zustand store; fix: replace with store.logout() + navigate())
 
@@ -832,7 +835,7 @@ None yet.
 
 ## Session Continuity
 
-Last activity: 2026-06-16 — Added Phase 85: perbaiki edit dan delate template
+Last activity: 2026-06-16 — Added Phase 87: Selesaikan fitur 'Create server from template' secara menyeluruh
 
 Last session: 2026-06-16T00:00:00.000Z
 Stopped at: Phase 84 context gathered

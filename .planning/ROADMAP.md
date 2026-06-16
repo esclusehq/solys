@@ -705,3 +705,13 @@ Plans:
 
 **Wave 1**
 - [x] 86-01-PLAN.md — Fix landing page logout button (replace inline handleLogout with store.logout())
+
+### Phase 87: Selesaikan fitur 'Create server from template' secara menyeluruh
+
+**Goal:** Complete the 'Create server from template' feature comprehensively — ensure the template selection UI, server creation flow, resource allocation, and deployment pipeline work end-to-end for all template types (game server, plugin, modpack)
+**Requirements**: TBD
+**Depends on:** Phase 86
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (run /gsd-plan-phase 87 to break down)
