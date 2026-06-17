@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: completed
-stopped_at: Phase 87 context gathered
+stopped_at: Phase 87 complete
 last_updated: "2026-06-17T00:00:00.000Z"
-last_activity: 2026-06-17 -- Phase 87 context gathered
+last_activity: 2026-06-17 -- Phase 87 executed (3 plans, 3 waves)
 progress:
   total_phases: 39
-  completed_phases: 15
-  total_plans: 49
-  completed_plans: 45
-  percent: 39
+  completed_phases: 16
+  total_plans: 52
+  completed_plans: 48
+  percent: 41
 ---
 
 # Project State: Esluce
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-09)
 
 **Core value:** Users can deploy game servers to cloud nodes with minimal configuration and manage them via a web control panel.
-**Current focus:** Phase 86 — complete
+**Current focus:** Phase 87 — complete
 
 ## Current Position
 
-Phase: 87 — CONTEXT GATHERED
-Plan: 0 of 0
-Status: Phase 87 context gathered — ready for planning
-Last activity: 2026-06-17 -- Phase 87 context gathered
+Phase: 87 — COMPLETE
+Plan: 3 of 3
+Status: Phase 87 executed — TemplateDetailPage + ConfigureServerModal + deploy progress
+Last activity: 2026-06-17 -- Phase 87 executed (3 plans)
 
-Next: Phase 87 planning — /gsd-plan-phase 87
+Next: Phase 88 — /gsd-discuss 88
 
 ## Performance Metrics
 

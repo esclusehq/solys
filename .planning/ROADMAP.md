@@ -714,10 +714,10 @@ Plans:
 **Plans:** 3 plans
 
 **Wave 1** *(foundation — no deps)*
-- [ ] 87-01-PLAN.md — TemplateDetailPage at `/templates/:id` with 5-state rendering (loading, error, not-found, active, inactive), config preview, dependencies section, Create Server button, route registration after `/templates/:id/edit`
+- [x] 87-01-PLAN.md — TemplateDetailPage at `/templates/:id` with 5-state rendering (loading, error, not-found, active, inactive), config preview, dependencies section, Create Server button, route registration after `/templates/:id/edit`
 
 **Wave 2** *(blocked on Wave 1)*
-- [ ] 87-02-PLAN.md — ConfigureServerModal with pre-filled form fields from template defaults, RAM/DISK steppers (reusing ServerOnboardingWizard pattern), target node selector, online mode toggle, world seed input, max players dropdown, locked fields display, resource capacity warning (non-blocking), dependency preview, submit via `POST /templates/:id/create-server`, success redirect to `/servers/{id}`
+- [x] 87-02-PLAN.md — ConfigureServerModal with pre-filled form fields from template defaults, RAM/DISK steppers (reusing ServerOnboardingWizard pattern), target node selector, online mode toggle, world seed input, max players dropdown, locked fields display, resource capacity warning (non-blocking), dependency preview, submit via `POST /templates/:id/create-server`, success redirect to `/servers/{id}`
 
 **Wave 3** *(blocked on Wave 2, optional polish)*
-- [ ] 87-03-PLAN.md — Deployment progress indicator (>2s threshold, step-based progress bar), double-click prevention, error recovery, interval cleanup on unmount
+- [x] 87-03-PLAN.md — Deployment progress indicator (>2s threshold, step-based progress bar), double-click prevention, error recovery, interval cleanup on unmount
