@@ -709,9 +709,15 @@ Plans:
 ### Phase 87: Selesaikan fitur 'Create server from template' secara menyeluruh
 
 **Goal:** Complete the 'Create server from template' feature comprehensively — ensure the template selection UI, server creation flow, resource allocation, and deployment pipeline work end-to-end for all template types (game server, plugin, modpack)
-**Requirements**: TBD
+**Requirements**: D-01 through D-12
 **Depends on:** Phase 86
-**Plans:** 0 plans
+**Plans:** 3 plans
 
-Plans:
-- [ ] TBD (run /gsd-plan-phase 87 to break down)
+**Wave 1** *(foundation — no deps)*
+- [ ] 87-01-PLAN.md — TemplateDetailPage at `/templates/:id` with 5-state rendering (loading, error, not-found, active, inactive), config preview, dependencies section, Create Server button, route registration after `/templates/:id/edit`
+
+**Wave 2** *(blocked on Wave 1)*
+- [ ] 87-02-PLAN.md — ConfigureServerModal with pre-filled form fields from template defaults, RAM/DISK steppers (reusing ServerOnboardingWizard pattern), target node selector, online mode toggle, world seed input, max players dropdown, locked fields display, resource capacity warning (non-blocking), dependency preview, submit via `POST /templates/:id/create-server`, success redirect to `/servers/{id}`
+
+**Wave 3** *(blocked on Wave 2, optional polish)*
+- [ ] 87-03-PLAN.md — Deployment progress indicator (>2s threshold, step-based progress bar), double-click prevention, error recovery, interval cleanup on unmount
