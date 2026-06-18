@@ -5,13 +5,13 @@ milestone_name: milestone
 status: completed
 stopped_at: Phase 87 complete
 last_updated: "2026-06-17T00:00:00.000Z"
-last_activity: 2026-06-17 -- Phase 87 executed (3 plans, 3 waves)
+last_activity: 2026-06-17 -- Phases 73, 82, 85 completed — all 21 phase dirs fully done
 progress:
   total_phases: 39
-  completed_phases: 16
-  total_plans: 52
-  completed_plans: 48
-  percent: 41
+  completed_phases: 21
+  total_plans: 60
+  completed_plans: 60
+  percent: 54
 ---
 
 # Project State: Esluce
@@ -832,6 +832,7 @@ None yet.
 | 260613-5a9 | add PocketMine-MP and Nukkit bedrock variants | 2026-06-12 | 9e7aff6 | [260613-5a9-tambahkan-variant-pocketmine-mp-dan-nukk](./quick/260613-5a9-tambahkan-variant-pocketmine-mp-dan-nukk/) |
 | 260616-42d | disable Subscribe button on Pro plan (Coming Soon) | 2026-06-16 | app:b725692, landing:79f1f5d | [260616-42d-coming-soon-subscribe-disabled](./quick/260616-42d-coming-soon-subscribe-disabled/) |
 | 260616-e5f | sidebar logo links to esluce.com | 2026-06-16 | app:b82de4c | [260616-e5f-sidebar-logo-link-esluce](./quick/260616-e5f-sidebar-logo-link-esluce/) |
+| 260617-8c3 | lock Hobby & Pro subscribe buttons for non-owners | 2026-06-17 | app:94965e2, landing:e29140a | [260617-lock-hobby-pro-subscribe](./quick/260617-lock-hobby-pro-subscribe/) |
 
 ## Session Continuity
 

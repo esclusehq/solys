@@ -640,16 +640,16 @@ Plans:
 **Goal:** Add semantic CSS variables, fix hardcoded colors across all JSX files, implement functional light/dark toggle with system-preference support, and hide stars/glows in light mode
 **Requirements**: No numbered requirements — implicit from phase goal
 **Depends on:** Phase 81
-**Plans:** 3 plans
+**Plans:** 3/3 plans complete
 
 **Wave 1** *(foundation — CSS vars + toggle)*
-- [ ] 82-01-PLAN.md — Foundation: semantic CSS variables in @theme, light theme cleanup, transition CSS, flash-guard script, system-preference detection
+- [x] 82-01-PLAN.md — Foundation: semantic CSS variables in @theme, light theme cleanup, transition CSS, flash-guard script, system-preference detection
 
 **Wave 2** *(blocked on Wave 1)*
-- [ ] 82-02-PLAN.md — Visible components: App.jsx sidebar, TopBar, Sidebar, ToastContainer, NotificationCenter, Onboarding, email verification components, InviteFriendsModal
+- [x] 82-02-PLAN.md — Visible components: App.jsx sidebar, TopBar, Sidebar, ToastContainer, NotificationCenter, Onboarding, email verification components, InviteFriendsModal
 
 **Wave 3** *(blocked on Wave 2)*
-- [ ] 82-03-PLAN.md — Remaining components: auth pages, server detail components, FileManager, LogViewer, skeleton loaders, already-cosmic page vestiges
+- [x] 82-03-PLAN.md — Remaining components: auth pages, server detail components, FileManager, LogViewer, skeleton loaders, already-cosmic page vestiges
 
 ### Phase 83: buat onboarding untuk mempermudah user membuat server yang di inginkan ketika menekan 'Create your first server' di dashboard utama
 
@@ -691,10 +691,11 @@ Plans:
 **Goal:** Perbaiki error 404 saat owner ingin mengedit template official — muncul toast 'Failed to load template' karena endpoint GET /api/v1/templates/:id mengembalikan 404 untuk template official yang tidak terasosiasi dengan user owner.
 **Requirements**: TBD
 **Depends on:** Phase 84
-**Plans:** 0 plans
+**Plans:** 2/2 plans complete
 
-Plans:
-- [ ] TBD (run /gsd-plan-phase 85 to break down)
+**Wave 1**
+- [x] 85-01-PLAN.md — Add version column migration + fix get_template_by_id SELECT + error handling differentiation
+- [x] 85-02-PLAN.md — Verify template edit/delete fix end-to-end (build, smoke-test API, regression check)
 
 ### Phase 86: memperbaiki tombol logout di landing page yang tidak berfungsi dengan baik atau lebih tepatnya tidak bisa logout
 
