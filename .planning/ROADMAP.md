@@ -161,3 +161,17 @@ Plans:
 **Cross-cutting constraints:**
 
 - npm run build succeeds with no TypeScript errors
+
+### Phase 91: mengganti code pembayaran dari lemon squeezy menjadi untuk whop
+
+**Goal:** Replace Lemon Squeezy billing integration with Whop across the entire Rust API codebase: WhopBillingService implementing the refactored BillingService trait, billing_products normalized table, dedicated Whop webhook endpoint with Standard Webhooks security, SubscriptionStatus enum, domain events, full LS/Stripe removal, and frontend checkout unlock.
+**Requirements**: D-01, D-02, D-03, D-04, D-05, D-06, D-07, D-08, D-09, D-10, D-11, D-12, D-13, D-14, D-15, D-16, D-17, D-18, D-19, D-20, D-21, D-22, D-23, D-24, D-25, D-26, D-27, D-28
+**Depends on:** Phase 90
+**Plans:** 5 plans in 3 waves
+
+Plans:
+- [ ] 91-01-PLAN.md — WhopBillingService + trait refactor + BillingProvider enum + MockBillingService (Wave 1)
+- [ ] 91-02-PLAN.md — Database migrations: billing_products, billing_events, processed_webhook_events, currency, seed data (Wave 1)
+- [ ] 91-03-PLAN.md — Webhook endpoints + domain events + SubscriptionStatus + subscription lifecycle (Wave 2)
+- [ ] 91-04-PLAN.md — Config: BILLING_PROVIDER, Whop env vars, container wiring, plan model currency (Wave 2)
+- [ ] 91-05-PLAN.md — Cleanup: remove LS/Stripe code, plan model fields, frontend unlock, git tag (Wave 3)
