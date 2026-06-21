@@ -150,13 +150,13 @@ Plans:
 **Goal:** Implement compliance fixes for About Us, Legal, and Contact pages based on audit findings across hybrid legal framework (UU ITE, UU PDP, UU Perlindungan Konsumen, UU Merek, GDPR, FTC). About Us must display PT status, NIB, address, contact info. Legal page must include Privacy Policy (8 mandatory clauses), Terms of Service, Cookie Policy. Contact page must include data protection notice (data controller identity, purpose, retention, rights, complaint channel).
 **Requirements**: None (implementation phase based on 89-AUDIT-REPORT.md findings)
 **Depends on:** Phase 89
-**Plans:** 3 plans in 1 wave
+**Plans:** 3/3 plans complete
 
 Plans:
 
 - [x] 90-01-PLAN.md — Entity disclosure (AboutUs.tsx), Legal page removal (Legal.tsx delete + App.tsx route/nav/copyright), Footer copyright updates (both footers) (completed 2026-06-21)
 - [x] 90-02-PLAN.md — Contact page data protection microcopy (Contact.tsx), Terms of Service date sync (TermsOfService.tsx) (completed 2026-06-21)
-- [ ] 90-03-PLAN.md — Privacy Policy full compliance: enriched Cookies + 5 new sections (Data Retention, International Data Transfers, Breach Notification, Dispute Resolution, Contact and Complaints) + date sync
+- [x] 90-03-PLAN.md — Privacy Policy full compliance: enriched Cookies + 5 new sections (Data Retention, International Data Transfers, Breach Notification, Dispute Resolution, Contact and Complaints) + date sync (completed 2026-06-21)
 
 **Cross-cutting constraints:**
 
