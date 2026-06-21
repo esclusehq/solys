@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: Entity disclosure updated, Legal page removed, footer copyrights fixed
-stopped_at: Phase 90 Plan 01 complete — ready for Plan 02
-last_updated: "2026-06-21T08:43:43.018Z"
-last_activity: 2026-06-21 -- Phase 90 Plan 01 executed (90-01-SUMMARY.md delivered)
+status: Contact microcopy added, Terms date synced
+stopped_at: Phase 90 Plan 02 complete — ready for Plan 03
+last_updated: "2026-06-21T08:48:08.821Z"
+last_activity: 2026-06-21 -- Phase 90 Plan 02 executed (90-02-SUMMARY.md delivered)
 progress:
   total_phases: 7
   completed_phases: 2
   total_plans: 9
-  completed_plans: 4
+  completed_plans: 5
   percent: 29
 ---
 
@@ -27,11 +27,11 @@ See: .planning/PROJECT.md (updated 2026-06-18)
 ## Current Position
 
 Phase: 90 (implementasi-hasil-analisis-legal-landing-page-untuk-halaman) — IN PROGRESS
-Plan: 1/3 complete (Plan 01 done)
-Status: Entity disclosure updated, Legal page removed, footer copyrights fixed
-Last activity: 2026-06-21 -- Phase 90 Plan 01 executed (90-01-SUMMARY.md delivered)
+Plan: 2/3 complete (Plan 02 done)
+Status: Contact data protection microcopy added, Terms of Service date synced to June 21, 2026
+Last activity: 2026-06-21 -- Phase 90 Plan 02 executed (90-02-SUMMARY.md delivered)
 
-Progress: [████░░░░░░] 44%
+Progress: [██████░░░░] 56%
 
 ## Performance Metrics
 
@@ -46,7 +46,7 @@ Progress: [████░░░░░░] 44%
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 89 | 1 | 1 | ~3 min |
-| 90 | 1 | 1 | ~3 min |
+| 90 | 2 | 2 | ~2.5 min |
 
 **Recent Trend:**
 
@@ -67,6 +67,7 @@ Progress: [████░░░░░░] 44%
 - `.planning/phases/89-audit-seluruh-copy-dan-cta-di-landing-page-saya-dari-perspek/89-AUDIT-REPORT.md` — 829-line compliance audit report covering all 18 pages/components, 11 risk areas, with legal provisions, risk assessments, and fix suggestions
 - `.planning/phases/90-implementasi-hasil-analisis-legal-landing-page-untuk-halaman/90-CONTEXT.md` — 11 implementation decisions for Phase 90
 - `.planning/phases/90-implementasi-hasil-analisis-legal-landing-page-untuk-halaman/90-01-SUMMARY.md` — Plan 01: Entity disclosure & Legal page removal (3 tasks, 3 commits)
+- `.planning/phases/90-implementasi-hasil-analisis-legal-landing-page-untuk-halaman/90-02-SUMMARY.md` — Plan 02: Contact microcopy & Terms date sync (2 tasks, 2 commits)
 
 ### Decisions
 
@@ -76,6 +77,7 @@ Recent decisions affecting current work:
 - D-01 to D-10 from Phase 89 CONTEXT.md all implemented in audit report
 - D-01 to D-11 from Phase 90 CONTEXT.md — entity disclosure, legal structure, privacy policy, cookie policy, contact data protection
 - Plan 01 decisions enacted: D-01 (Escluse as entity name), D-02 (city+country address), D-04 (footer copyright), D-05 (About Us copy), D-06 (remove Legal summary)
+- Plan 02 decisions enacted: D-07 (Terms date sync), D-10 (Contact data protection microcopy)
 
 ### Pending Todos
 
@@ -94,6 +96,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-06-21T08:43:42.980Z
-Stopped at: Phase 90 Plan 01 complete — ready for Plan 02
+Last session: 2026-06-21T08:47:11.000Z
+Stopped at: Phase 90 Plan 02 complete — ready for Plan 03
 Resume file: None

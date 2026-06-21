@@ -155,7 +155,7 @@ Plans:
 Plans:
 
 - [x] 90-01-PLAN.md — Entity disclosure (AboutUs.tsx), Legal page removal (Legal.tsx delete + App.tsx route/nav/copyright), Footer copyright updates (both footers) (completed 2026-06-21)
-- [ ] 90-02-PLAN.md — Contact page data protection microcopy (Contact.tsx), Terms of Service date sync (TermsOfService.tsx)
+- [x] 90-02-PLAN.md — Contact page data protection microcopy (Contact.tsx), Terms of Service date sync (TermsOfService.tsx) (completed 2026-06-21)
 - [ ] 90-03-PLAN.md — Privacy Policy full compliance: enriched Cookies + 5 new sections (Data Retention, International Data Transfers, Breach Notification, Dispute Resolution, Contact and Complaints) + date sync
 
 **Cross-cutting constraints:**
