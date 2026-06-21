@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: complete
-stopped_at: Phase 89 complete — AUDIT-REPORT.md delivered
-last_updated: "2026-06-21T13:15:00.000Z"
-last_activity: 2026-06-21 -- Phase 89 execution complete (1/1 plans)
+status: Entity disclosure updated, Legal page removed, footer copyrights fixed
+stopped_at: Phase 90 Plan 01 complete — ready for Plan 02
+last_updated: "2026-06-21T08:43:43.018Z"
+last_activity: 2026-06-21 -- Phase 90 Plan 01 executed (90-01-SUMMARY.md delivered)
 progress:
-  total_phases: 6
+  total_phases: 7
   completed_phases: 2
-  total_plans: 6
-  completed_plans: 3
-  percent: 33
+  total_plans: 9
+  completed_plans: 4
+  percent: 29
 ---
 
 # Project State: Escluse Community Bot
@@ -22,30 +22,31 @@ See: .planning/PROJECT.md (updated 2026-06-18)
 
 **Core value:** The bot must serve as the central, reliable hub of the Escluse community — allowing users to learn, get support, share projects, follow development, and feel connected even when the founder is offline.
 
-**Current focus:** Phase 89 — audit-seluruh-copy-dan-cta-di-landing-page-saya-dari-perspek
+**Current focus:** Phase 90 — implementasi hasil analisis legal landing page
 
 ## Current Position
 
-Phase: 89 (audit-seluruh-copy-dan-cta-di-landing-page-saya-dari-perspek) — COMPLETE ✓
-Plan: 1/1 complete
-Status: Phase 89 execution complete
-Last activity: 2026-06-21 -- Phase 89 execution complete (89-AUDIT-REPORT.md delivered)
+Phase: 90 (implementasi-hasil-analisis-legal-landing-page-untuk-halaman) — IN PROGRESS
+Plan: 1/3 complete (Plan 01 done)
+Status: Entity disclosure updated, Legal page removed, footer copyrights fixed
+Last activity: 2026-06-21 -- Phase 90 Plan 01 executed (90-01-SUMMARY.md delivered)
 
-Progress: [████████░░] 80% (Phase 89 complete — 1/1 plans executed)
+Progress: [████░░░░░░] 44%
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 1 (Phase 89)
+- Total plans completed: 2 (Phase 89, Phase 90 Plan 01)
 - Average duration: ~3 min per plan
-- Total execution time: ~3 min
+- Total execution time: ~6 min
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 89 | 1 | 1 | ~3 min |
+| 90 | 1 | 1 | ~3 min |
 
 **Recent Trend:**
 
@@ -58,10 +59,14 @@ Progress: [████████░░] 80% (Phase 89 complete — 1/1 plans 
 - Phase 89 added: audit seluruh copy dan CTA di landing page dari perspektif hukum/legalitas bisnis digital
 - Phase 89 discuss-phase complete: 10 decisions locked in CONTEXT.md (hybrid legal framework, report structure, trademark handling, etc.)
 - Phase 89 execution complete: 89-AUDIT-REPORT.md delivered with 3-tier classification (Safe/Risky/Must Avoid)
+- Phase 90 added: implementasi hasil analisis legal landing page untuk halaman About Us, Legal, dan Contact sesuai kerangka hybrid (UU ITE, UU PDP, UU Perlindungan Konsumen, UU Merek, GDPR, FTC)
+- Phase 90 context gathered: 11 decisions locked (D-01 to D-11) covering entity disclosure, legal page structure, privacy policy, cookie policy, contact data protection
 
 ### Key Deliverable
 
 - `.planning/phases/89-audit-seluruh-copy-dan-cta-di-landing-page-saya-dari-perspek/89-AUDIT-REPORT.md` — 829-line compliance audit report covering all 18 pages/components, 11 risk areas, with legal provisions, risk assessments, and fix suggestions
+- `.planning/phases/90-implementasi-hasil-analisis-legal-landing-page-untuk-halaman/90-CONTEXT.md` — 11 implementation decisions for Phase 90
+- `.planning/phases/90-implementasi-hasil-analisis-legal-landing-page-untuk-halaman/90-01-SUMMARY.md` — Plan 01: Entity disclosure & Legal page removal (3 tasks, 3 commits)
 
 ### Decisions
 
@@ -69,6 +74,8 @@ Decisions are logged in PROJECT.md Key Decisions table.
 Recent decisions affecting current work:
 
 - D-01 to D-10 from Phase 89 CONTEXT.md all implemented in audit report
+- D-01 to D-11 from Phase 90 CONTEXT.md — entity disclosure, legal structure, privacy policy, cookie policy, contact data protection
+- Plan 01 decisions enacted: D-01 (Escluse as entity name), D-02 (city+country address), D-04 (footer copyright), D-05 (About Us copy), D-06 (remove Legal summary)
 
 ### Pending Todos
 
@@ -87,6 +94,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-06-21
-Stopped at: Phase 89 complete — AUDIT-REPORT.md delivered
-Resume file: .planning/phases/89-audit-seluruh-copy-dan-cta-di-landing-page-saya-dari-perspek/89-AUDIT-REPORT.md
+Last session: 2026-06-21T08:43:42.980Z
+Stopped at: Phase 90 Plan 01 complete — ready for Plan 02
+Resume file: None

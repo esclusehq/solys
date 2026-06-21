@@ -14,71 +14,87 @@ The Escluse Community Bot transforms the Escluse Discord server into a self-serv
 ## Phase Details
 
 ### Phase 1: Foundation & Onboarding
+
 **Goal**: New members get automatically welcomed and assigned roles based on interests; server staff can configure behavior via settings.
 **Mode**: mvp
 **Depends on**: Nothing (first phase)
 **Requirements**: ONB-01, ONB-02, ONB-03, PERM-01, ADMN-03
 **Success Criteria** (what must be TRUE):
+
   1. New member joins server → receives a welcome embed with getting-started guides, links, and resources
   2. New member can select interests via interactive buttons/select menu → gets auto-assigned matching roles
   3. Admin can configure welcome message content, interest options, and role mappings via server settings command
   4. All bot commands respect role-based permissions (configurable per role and per command)
+
 **Plans**: 3 plans in 2 waves
 **UI hint**: yes
 
 Plans:
+
 - [ ] 01-01: Walking Skeleton — Scaffold monorepo, Docker Compose (postgres/redis/api/bot), bot client with command handlers, Axum API with DB, /ping command
 - [ ] 01-02: Settings + Permissions — Normalized settings tables, `/admin settings` command, role-based permission system, command gate
 - [ ] 01-03: Welcome + Interest Onboarding — Multi-message bilingual welcome, interest select menu, dual auto-role system, role logging
 
 ### Phase 2: Information Hub
+
 **Goal**: Users can find information about Escluse without asking the founder — self-service knowledge.
 **Mode**: mvp
 **Depends on**: Phase 1
 **Requirements**: INFO-01, INFO-02, INFO-04, UPDT-01, UPDT-03
 **Success Criteria** (what must be TRUE):
+
   1. User can search documentation via `/escluse docs <query>` and get relevant search results with links
   2. User can view pricing, features, and "what is Escluse" information via `/escluse pricing` and `/escluse what-is`
   3. User can get quick answers from FAQ via a slash command
   4. Admin can publish release announcements and changelog updates to a designated announcements channel
   5. Admin can post maintenance notices visible to the server community
+
 **Plans**: TBD
 **UI hint**: yes
 
 Plans:
+
 - [ ] 02-01: [Plan description — TBD during phase planning]
 
 ### Phase 3: Support & Administration
+
 **Goal**: Users can submit structured bug reports; staff can manage server channels, roles, and member activity.
 **Mode**: mvp
 **Depends on**: Phase 2
 **Requirements**: SUPP-02, ADMN-01, ADMN-02, ADMN-04
 **Success Criteria** (what must be TRUE):
+
   1. User can submit a structured bug report (version, OS, steps, logs) via a modal form
   2. Admin can create, edit, and delete channels via slash commands
   3. Admin can manage roles (create, assign, remove) via slash commands
   4. Staff can view member join/leave logs and event history via a logging channel
+
 **Plans**: TBD
 **UI hint**: yes
 
 Plans:
+
 - [ ] 03-01: [Plan description — TBD during phase planning]
 
 ### Phase 4: Community Features
+
 **Goal**: Community members can participate in polls, vote on features, get recognized for contributions, and follow development via GitHub.
 **Mode**: mvp
 **Depends on**: Phase 3
 **Requirements**: FDBK-01, FDBK-02, DEV-01, RECG-01, RECG-02, RECG-03
 **Success Criteria** (what must be TRUE):
+
   1. User can vote on feature requests and participate in game support polls
   2. User can respond to community surveys and template requests
   3. GitHub events (issues, PRs, releases) automatically appear in a designated Discord channel
   4. User can generate referral links and track successful referrals
   5. User receives role-based recognition (Early Supporter, Beta Tester, Contributor, Community Helper) based on contributions and contributions are tracked
+
 **Plans**: TBD
 **UI hint**: yes
 
 Plans:
+
 - [ ] 04-01: [Plan description — TBD during phase planning]
 
 ## Progress
@@ -98,10 +114,10 @@ Plans:
 **Plans:** 2/2 plans complete
 
 Plans:
+
 - [x] TBD (run /gsd-plan-phase 88 to break down) (completed 2026-06-18)
 
 ### Phase 89: audit seluruh copy dan CTA di landing page saya dari perspektif hukum/legalitas bisnis digital. 
-
 
 Cakupan audit meliputi seluruh teks yang ada di menu:
 
@@ -110,7 +126,6 @@ Cakupan audit meliputi seluruh teks yang ada di menu:
 - Resources: Documentation, API Reference, Community Forum
 
 - Company: About Us, Legal, Contact
-
 
 Tolong kelompokkan analisis kamu menjadi 3 kategori:
 
@@ -127,6 +142,7 @@ Tolong kelompokkan analisis kamu menjadi 3 kategori:
 **Plans:** 1/1 plans complete
 
 Plans:
+
 - [x] 89-01-PLAN.md — Read all 16 source files, classify copy elements against hybrid legal framework, compile 89-AUDIT-REPORT.md with 3-tier classification (Safe/Risky/Must Avoid), fix suggestions, legal citations, and future recommendations. Per D-01 to D-10 locked decisions.
 
 ### Phase 90: implementasi hasil analisis legal landing page untuk halaman About Us, Legal, dan Contact sesuai kerangka hybrid (UU ITE, UU PDP, UU Perlindungan Konsumen, UU Merek, GDPR, FTC)
@@ -137,6 +153,11 @@ Plans:
 **Plans:** 3 plans in 1 wave
 
 Plans:
-- [ ] 90-01-PLAN.md — Entity disclosure (AboutUs.tsx), Legal page removal (Legal.tsx delete + App.tsx route/nav/copyright), Footer copyright updates (both footers)
+
+- [x] 90-01-PLAN.md — Entity disclosure (AboutUs.tsx), Legal page removal (Legal.tsx delete + App.tsx route/nav/copyright), Footer copyright updates (both footers) (completed 2026-06-21)
 - [ ] 90-02-PLAN.md — Contact page data protection microcopy (Contact.tsx), Terms of Service date sync (TermsOfService.tsx)
 - [ ] 90-03-PLAN.md — Privacy Policy full compliance: enriched Cookies + 5 new sections (Data Retention, International Data Transfers, Breach Notification, Dispute Resolution, Contact and Complaints) + date sync
+
+**Cross-cutting constraints:**
+
+- npm run build succeeds with no TypeScript errors
