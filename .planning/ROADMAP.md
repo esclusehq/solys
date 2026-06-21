@@ -128,3 +128,15 @@ Tolong kelompokkan analisis kamu menjadi 3 kategori:
 
 Plans:
 - [x] 89-01-PLAN.md — Read all 16 source files, classify copy elements against hybrid legal framework, compile 89-AUDIT-REPORT.md with 3-tier classification (Safe/Risky/Must Avoid), fix suggestions, legal citations, and future recommendations. Per D-01 to D-10 locked decisions.
+
+### Phase 90: implementasi hasil analisis legal landing page untuk halaman About Us, Legal, dan Contact sesuai kerangka hybrid (UU ITE, UU PDP, UU Perlindungan Konsumen, UU Merek, GDPR, FTC)
+
+**Goal:** Implement compliance fixes for About Us, Legal, and Contact pages based on audit findings across hybrid legal framework (UU ITE, UU PDP, UU Perlindungan Konsumen, UU Merek, GDPR, FTC). About Us must display PT status, NIB, address, contact info. Legal page must include Privacy Policy (8 mandatory clauses), Terms of Service, Cookie Policy. Contact page must include data protection notice (data controller identity, purpose, retention, rights, complaint channel).
+**Requirements**: None (implementation phase based on 89-AUDIT-REPORT.md findings)
+**Depends on:** Phase 89
+**Plans:** 3 plans in 1 wave
+
+Plans:
+- [ ] 90-01-PLAN.md — Entity disclosure (AboutUs.tsx), Legal page removal (Legal.tsx delete + App.tsx route/nav/copyright), Footer copyright updates (both footers)
+- [ ] 90-02-PLAN.md — Contact page data protection microcopy (Contact.tsx), Terms of Service date sync (TermsOfService.tsx)
+- [ ] 90-03-PLAN.md — Privacy Policy full compliance: enriched Cookies + 5 new sections (Data Retention, International Data Transfers, Breach Notification, Dispute Resolution, Contact and Complaints) + date sync
