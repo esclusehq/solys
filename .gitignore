@@ -59,6 +59,7 @@ target/
 agent/agent-core/
 agent/solys/
 api/
+escluse-bot/
 app/
 compose/
 docker/
