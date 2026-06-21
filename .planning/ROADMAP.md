@@ -99,3 +99,31 @@ Plans:
 
 Plans:
 - [x] TBD (run /gsd-plan-phase 88 to break down) (completed 2026-06-18)
+
+### Phase 89: audit seluruh copy dan CTA di landing page saya dari perspektif hukum/legalitas bisnis digital. 
+
+
+Cakupan audit meliputi seluruh teks yang ada di menu:
+
+- Product: Features, Pricing, Supported Games, Changelog
+
+- Resources: Documentation, API Reference, Community Forum
+
+- Company: About Us, Legal, Contact
+
+
+Tolong kelompokkan analisis kamu menjadi 3 kategori:
+
+1. "KATA/CTA YANG AMAN" (Boleh digunakan tanpa syarat)
+
+2. "KATA/CTA BERISIKO" (Boleh digunakan tapi butuh disclaimer/catatan hukum)
+
+3. "KATA/CTA YANG HARUS DIHINDARI" (Secara hukum ilegal, menjebak, atau melanggar hak cipta pihak ketiga, terutama di bagian Supported Games dan Pricing).
+
+**Goal:** [To be planned]
+**Requirements**: TBD
+**Depends on:** Phase 88
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (run /gsd-plan-phase 89 to break down)
