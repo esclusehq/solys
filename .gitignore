@@ -1,0 +1,69 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Build
+dist/
+build/
+.next/
+out/
+
+# Testing
+test/
+coverage/
+
+# Playwright
+.playwright-mcp/
+
+# opencode local config
+.opencode/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Environment
+.env
+.env.*
+config.json
+
+# Misc
+*.tar
+*.gz
+skills-lock.json
+
+# Rust build artifacts
+target/
+
+# Backup files
+*.bak
+*.tmp
+
+# Embedded repos (tracked separately)
+agent/agent-core/
+
+# Sensitive
+.planning/
+PUSH_COMMIT.md
+DEPLOY.md
+docker-compose.yml
+.github/PULL_REQUEST_TEMPLATE.md
+.github/profile/
+
+# Docs
+docs/
+
+# release.yml is explicitly tracked (CI/CD for agent builds)
