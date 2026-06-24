@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v0.4.16] - 2026-06-24
+
+### Fixed
+
+- **Agent ignores `mc_version` when creating Docker containers** — `DeployConfig.version` was never forwarded from `agent_connection.rs` to the runtime payload, and both `handle_create` and `handle_start` in `runtime.rs` ignored the incoming `version` field. The Docker container always received `VERSION=LATEST` regardless of the version the user selected. Minecraft server `test` (created with version 1.21.1) was running version 26.2 because `LATEST` resolved to the latest release. Fixed by forwarding `config.version` as `payload["version"]` in `agent_connection.rs` and inserting `VERSION=<version>` into the container's environment variables in `runtime.rs`.
+
 ## [v0.4.15] - 2026-06-14
 
 ### Fixed

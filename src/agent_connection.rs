@@ -781,11 +781,14 @@ pub async fn run(
                                                      if let Some(cpu) = config.cpu_limit {
                                                          payload["cpu_limit"] = serde_json::json!(cpu);
                                                      }
-                                                     // Forward loader to payload so runtime.rs can determine protocol (TCP vs UDP)
-                                                     if let Some(loader) = &config.loader {
-                                                         payload["loader"] = serde_json::json!(loader);
-                                                     }
-                                                 }
+                                                      // Forward loader to payload so runtime.rs can determine protocol (TCP vs UDP)
+                                                      if let Some(loader) = &config.loader {
+                                                          payload["loader"] = serde_json::json!(loader);
+                                                      }
+                                                      if let Some(version) = &config.version {
+                                                          payload["version"] = serde_json::json!(version);
+                                                      }
+                                                  }
                                                 
                                                 let task = agent_proto::Task::new(
                                                     task_type.to_string(),

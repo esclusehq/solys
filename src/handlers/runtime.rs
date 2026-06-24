@@ -116,6 +116,11 @@ pub async fn handle_create(task: Task, runtime: &RuntimeDetector) -> Result<serd
             env_vec.push(format!("{}={}", k, v));
         }
     }
+    if let Some(version) = &payload.version {
+        if !version.is_empty() {
+            env_vec.push(format!("VERSION={}", version));
+        }
+    }
 
     let mut port_bindings = std::collections::HashMap::new();
     let mut exposed_ports = std::collections::HashMap::new();
@@ -263,6 +268,11 @@ pub async fn handle_start(task: Task, runtime: &RuntimeDetector) -> Result<serde
                     env_vars.insert(k.clone(), val.to_string());
                 }
             }
+        }
+    }
+    if let Some(version) = payload.get("version").and_then(|v| v.as_str()) {
+        if !version.is_empty() {
+            env_vars.insert("VERSION".to_string(), version.to_string());
         }
     }
     
