@@ -58,6 +58,8 @@ target/
 # Submodules / Embedded repos (tracked separately)
 agent/agent-core/
 agent/solys/
+backup/
+escluse-bot/
 api/
 app/
 compose/
