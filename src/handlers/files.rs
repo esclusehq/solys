@@ -2,6 +2,8 @@
 //!
 //! Handles file operations on containers running on this node.
 
+use std::path::Path;
+
 use agent_proto::Task;
 use anyhow::{Context, Result};
 use tokio::process::Command;
@@ -18,13 +20,7 @@ pub async fn handle_list_dir(task: Task) -> Result<serde_json::Value> {
 
     info!(container_name = %container_name, path = %path, "Listing directory");
 
-    let full_path = if path.is_empty() || path == "." {
-        "/data".to_string()
-    } else if path.starts_with('/') {
-        format!("/data{}", path)
-    } else {
-        format!("/data/{}", path)
-    };
+    let full_path = resolve_path(path)?;
 
     let output = Command::new("docker")
         .args(["exec", &container_name, "ls", "-la", "--time-style=+%s", &full_path])
@@ -51,10 +47,11 @@ pub async fn handle_read_file(task: Task) -> Result<serde_json::Value> {
         .and_then(|v| v.as_str())
         .ok_or_else(|| anyhow::anyhow!("Missing path"))?;
 
-    info!(container_name = %container_name, path = %path, "Reading file");
+    let resolved_path = resolve_path(path)?;
+    info!(container_name = %container_name, path = %resolved_path, "Reading file");
 
     let output = Command::new("docker")
-        .args(["exec", &container_name, "cat", path])
+        .args(["exec", &container_name, "cat", &resolved_path])
         .output()
         .await
         .context("Failed to run docker exec cat")?;
@@ -83,7 +80,8 @@ pub async fn handle_write_file(task: Task) -> Result<serde_json::Value> {
         .and_then(|v| v.as_str())
         .ok_or_else(|| anyhow::anyhow!("Missing content"))?;
 
-    info!(container_name = %container_name, path = %path, "Writing file");
+    let resolved_path = resolve_path(path)?;
+    info!(container_name = %container_name, path = %resolved_path, "Writing file");
 
     // Write to temp file and use docker cp
     let temp_dir = std::env::temp_dir().join(format!("escluse-write-{}", uuid::Uuid::new_v4()));
@@ -95,7 +93,7 @@ pub async fn handle_write_file(task: Task) -> Result<serde_json::Value> {
         .context("Failed to write temp file")?;
 
     let output = Command::new("docker")
-        .args(["cp", temp_file.to_str().unwrap(), &format!("{}:{}", container_name, path)])
+        .args(["cp", temp_file.to_str().unwrap(), &format!("{}:{}", container_name, resolved_path)])
         .output()
         .await
         .context("Failed to run docker cp")?;
@@ -118,10 +116,11 @@ pub async fn handle_delete(task: Task) -> Result<serde_json::Value> {
         .and_then(|v| v.as_str())
         .ok_or_else(|| anyhow::anyhow!("Missing path"))?;
 
-    info!(container_name = %container_name, path = %path, "Deleting path");
+    let resolved_path = resolve_path(path)?;
+    info!(container_name = %container_name, path = %resolved_path, "Deleting path");
 
     let output = Command::new("docker")
-        .args(["exec", &container_name, "rm", "-rf", path])
+        .args(["exec", &container_name, "rm", "-rf", &resolved_path])
         .output()
         .await
         .context("Failed to run docker exec rm")?;
@@ -141,10 +140,11 @@ pub async fn handle_mkdir(task: Task) -> Result<serde_json::Value> {
         .and_then(|v| v.as_str())
         .ok_or_else(|| anyhow::anyhow!("Missing path"))?;
 
-    info!(container_name = %container_name, path = %path, "Creating directory");
+    let resolved_path = resolve_path(path)?;
+    info!(container_name = %container_name, path = %resolved_path, "Creating directory");
 
     let output = Command::new("docker")
-        .args(["exec", &container_name, "mkdir", "-p", path])
+        .args(["exec", &container_name, "mkdir", "-p", &resolved_path])
         .output()
         .await
         .context("Failed to run docker exec mkdir")?;
@@ -167,10 +167,12 @@ pub async fn handle_rename(task: Task) -> Result<serde_json::Value> {
         .and_then(|v| v.as_str())
         .ok_or_else(|| anyhow::anyhow!("Missing dest_path"))?;
 
-    info!(container_name = %container_name, source = %source, dest = %dest, "Renaming path");
+    let resolved_source = resolve_path(source)?;
+    let resolved_dest = resolve_path(dest)?;
+    info!(container_name = %container_name, source = %resolved_source, dest = %resolved_dest, "Renaming path");
 
     let output = Command::new("docker")
-        .args(["exec", &container_name, "mv", source, dest])
+        .args(["exec", &container_name, "mv", &resolved_source, &resolved_dest])
         .output()
         .await
         .context("Failed to run docker exec mv")?;
@@ -193,10 +195,12 @@ pub async fn handle_copy(task: Task) -> Result<serde_json::Value> {
         .and_then(|v| v.as_str())
         .ok_or_else(|| anyhow::anyhow!("Missing dest_path"))?;
 
-    info!(container_name = %container_name, source = %source, dest = %dest, "Copying path");
+    let resolved_source = resolve_path(source)?;
+    let resolved_dest = resolve_path(dest)?;
+    info!(container_name = %container_name, source = %resolved_source, dest = %resolved_dest, "Copying path");
 
     let output = Command::new("docker")
-        .args(["exec", &container_name, "cp", "-r", source, dest])
+        .args(["exec", &container_name, "cp", "-r", &resolved_source, &resolved_dest])
         .output()
         .await
         .context("Failed to run docker exec cp")?;
@@ -225,4 +229,25 @@ fn get_container_name(payload: &serde_json::Value) -> Result<String> {
     } else {
         Err(anyhow::anyhow!("Missing container_name or server_id"))
     }
+}
+
+fn resolve_path(path_str: &str) -> Result<String> {
+    let base = Path::new("/data");
+    let resolved = if path_str.is_empty() || path_str == "." {
+        base.to_path_buf()
+    } else if path_str.starts_with('/') {
+        // Strip leading slash and join to /data — this removes the traversal vector
+        let cleaned = path_str.trim_start_matches('/');
+        base.join(cleaned)
+    } else {
+        base.join(path_str)
+    };
+    // Canonicalize to resolve symlinks and .. components
+    let canonical = resolved.canonicalize()
+        .map_err(|e| anyhow::anyhow!("Path canonicalization failed: {} (path must exist on host)", e))?;
+    // Verify the resolved path starts with /data/
+    if !canonical.starts_with(base) {
+        anyhow::bail!("Path traversal detected: {:?} resolves outside /data/", path_str);
+    }
+    Ok(canonical.to_string_lossy().to_string())
 }
