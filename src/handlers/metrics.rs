@@ -156,6 +156,12 @@ pub async fn collect_full_metrics() -> anyhow::Result<MetricsReport> {
                     .trim_start_matches('/')
                     .to_string();
 
+                // C-01: Validate container name before docker exec
+                if !container_name.is_empty() && !container_name.chars().all(|c| c.is_alphanumeric() || c == '_' || c == '-' || c == '.') {
+                    tracing::warn!(container_name = %container_name, "Skipping metrics collection: invalid container name");
+                    continue;
+                }
+
                 // Get stats for this container
                 let mut disk_usage_bytes = 0u64;
                 if let Some(Ok(stats)) = docker.stats(&container_id, None).next().await {
