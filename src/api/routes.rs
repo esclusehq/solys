@@ -14,6 +14,7 @@ use axum::{
 };
 use tokio_stream::StreamExt;
 
+use crate::api::middleware::auth::auth_middleware;
 use crate::api::middleware::tracing::trace_id_middleware;
 use crate::task_state::TASK_STATE_TRACKER;
 use crate::task_state;
@@ -43,6 +44,7 @@ pub fn create_router() -> Router {
         // Events (SSE)
         .route("/events", get(event_stream))
         .layer(middleware::from_fn(trace_id_middleware))
+        .layer(middleware::from_fn(auth_middleware))
         .with_state(Arc::new(ApiState))
 }
 
