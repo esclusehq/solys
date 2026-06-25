@@ -10,7 +10,9 @@
 //! ourselves. If the IGD doesn't expose the WANIPConnection service we
 //! report the failure with a clear "upnp-no-igd-control" reason.
 
+use std::sync::Mutex;
 use std::time::Duration;
+use std::time::Instant;
 
 use agent_proto::Task;
 use anyhow::{anyhow, Result};
@@ -22,9 +24,72 @@ use uuid::Uuid;
 
 use super::is_vps_node;
 
+struct IgdCache {
+    location: String,
+    control_url: String,
+    discovered_at: Instant,
+}
+
+lazy_static::lazy_static! {
+    static ref IGD_CACHE: Mutex<Option<IgdCache>> = Mutex::new(None);
+    static ref LAST_DISCOVERY: Mutex<Instant> = Mutex::new(Instant::now());
+}
+
 const LEASE_SECS: u32 = 3600;       // 1 hour
 const DISCOVERY_TIMEOUT: Duration = Duration::from_secs(2);
 const HTTP_TIMEOUT: Duration = Duration::from_secs(5);
+const CACHE_TTL: Duration = Duration::from_secs(60);
+const RATE_LIMIT: Duration = Duration::from_secs(10);
+
+/// Discover the UPnP IGD on the LAN, using a rate-limited + cached approach.
+///
+/// Rate limit: at most one SSDP discovery per 10 seconds (global).
+/// Cache: IGD location and control URL are cached for 60 seconds.
+async fn discover_igd() -> Result<(String, String)> {
+    // Rate limit check — reject if less than RATE_LIMIT since last discovery.
+    {
+        let mut last = LAST_DISCOVERY.lock().unwrap();
+        if last.elapsed() < RATE_LIMIT {
+            return Err(anyhow!("UPnP rate limited"));
+        }
+        *last = Instant::now();
+    }
+
+    // Cache check — return cached IGD data if TTL hasn't expired.
+    {
+        let cache = IGD_CACHE.lock().unwrap();
+        if let Some(ref cached) = *cache {
+            if cached.discovered_at.elapsed() < CACHE_TTL {
+                return Ok((cached.location.clone(), cached.control_url.clone()));
+            }
+        }
+    }
+
+    // SSDP discovery — run in spawn_blocking (search_once is sync, blocks on the socket).
+    let opts = search::Options::default_for(upnp_rs::SpecVersion::V10);
+    let responses = tokio::task::spawn_blocking(move || search::search_once(opts))
+        .await
+        .map_err(|e| anyhow!("UPnP discovery join error: {}", e))?
+        .map_err(|e| anyhow!("UPnP discovery failed: {}", e))?;
+    let first = responses.into_iter().next()
+        .ok_or_else(|| anyhow!("No UPnP IGD found on LAN"))?;
+    let location = first.location.to_string();
+
+    // Fetch the device description XML to find the WANIPConnection control URL.
+    let control_url = fetch_igd_control_url(&location).await?;
+
+    // Update cache.
+    {
+        let mut cache = IGD_CACHE.lock().unwrap();
+        *cache = Some(IgdCache {
+            location: location.clone(),
+            control_url: control_url.clone(),
+            discovered_at: Instant::now(),
+        });
+    }
+
+    Ok((location, control_url))
+}
 
 #[derive(Debug, Deserialize)]
 pub struct UpnpPayload {
@@ -47,20 +112,10 @@ pub async fn add(task: Task) -> Result<Value, anyhow::Error> {
         return Ok(json!({"status": "skipped", "reason": "vps_node_no_upnp"}));
     }
 
-    // 1) SSDP discovery — run in spawn_blocking (search_once is sync, blocks on the socket).
-    let opts = search::Options::default_for(upnp_rs::SpecVersion::V10);
-    let responses = tokio::task::spawn_blocking(move || search::search_once(opts))
-        .await
-        .map_err(|e| anyhow!("UPnP discovery join error: {}", e))?
-        .map_err(|e| anyhow!("UPnP discovery failed: {}", e))?;
-    let first = responses.into_iter().next()
-        .ok_or_else(|| anyhow!("No UPnP IGD found on LAN"))?;
-    let location = first.location.to_string();
+    // 1) Discover IGD via rate-limited + cached SSDP discovery (C-07).
+    let (location, control_url) = discover_igd().await?;
 
-    // 2) Fetch the device description XML to find the WANIPConnection control URL.
-    let control_url = fetch_igd_control_url(&location).await?;
-
-    // 3) POST the SOAP AddPortMapping envelope.
+    // 2) POST the SOAP AddPortMapping envelope.
     let internal_client = local_ip
         .map(|v| v.to_string())
         .unwrap_or_else(|| "0.0.0.0".to_string());
@@ -118,15 +173,8 @@ pub async fn remove(task: Task) -> Result<Value, anyhow::Error> {
         return Ok(json!({"status": "skipped", "reason": "vps_node_no_upnp"}));
     }
 
-    let opts = search::Options::default_for(upnp_rs::SpecVersion::V10);
-    let responses = tokio::task::spawn_blocking(move || search::search_once(opts))
-        .await
-        .map_err(|e| anyhow!("UPnP discovery join error: {}", e))?
-        .map_err(|e| anyhow!("UPnP discovery failed: {}", e))?;
-    let first = responses.into_iter().next()
-        .ok_or_else(|| anyhow!("No UPnP IGD found"))?;
-    let location = first.location.to_string();
-    let control_url = fetch_igd_control_url(&location).await?;
+    // 1) Discover IGD via rate-limited + cached SSDP discovery (C-07).
+    let (location, control_url) = discover_igd().await?;
 
     let body = build_delete_port_mapping_body(&p.proto, p.port);
     let resp = reqwest::Client::new()
