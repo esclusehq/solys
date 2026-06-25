@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **`handle_create` drops `env_vars` from server create payload** — `ServerCreatePayload.env` deserialized from JSON key `"env"`, but the backend sends JSON key `"env_vars"`. Renamed the struct field to `env_vars` so `TYPE`, `VERSION`, `MEMORY` and all other environment variables reach the Docker container during initial server creation. `handle_start` was not affected because it reads `payload["env_vars"]` directly from `serde_json::Value` rather than via the struct.
+
 ## [v0.4.16] - 2026-06-24
 
 ### Fixed

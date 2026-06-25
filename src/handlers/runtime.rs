@@ -18,7 +18,7 @@ pub struct ServerCreatePayload {
     pub server_id: uuid::Uuid,
     pub image: String,
     pub name: String,
-    pub env: Option<HashMap<String, String>>,
+    pub env_vars: Option<HashMap<String, String>>,
     pub ports: Option<HashMap<String, Vec<String>>>,
     pub container_port: Option<u32>,
     pub memory_limit: Option<i64>,
@@ -111,7 +111,7 @@ pub async fn handle_create(task: Task, runtime: &RuntimeDetector) -> Result<serd
     info!(server_id = %payload.server_id, image = %payload.image, name = %payload.name, "Creating container");
 
     let mut env_vec = vec![];
-    if let Some(env) = &payload.env {
+    if let Some(env) = &payload.env_vars {
         for (k, v) in env {
             env_vec.push(format!("{}={}", k, v));
         }
