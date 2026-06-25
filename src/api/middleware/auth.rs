@@ -53,12 +53,12 @@ mod tests {
     use super::*;
     use axum::{
         body::Body,
-        http::HeaderValue,
         routing::get,
         Router,
         middleware,
         response::IntoResponse,
     };
+    use tower::ServiceExt;
 
     async fn dummy_handler() -> impl IntoResponse {
         "OK"
