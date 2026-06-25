@@ -99,47 +99,46 @@ async fn check_and_update() -> Result<()> {
     // audit-only trigger point.
         tracing::trace!("[CONNECTIVITY_TRIGGER] Public IP changed; backend probe will re-evaluate");
 
-    let config_guard = dns::DNS_CONFIG.read().await;
-    let config = match config_guard.as_ref() {
-        Some(cfg) => cfg.clone(),
+    // Hold the read lock across all DNS operations to avoid cloning Zeroizing<String>
+    // tokio::sync::RwLock allows concurrent reads across .await points, and the only
+    // writer (DnsConfig handler) runs in a different task, so this is safe.
+    let guard = dns::DNS_CONFIG.read().await;
+    let cfg = match guard.as_ref() {
+        Some(cfg) => cfg,
         None => {
             debug!("DNS not configured yet, skipping DNS record update");
             return Ok(());
         }
     };
-    drop(config_guard);
 
-    if !config.auto_refresh {
-            debug!("Auto-refresh disabled, skipping DNS record update");
+    if !cfg.auto_refresh {
+        debug!("Auto-refresh disabled, skipping DNS record update");
         return Ok(());
     }
 
-    let global_subdomain = config.subdomain.clone()
-        .unwrap_or_else(|| config.zone_name.split('.').next().unwrap_or("node").to_string());
+    let global_subdomain = cfg.subdomain.clone()
+        .unwrap_or_else(|| cfg.zone_name.split('.').next().unwrap_or("node").to_string());
 
-    // Build the full list of FQDNs to keep in sync:
-    //   1. The global record: `<global_subdomain>.<wildcard_domain>` (e.g. `play.esluce.com`)
-    //   2. Per-server records: `<server_sub>.<global_subdomain>.<wildcard_domain>`
-    //      (e.g. `mantap-wou.play.esluce.com`) — pulled from config.extra_subdomains
-    let mut fqdns: Vec<String> = Vec::with_capacity(1 + config.extra_subdomains.len());
-    fqdns.push(format!("{}.{}", global_subdomain, config.wildcard_domain));
-    for sub in &config.extra_subdomains {
+    // Build the full list of FQDNs to keep in sync
+    let mut fqdns: Vec<String> = Vec::with_capacity(1 + cfg.extra_subdomains.len());
+    fqdns.push(format!("{}.{}", global_subdomain, cfg.wildcard_domain));
+    for sub in &cfg.extra_subdomains {
         let trimmed = sub.trim();
         if trimmed.is_empty() {
             continue;
         }
-        fqdns.push(format!("{}.{}.{}", trimmed, global_subdomain, config.wildcard_domain));
+        fqdns.push(format!("{}.{}.{}", trimmed, global_subdomain, cfg.wildcard_domain));
     }
 
     let mut updated = 0usize;
     let mut created = 0usize;
     let mut failed = 0usize;
     for full_name in &fqdns {
-        match dns::find_dns_record(&config.api_token, &config.zone_id, full_name).await {
+        match dns::find_dns_record(&cfg.api_token, &cfg.zone_id, full_name).await {
             Ok(Some((record_id, _))) => {
                 match dns::update_dns_record(
-                    &config.api_token,
-                    &config.zone_id,
+                    &cfg.api_token,
+                    &cfg.zone_id,
                     &record_id,
                     full_name,
                     &current_ip,
@@ -155,20 +154,22 @@ async fn check_and_update() -> Result<()> {
                     }
                 }
             }
-            Ok(None) => match dns::create_dns_record(
-                &config.api_token,
-                &config.zone_id,
-                full_name,
-                &current_ip,
-            )
-            .await
-            {
-                    Ok(rid) => {
-                        created += 1;
-                }
-                Err(e) => {
-                    error!("DNS create failed: {}", e);
-                    failed += 1;
+            Ok(None) => {
+                match dns::create_dns_record(
+                    &cfg.api_token,
+                    &cfg.zone_id,
+                    full_name,
+                    &current_ip,
+                )
+                .await
+                {
+                        Ok(rid) => {
+                            created += 1;
+                    }
+                    Err(e) => {
+                        error!("DNS create failed: {}", e);
+                        failed += 1;
+                    }
                 }
             },
             Err(e) => {
@@ -177,6 +178,7 @@ async fn check_and_update() -> Result<()> {
             }
         }
     }
+    drop(guard);
 
     debug!(
         "DDNS cycle complete: {} updated, {} created, {} failed (of {} total)",

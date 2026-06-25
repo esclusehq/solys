@@ -59,6 +59,9 @@ lazy_static      = "1.4"
 # C-05: Secure temp files for SSH key material
 tempfile = "3"
 
+# W-01: Zeroizing secret buffers on drop
+zeroize = "1"
+
 # Docker client
 bollard         = "0.18"
 
