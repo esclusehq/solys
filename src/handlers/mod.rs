@@ -42,8 +42,11 @@ pub async fn execute_task(
     // Log task received
     audit::log_task_received(task_id, &task_type).await;
 
-    // Check rate limit before execution
-    if let Err(e) = crate::rate_limit::check_rate_limit(&task_type, None).await {
+    // Check rate limit before execution — extract user_id from task payload for per-user limiting
+    let user_id = task.payload.get("user_id")
+        .and_then(|v| v.as_str())
+        .and_then(|s| uuid::Uuid::parse_str(s).ok());
+    if let Err(e) = crate::rate_limit::check_rate_limit(&task_type, user_id).await {
         error!(task_type = %task_type, error = %e, "Rate limit exceeded");
         crate::task_state::send_progress(task_id, "failed", 0.0, &format!("Rate limit exceeded: {}", e)).await;
         audit::log_task_failed(task_id, &format!("Rate limit: {}", e)).await;
