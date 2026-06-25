@@ -9,6 +9,9 @@ use agent_ssh::SshClient;
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
+use std::io::Write;
+use std::os::unix::fs::PermissionsExt;
+use tempfile::Builder;
 use tracing::info;
 
 #[derive(Debug, Deserialize)]
@@ -146,11 +149,12 @@ pub async fn handle_connect(task: Task) -> Result<serde_json::Value> {
 
     let client = match &payload.auth {
         SshAuth::Key { key_content, passphrase: _ } => {
-            let temp_dir = std::env::temp_dir();
-            let key_path = temp_dir.join(format!("ssh_key_{}", uuid::Uuid::new_v4()));
-            
-            std::fs::write(&key_path, key_content)?;
-            
+            let mut temp_file = Builder::new()
+                .permissions(PermissionsExt::from_mode(0o600))
+                .tempfile()?;
+            temp_file.write_all(key_content.as_bytes())?;
+            let key_path = temp_file.path().to_owned();
+
             let result = SshClient::connect(
                 &payload.host,
                 port,
@@ -159,7 +163,7 @@ pub async fn handle_connect(task: Task) -> Result<serde_json::Value> {
                 Some(key_path.to_str().unwrap()),
             ).await;
 
-            let _ = std::fs::remove_file(&key_path);
+            drop(temp_file);
             result?
         }
         SshAuth::Password { password } => {
