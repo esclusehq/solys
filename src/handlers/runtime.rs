@@ -275,6 +275,14 @@ pub async fn handle_start(task: Task, runtime: &RuntimeDetector) -> Result<serde
             env_vars.insert("VERSION".to_string(), version.to_string());
         }
     }
+    if !env_vars.contains_key("TYPE") {
+        if let Some(loader) = payload.get("loader").and_then(|v| v.as_str()) {
+            let upper = loader.to_uppercase();
+            if upper != "VANILLA" && upper != "BEDROCK" && !upper.is_empty() {
+                env_vars.insert("TYPE".to_string(), upper);
+            }
+        }
+    }
     
     let container_port = payload.get("container_port")
         .and_then(|v| v.as_i64())
