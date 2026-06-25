@@ -588,15 +588,16 @@ fn build_ws_request(uri: Uri, token: &str) -> Result<tungstenite::handshake::cli
         .map_err(|e| anyhow!("failed to build WS request: {}", e))
 }
 
-/// Apply ±20% jitter to a backoff value.
+/// Apply ±20% jitter to a backoff value using CSPRNG.
 fn backoff_with_jitter(backoff_ms: u64) -> u64 {
-    let nanos = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.subsec_nanos() as u64)
-        .unwrap_or(0);
-    let jitter = (nanos % (BACKOFF_JITTER_PCT * 2 + 1)).saturating_sub(BACKOFF_JITTER_PCT);
-    let delta = backoff_ms.saturating_mul(jitter) / 100;
-    backoff_ms.saturating_add(delta)
+    let jitter_pct = rand::thread_rng().gen_range(0..=BACKOFF_JITTER_PCT * 2);
+    let jitter = (jitter_pct as i64).saturating_sub(BACKOFF_JITTER_PCT as i64);
+    let delta = backoff_ms.saturating_mul(jitter.unsigned_abs()) / 100;
+    if jitter >= 0 {
+        backoff_ms.saturating_add(delta)
+    } else {
+        backoff_ms.saturating_sub(delta)
+    }
 }
 
 /// Best-effort DNS record cleanup on tunnel teardown.
