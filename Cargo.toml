@@ -56,6 +56,9 @@ thiserror        = "2"
 anyhow           = "1"
 lazy_static      = "1.4"
 
+# C-05: Secure temp files for SSH key material
+tempfile = "3"
+
 # Docker client
 bollard         = "0.18"
 
@@ -121,7 +124,8 @@ lto = "fat"
 codegen-units = 1
 strip = true
 # D-18: Removed panic="abort" - no panics in production, proper error handling instead
-overflow-checks = false
+# C-06: Enable overflow detection in release builds
+overflow-checks = true
 
 # Static build target - requires musl-gcc cross-compiler installed
 # For fully static binary on systems without musl-gcc, use standard release
