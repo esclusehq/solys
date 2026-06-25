@@ -149,6 +149,9 @@ pub async fn handle_create(task: Task, runtime: &RuntimeDetector) -> Result<serd
         port_bindings: if port_bindings.is_empty() { None } else { Some(port_bindings) },
         network_mode: Some("bridge".to_string()),
         dns: Some(vec!["8.8.8.8".to_string(), "1.1.1.1".to_string()]),
+        readonly_rootfs: Some(true),
+        cap_drop: Some(vec!["ALL".to_string()]),
+        security_opt: Some(vec!["no-new-privileges:true".to_string()]),
         ..Default::default()
     };
 
@@ -310,6 +313,9 @@ pub async fn handle_start(task: Task, runtime: &RuntimeDetector) -> Result<serde
         port_bindings: if port_bindings.is_empty() { None } else { Some(port_bindings) },
         network_mode: Some("bridge".to_string()),
         dns: Some(vec!["8.8.8.8".to_string(), "1.1.1.1".to_string()]),
+        readonly_rootfs: Some(true),
+        cap_drop: Some(vec!["ALL".to_string()]),
+        security_opt: Some(vec!["no-new-privileges:true".to_string()]),
         ..Default::default()
     };
     if let Some(mem) = memory {
