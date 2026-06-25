@@ -226,6 +226,14 @@ pub async fn handle_start(task: Task) -> anyhow::Result<serde_json::Value> {
         .or(payload.container_name.as_deref())
         .ok_or_else(|| anyhow::anyhow!("Either container_id or container_name must be provided"))?;
 
+    // C-01: Validate container name used in docker subprocess calls
+    if payload.container_name.is_some() {
+        let name = payload.container_name.as_deref().unwrap();
+        if !name.chars().all(|c| c.is_alphanumeric() || c == '_' || c == '-' || c == '.') {
+            anyhow::bail!("Invalid container name: {:?}", name);
+        }
+    }
+
     // 1. Create archive from container data directory
     let backup_dir = std::path::PathBuf::from("/var/lib/escluse-agent/backups")
         .join(payload.server_id.to_string());
