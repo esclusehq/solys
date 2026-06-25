@@ -209,9 +209,17 @@ pub async fn handle_copy(task: Task) -> Result<serde_json::Value> {
     Ok(serde_json::json!({ "status": "copied" }))
 }
 
+fn validate_container_name(name: &str) -> Result<String> {
+    if name.chars().all(|c| c.is_alphanumeric() || c == '_' || c == '-' || c == '.') {
+        Ok(name.to_string())
+    } else {
+        Err(anyhow::anyhow!("Invalid container name: {:?}", name))
+    }
+}
+
 fn get_container_name(payload: &serde_json::Value) -> Result<String> {
     if let Some(name) = payload.get("container_name").and_then(|v| v.as_str()) {
-        Ok(name.to_string())
+        validate_container_name(name)
     } else if let Some(server_id) = payload.get("server_id").and_then(|v| v.as_str()) {
         Ok(format!("mc-{}", server_id))
     } else {
