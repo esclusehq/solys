@@ -13,6 +13,14 @@ use futures_util::StreamExt;
 use serde::Deserialize;
 use tracing::{debug, error, info, warn};
 
+fn validate_container_name(name: &str) -> Result<String> {
+    if name.chars().all(|c| c.is_alphanumeric() || c == '_' || c == '-' || c == '.') {
+        Ok(name.to_string())
+    } else {
+        Err(anyhow::anyhow!("Invalid container name: {:?}", name))
+    }
+}
+
 #[derive(Debug, Deserialize)]
 pub struct ServerCreatePayload {
     pub server_id: uuid::Uuid,
@@ -219,6 +227,7 @@ pub async fn handle_start(task: Task, runtime: &RuntimeDetector) -> Result<serde
     } else {
         return Err(anyhow::anyhow!("Missing container_name for container creation"));
     };
+    validate_container_name(&container_name)?;
     
     info!(container_name = %container_name, "Looking up container by name");
     
@@ -371,6 +380,7 @@ pub async fn handle_stop(task: Task, runtime: &RuntimeDetector) -> Result<serde_
         let container_name = payload.get("container_name")
             .and_then(|v| v.as_str())
             .context("Missing container_id and container_name")?;
+        validate_container_name(container_name)?;
         
         info!(container_name = %container_name, "Looking up container by name");
         
@@ -418,6 +428,7 @@ pub async fn handle_restart(task: Task, runtime: &RuntimeDetector) -> Result<ser
         let container_name = payload.get("container_name")
             .and_then(|v| v.as_str())
             .context("Missing container_id and container_name")?;
+        validate_container_name(container_name)?;
         
         info!(container_name = %container_name, "Looking up container by name");
         
@@ -466,6 +477,7 @@ pub async fn handle_delete(task: Task, runtime: &RuntimeDetector) -> Result<serd
         let container_name = payload.get("container_name")
             .and_then(|v| v.as_str())
             .context("Missing container_id and container_name")?;
+        validate_container_name(container_name)?;
         
         info!(container_name = %container_name, "Looking up container by name");
         
