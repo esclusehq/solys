@@ -4,9 +4,10 @@ use tokio::sync::RwLock;
 use agent_proto::Task;
 use anyhow::{anyhow, Context};
 use lazy_static::lazy_static;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::json;
 use tracing::{debug, error, trace, warn};
+use zeroize::Zeroizing;
 
 pub fn redact_ip(ip: &str) -> String {
     let parts: Vec<&str> = ip.split('.').collect();
@@ -17,11 +18,27 @@ pub fn redact_ip(ip: &str) -> String {
     }
 }
 
+fn zeroizing_string_deserialize<'de, D>(deserializer: D) -> Result<Zeroizing<String>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let s = String::deserialize(deserializer)?;
+    Ok(Zeroizing::new(s))
+}
+
+fn zeroizing_string_serialize<S>(value: &Zeroizing<String>, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: serde::Serializer,
+{
+    serializer.serialize_str(value.as_str())
+}
+
 static CLOUDFLARE_API_BASE: &str = "https://api.cloudflare.com/client/v4";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CloudflareDnsConfig {
-    pub api_token: String,
+    #[serde(deserialize_with = "zeroizing_string_deserialize", serialize_with = "zeroizing_string_serialize")]
+    pub api_token: Zeroizing<String>,
     pub zone_id: String,
     pub zone_name: String,
     pub wildcard_domain: String,

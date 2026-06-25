@@ -13,6 +13,8 @@ use tokio_tungstenite::{connect_async, tungstenite::Message};
 use tracing::{debug, error, info, trace, warn};
 use uuid::Uuid;
 
+use zeroize::Zeroizing;
+
 use crate::handlers;
 use crate::handlers::metrics;
 use crate::handlers::dns::{self, CloudflareDnsConfig};
@@ -874,7 +876,7 @@ pub async fn run(
                                             BackendMessage::DnsConfig { api_token, zone_id, zone_name, wildcard_domain, auto_refresh, refresh_interval_secs, public_ip, subdomain, extra_subdomains } => {
                                                 let per_server_count = extra_subdomains.len();
                                                 let config = CloudflareDnsConfig {
-                                                    api_token,
+                                                    api_token: Zeroizing::new(api_token),
                                                     zone_id,
                                                     zone_name,
                                                     wildcard_domain,

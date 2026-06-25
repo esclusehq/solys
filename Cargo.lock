@@ -3676,6 +3676,7 @@ dependencies = [
  "sha2 0.10.9",
  "softbuffer",
  "sysinfo",
+ "tempfile",
  "thiserror 2.0.18",
  "tokio",
  "tokio-stream",
@@ -3694,6 +3695,7 @@ dependencies = [
  "winapi",
  "windows-service",
  "winit",
+ "zeroize",
 ]
 
 [[package]]
