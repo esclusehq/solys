@@ -155,7 +155,7 @@ async fn run_agent_core_service(
     tokio::spawn(async move {
         use crate::api;
 
-        let addr: std::net::SocketAddr = "0.0.0.0:8642".parse().unwrap();
+        let addr: std::net::SocketAddr = "127.0.0.1:8642".parse().unwrap();
         let router = api::routes::create_router();
 
         info!("Starting HTTP API server on {}", addr);

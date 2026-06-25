@@ -282,7 +282,7 @@ async fn run_agent_core(config: agent_config::AgentConfig) -> Result<()> {
     // 8. Start HTTP API server for GUI communication
     let api_shutdown = shutdown.clone();
     tokio::spawn(async move {
-        let addr: std::net::SocketAddr = "0.0.0.0:8642".parse().unwrap();
+        let addr: std::net::SocketAddr = "127.0.0.1:8642".parse().unwrap();
         let router = api::routes::create_router();
 
         info!("Starting HTTP API server on {}", addr);
