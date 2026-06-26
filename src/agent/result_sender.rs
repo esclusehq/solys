@@ -9,6 +9,7 @@ use anyhow::{Context, Result};
 use bytes::Bytes;
 use tokio::fs;
 use tokio::sync::{mpsc, Mutex};
+use tokio::sync::mpsc::error::SendError;
 use tracing::{error, info, trace, warn};
 
 use agent_proto::TaskResult;
@@ -144,8 +145,8 @@ impl ResultSender {
                         trace!(task_id = %result.task_id, "Task result sent immediately");
                         return;
                     }
-                    Err(_) => {
-                        warn!("WebSocket channel closed, buffering result");
+                    Err(SendError(_)) => {
+                        warn!(task_id = %result.task_id, "WebSocket channel closed, buffering result");
                     }
                 }
             }
