@@ -1,7 +1,5 @@
 //! Handlers module
 
-#![allow(dead_code)]
-
 pub mod runtime;
 pub mod backup;
 pub mod rcon;

@@ -1019,12 +1019,6 @@ pub async fn run(
 
         warn!("Reconnecting in {}s", initial_delay.as_secs());
         
-        // Check shutdown before retrying
-        if shutdown.load(Ordering::Relaxed) {
-            info!("Shutdown requested, exiting reconnect loop");
-            break;
-        }
-        
         tokio::time::sleep(initial_delay).await;
         initial_delay = std::time::Duration::from_secs_f64(
             initial_delay.as_secs_f64() * multiplier

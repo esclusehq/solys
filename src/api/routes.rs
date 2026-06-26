@@ -1,7 +1,5 @@
 //! API routes - /health, /status, /metrics
 
-#![allow(dead_code)]
-
 use std::time::Instant;
 use std::sync::Arc;
 
@@ -221,6 +219,7 @@ async fn restart_agent() -> Json<ControlResponse> {
 #[derive(serde::Deserialize)]
 pub struct LogsQuery {
     lines: Option<usize>,
+    #[allow(dead_code)]
     stream: Option<bool>,
 }
 
@@ -271,9 +270,13 @@ async fn get_config() -> Json<ConfigResponse> {
 
 #[derive(serde::Deserialize)]
 pub struct ConfigUpdateRequest {
+    #[allow(dead_code)]
     api_key: Option<String>,
+    #[allow(dead_code)]
     backend_url: Option<String>,
+    #[allow(dead_code)]
     agent_name: Option<String>,
+    #[allow(dead_code)]
     log_level: Option<String>,
 }
 
