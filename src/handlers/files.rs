@@ -93,7 +93,7 @@ pub async fn handle_write_file(task: Task) -> Result<serde_json::Value> {
         .context("Failed to write temp file")?;
 
     let output = Command::new("docker")
-        .args(["cp", temp_file.to_str().unwrap(), &format!("{}:{}", container_name, resolved_path)])
+        .args(["cp", temp_file.to_string_lossy().as_ref(), &format!("{}:{}", container_name, resolved_path)])
         .output()
         .await
         .context("Failed to run docker cp")?;
