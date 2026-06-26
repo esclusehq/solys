@@ -13,6 +13,9 @@ use tar::Archive;
 use tokio::io::AsyncWriteExt;
 use tokio::process::Command;
 use tracing::{info, warn};
+use zeroize::Zeroizing;
+
+use reqwest::Client as HttpClient;
 
 use crate::task_state::TASK_STATE_TRACKER;
 
@@ -229,6 +232,11 @@ pub struct BackupStartPayload {
     pub s3_region: Option<String>,
     pub s3_access_key: Option<String>,
     pub s3_secret_key: Option<String>,
+    /// Pre-signed URL or backend proxy URL for direct HTTP upload (C-04).
+    /// When present, S3 credentials never travel over WebSocket.
+    pub upload_url: Option<String>,
+    /// Optional custom headers for the HTTP PUT request (e.g., Authorization).
+    pub upload_headers: Option<Vec<(String, String)>>,
 }
 
 #[derive(Debug, Serialize)]
@@ -237,6 +245,80 @@ pub struct BackupStartOutput {
     pub size_bytes: u64,
     pub checksum: String,
     pub storage_path: String,
+}
+
+/// Upload backup archive via HTTP PUT to a pre-signed/proxy URL.
+/// Used when the backend provides an upload_url instead of raw S3 credentials (C-04).
+async fn upload_via_http(
+    archive_path: &Path,
+    upload_url: &str,
+    headers: Option<&Vec<(String, String)>>,
+) -> Result<String> {
+    let client = HttpClient::new();
+    let archive_bytes = tokio::fs::read(archive_path)
+        .await
+        .context("Failed to read archive for HTTP upload")?;
+
+    let mut req = client.put(upload_url)
+        .header("Content-Type", "application/gzip")
+        .body(archive_bytes);
+
+    if let Some(hdrs) = headers {
+        for (key, value) in hdrs {
+            req = req.header(key.as_str(), value.as_str());
+        }
+    }
+
+    let resp = req.send()
+        .await
+        .context("HTTP upload request failed")?;
+
+    if !resp.status().is_success() {
+        let status = resp.status();
+        let body = resp.text().await.unwrap_or_default();
+        anyhow::bail!("HTTP upload failed: {} — {}", status, body);
+    }
+
+    Ok(upload_url.to_string())
+}
+
+/// Upload backup archive using existing provider-based path (S3 credentials or local).
+/// Extracted from handle_start for code clarity — used as fallback when upload_url is absent.
+async fn upload_via_existing(payload: &BackupStartPayload, archive_path: &Path) -> Result<String> {
+    match payload.provider.as_str() {
+        "s3" => {
+            let endpoint = payload.s3_endpoint.clone()
+                .ok_or_else(|| anyhow::anyhow!("S3 endpoint required for s3 provider"))?;
+            let bucket = payload.s3_bucket.clone()
+                .ok_or_else(|| anyhow::anyhow!("S3 bucket required for s3 provider"))?;
+            let access_key = payload.s3_access_key
+                .as_deref()
+                .ok_or_else(|| anyhow::anyhow!("S3 access key required for s3 provider"))?;
+            let secret_key = payload.s3_secret_key
+                .as_deref()
+                .ok_or_else(|| anyhow::anyhow!("S3 secret key required for s3 provider"))?;
+
+            // Credentials used ephemerally — dropped when handle_start returns (T-03-02-02)
+            upload_to_s3_with_config(
+                &endpoint,
+                &bucket,
+                &payload.s3_region.as_deref().unwrap_or_default(),
+                access_key,
+                secret_key,
+                &payload.server_id.to_string(),
+                &payload.file_name,
+                archive_path,
+            ).await
+        }
+        _ => {
+            upload_to_local(
+                archive_path,
+                &std::path::PathBuf::from("/var/lib/escluse-agent/backups"),
+                &payload.server_id.to_string(),
+                &payload.file_name,
+            ).await
+        }
+    }
 }
 
 /// Handle backup.start command — archive container data and upload directly to storage.
@@ -305,36 +387,17 @@ pub async fn handle_start(task: Task) -> anyhow::Result<serde_json::Value> {
     }).await;
     crate::task_state::send_progress(task.id, "running", 60.0, "Uploading backup...").await;
 
-    let storage_path = match payload.provider.as_str() {
-        "s3" => {
-            let endpoint = payload.s3_endpoint
-                .ok_or_else(|| anyhow::anyhow!("S3 endpoint required for s3 provider"))?;
-            let bucket = payload.s3_bucket
-                .ok_or_else(|| anyhow::anyhow!("S3 bucket required for s3 provider"))?;
-            let access_key = payload.s3_access_key
-                .ok_or_else(|| anyhow::anyhow!("S3 access key required for s3 provider"))?;
-            let secret_key = payload.s3_secret_key
-                .ok_or_else(|| anyhow::anyhow!("S3 secret key required for s3 provider"))?;
-
-            upload_to_s3_with_config(
-                &endpoint,
-                &bucket,
-                &payload.s3_region.unwrap_or_default(),
-                &access_key,
-                &secret_key,
-                &payload.server_id.to_string(),
-                &payload.file_name,
-                &archive_path,
-            ).await?
+    // C-04: Check for pre-signed URL / proxy-via-backend path first
+    let storage_path = if let Some(ref upload_url) = payload.upload_url {
+        if !upload_url.is_empty() {
+            info!("Uploading via pre-signed/proxy URL (C-04)");
+            upload_via_http(&archive_path, upload_url, payload.upload_headers.as_ref()).await?
+        } else {
+            // empty upload_url — fall through to existing provider-based upload
+            upload_via_existing(&payload, &archive_path).await?
         }
-        _ => {
-            upload_to_local(
-                &archive_path,
-                &std::path::PathBuf::from("/var/lib/escluse-agent/backups"),
-                &payload.server_id.to_string(),
-                &payload.file_name,
-            ).await?
-        }
+    } else {
+        upload_via_existing(&payload, &archive_path).await?
     };
 
     TASK_STATE_TRACKER.update(task.id, |s: &mut crate::task_state::TaskState| {
