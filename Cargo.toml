@@ -102,6 +102,9 @@ hex         = "0.4"
 # Phase 69-04: Heartbeat staggering via random jitter
 rand = "0.8"
 
+# W-10: Safe tar extraction (path traversal protection)
+tar = "0.4"
+
 [[bin]]
 name = "escluse-agent"
 path = "src/main.rs"

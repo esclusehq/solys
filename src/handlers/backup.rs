@@ -2,12 +2,14 @@
 //!
 //! Full implementation for backing up container volumes
 
-use std::path::PathBuf;
+use std::fs::File;
+use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 use agent_proto::Task;
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
+use tar::Archive;
 use tokio::io::AsyncWriteExt;
 use tokio::process::Command;
 use tracing::{info, warn};
@@ -16,6 +18,43 @@ use crate::task_state::TASK_STATE_TRACKER;
 
 use agent_backup::{create_container_backup, calculate_checksum, CompressionFormat};
 use agent_backup::upload::{upload_to_s3_with_config, upload_to_local};
+
+/// Extract a tar archive with path traversal and symlink escape protection.
+/// Blocks the current thread (I/O-bound, called from sync or spawn_blocking contexts).
+fn safe_extract_tar(archive_path: &Path, dest: &Path) -> Result<()> {
+    let file = File::open(archive_path)
+        .with_context(|| format!("Failed to open archive: {}", archive_path.display()))?;
+    let mut archive = Archive::new(file);
+
+    for entry in archive.entries()? {
+        let mut entry = entry?;
+        let entry_path = entry.path()?;
+
+        // Resolve target path and verify it stays under dest
+        let target = dest.join(&entry_path);
+        if !target.starts_with(dest) {
+            anyhow::bail!("Path traversal detected: {:?} resolves outside {:?}", entry_path, dest);
+        }
+
+        // Check for symlinks that could escape outside dest
+        if entry.header().entry_type().is_symlink() {
+            if let Some(link_target) = entry.link_name()? {
+                let resolved = target.parent()
+                    .unwrap_or(dest)
+                    .join(&link_target);
+                if let Ok(canonical) = resolved.canonicalize() {
+                    if !canonical.starts_with(dest) {
+                        anyhow::bail!("Symlink traversal detected: {:?} -> {:?}", entry_path, link_target);
+                    }
+                }
+            }
+        }
+
+        entry.unpack_in(dest)?;
+    }
+
+    Ok(())
+}
 
 #[derive(Debug, Deserialize)]
 pub struct BackupCreatePayload {
@@ -363,22 +402,18 @@ pub async fn handle_restore(task: Task) -> Result<serde_json::Value> {
         let temp_dir = PathBuf::from(format!("/tmp/escluse-restore-{}", uuid::Uuid::new_v4()));
         tokio::fs::create_dir_all(&temp_dir).await?;
 
-        // Extract backup
-        let extract_result = Command::new("tar")
-            .args(["-xzf", backup_path.to_str().unwrap(), "-C", temp_dir.to_str().unwrap()])
-            .output()
-            .await;
+        // Extract with path traversal protection using Rust tar crate
+        safe_extract_tar(&backup_path, &temp_dir)
+            .context("Failed to extract backup archive")?;
 
-        if extract_result.is_ok() && extract_result.unwrap().status.success() {
-            // Copy back to container
-            let copy_source = temp_dir.join(target_path.trim_start_matches('/'));
-            if copy_source.exists() {
-                let dest = format!("{}:{}", payload.container_id, target_path);
-                let _ = Command::new("docker")
-                    .args(["cp", copy_source.to_str().unwrap(), &dest])
-                    .output()
-                    .await;
-            }
+        // Copy back to container
+        let copy_source = temp_dir.join(target_path.trim_start_matches('/'));
+        if copy_source.exists() {
+            let dest = format!("{}:{}", payload.container_id, target_path);
+            let _ = Command::new("docker")
+                .args(["cp", copy_source.to_str().unwrap(), &dest])
+                .output()
+                .await;
         }
 
         // Cleanup
@@ -467,14 +502,12 @@ pub async fn handle_restore_s3(task: Task) -> Result<serde_json::Value> {
         .output()
         .await;
 
-    // Extract backup
+    // Extract with path traversal protection using Rust tar crate
     let extract_dir = temp_dir.join("extracted");
     tokio::fs::create_dir_all(&extract_dir).await?;
 
-    let _ = Command::new("tar")
-        .args(["-xzf", download_path.to_str().unwrap(), "-C", extract_dir.to_str().unwrap()])
-        .output()
-        .await;
+    safe_extract_tar(&download_path, &extract_dir)
+        .context("Failed to extract S3 backup archive")?;
 
     // Restore to container
     for target_path in &payload.target_paths {
