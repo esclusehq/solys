@@ -149,7 +149,7 @@ pub async fn handle_create(task: Task) -> Result<serde_json::Value> {
 
         // Copy volume from container
         let cp_result = Command::new("docker")
-            .args(["cp", &format!("{}:{}", payload.container_id, volume), temp_dir.to_str().unwrap()])
+            .args(["cp", &format!("{}:{}", payload.container_id, volume), temp_dir.to_string_lossy().as_ref()])
             .output()
             .await;
 
@@ -157,7 +157,7 @@ pub async fn handle_create(task: Task) -> Result<serde_json::Value> {
             if output.status.success() {
                 // Create tarball
                 let tar_result = Command::new("tar")
-                    .args(["-czf", volume_backup_file.to_str().unwrap(), "-C", temp_dir.to_str().unwrap(), "."])
+                    .args(["-czf", volume_backup_file.to_string_lossy().as_ref(), "-C", temp_dir.to_string_lossy().as_ref(), "."])
                     .output()
                     .await;
 
@@ -170,7 +170,7 @@ pub async fn handle_create(task: Task) -> Result<serde_json::Value> {
 
                         // Calculate checksum
                         let checksum_output = Command::new("sha256sum")
-                            .arg(volume_backup_file.to_str().unwrap())
+                            .arg(volume_backup_file.to_string_lossy().as_ref())
                             .output()
                             .await?;
 
@@ -474,7 +474,7 @@ pub async fn handle_restore(task: Task) -> Result<serde_json::Value> {
         if copy_source.exists() {
             let dest = format!("{}:{}", payload.container_id, target_path);
             let _ = Command::new("docker")
-                .args(["cp", copy_source.to_str().unwrap(), &dest])
+                .args(["cp", copy_source.to_string_lossy().as_ref(), &dest])
                 .output()
                 .await;
         }

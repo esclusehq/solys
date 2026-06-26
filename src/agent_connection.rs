@@ -460,7 +460,7 @@ pub async fn run(
                                 match backend_msg {
                                     BackendMessage::RegisterAck { node_id: id, .. } => {
                                         info!(node_id = %id, "Agent registered successfully");
-                                        *node_id.lock().unwrap() = Some(id);
+                                        *node_id.lock().unwrap_or_else(|e| e.into_inner()) = Some(id);
                                         // Also set in global state for API
                                         task_state::set_agent_node_id(id);
                                         // Log agent registration
@@ -490,7 +490,7 @@ pub async fn run(
                     }
                 }
 
-                let current_node_id = *node_id.lock().unwrap();
+                let current_node_id = *node_id.lock().unwrap_or_else(|e| e.into_inner());
                 if current_node_id.is_none() {
                     warn!("No node_id received, continuing anyway");
                 }
@@ -592,7 +592,7 @@ pub async fn run(
                         }
                         _ = heartbeat_interval.tick() => {
                             // Send heartbeat with metrics
-                            let node_id_value = *node_id.lock().unwrap();
+                            let node_id_value = *node_id.lock().unwrap_or_else(|e| e.into_inner());
                             if let Some(id) = node_id_value {
                                 if let Ok(metrics_report) = metrics::collect_full_metrics().await {
                                     let m = serde_json::json!({
@@ -935,7 +935,7 @@ pub async fn run(
                                                 crate::state::relay_manager().set_servers(configs).await;
                                             }
                                             BackendMessage::Ping => {
-                                                let node_id_value = *node_id.lock().unwrap();
+                                                let node_id_value = *node_id.lock().unwrap_or_else(|e| e.into_inner());
                                                 if let Some(id) = node_id_value {
                                                     // Collect and send heartbeat
                                                     if let Ok(metrics_report) = metrics::collect_full_metrics().await {
@@ -1026,7 +1026,7 @@ pub async fn run(
     }
     
     // Return node_id (nil if shutdown)
-    let result = node_id.lock().unwrap().unwrap_or(Uuid::nil());
+    let result = node_id.lock().unwrap_or_else(|e| e.into_inner()).unwrap_or(Uuid::nil());
     Ok(result)
 }
 

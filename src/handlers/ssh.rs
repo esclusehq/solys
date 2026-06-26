@@ -93,7 +93,9 @@ impl SshConnectionCache {
         }
         
         let client = conn.client.clone();
-        self.connections.get_mut(key).unwrap().last_used = Instant::now();
+        if let Some(entry) = self.connections.get_mut(key) {
+            entry.last_used = Instant::now();
+        }
         Some(client)
     }
 
@@ -171,7 +173,7 @@ pub async fn handle_connect(task: Task) -> Result<serde_json::Value> {
                 port,
                 &payload.user,
                 None,
-                Some(key_path.to_str().unwrap()),
+                Some(key_path.to_string_lossy().as_ref()),
             ).await;
 
             drop(temp_file);

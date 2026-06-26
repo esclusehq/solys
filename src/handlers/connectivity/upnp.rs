@@ -48,7 +48,7 @@ const RATE_LIMIT: Duration = Duration::from_secs(10);
 async fn discover_igd() -> Result<(String, String)> {
     // Rate limit check — reject if less than RATE_LIMIT since last discovery.
     {
-        let mut last = LAST_DISCOVERY.lock().unwrap();
+        let mut last = LAST_DISCOVERY.lock().unwrap_or_else(|e| e.into_inner());
         if last.elapsed() < RATE_LIMIT {
             return Err(anyhow!("UPnP rate limited"));
         }
@@ -57,7 +57,7 @@ async fn discover_igd() -> Result<(String, String)> {
 
     // Cache check — return cached IGD data if TTL hasn't expired.
     {
-        let cache = IGD_CACHE.lock().unwrap();
+        let cache = IGD_CACHE.lock().unwrap_or_else(|e| e.into_inner());
         if let Some(ref cached) = *cache {
             if cached.discovered_at.elapsed() < CACHE_TTL {
                 return Ok((cached.location.clone(), cached.control_url.clone()));
@@ -80,7 +80,7 @@ async fn discover_igd() -> Result<(String, String)> {
 
     // Update cache.
     {
-        let mut cache = IGD_CACHE.lock().unwrap();
+        let mut cache = IGD_CACHE.lock().unwrap_or_else(|e| e.into_inner());
         *cache = Some(IgdCache {
             location: location.clone(),
             control_url: control_url.clone(),
