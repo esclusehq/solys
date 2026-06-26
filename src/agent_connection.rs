@@ -892,7 +892,7 @@ pub async fn run(
                                                     servers.len(),
                                                 );
 
-                                                // Build configs and apply via RelayManager
+                                                // STEP 1: Build configs first (pure data transformation, no side effects)
                                                 let agent_public_ip =
                                                     crate::handlers::dns_watch::detect_public_ip().await
                                                         .unwrap_or_else(|_| "0.0.0.0".to_string());
@@ -912,20 +912,27 @@ pub async fn run(
                                                     })
                                                     .collect();
 
-                                                crate::state::relay_manager().set_servers(configs).await;
-
-                                                // Remove relay subdomains from DNS extra_subdomains so the
-                                                // DnsWatcher doesn't create A records pointing to the agent's
-                                                // local IP (which would override the wildcard
-                                                // *.play.esluce.com → relay VPS).
+                                                // STEP 2: Remove relay subdomains from DNS_CONFIG BEFORE set_servers
+                                                // This prevents DnsWatcher from creating A records pointing to agent
+                                                // local IP that would conflict with relay VPS records.
                                                 let relay_subs: Vec<String> = servers.iter().map(|s| s.subdomain.clone()).collect();
                                                 if !relay_subs.is_empty() {
                                                     let mut dns_guard = crate::handlers::dns::DNS_CONFIG.write().await;
                                                     if let Some(ref mut cfg) = *dns_guard {
                                                         cfg.extra_subdomains.retain(|sub| !relay_subs.contains(sub));
                                                     }
-                                                    drop(dns_guard);
+                                                    drop(dns_guard); // Release write lock so DnsWatcher can proceed
                                                 }
+
+                                                // STEP 3: Drain-delay — give DnsWatcher time to complete any in-flight
+                                                // check_and_update() with the updated DNS_CONFIG. 500ms is sufficient
+                                                // for a Cloudflare API round trip (typical: 100-300ms).
+                                                tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+
+                                                // STEP 4: Now start/update relay tunnels (set_servers)
+                                                // DnsWatcher has already seen the updated extra_subdomains (or will
+                                                // see them on its next check), so no stale A records will be created.
+                                                crate::state::relay_manager().set_servers(configs).await;
                                             }
                                             BackendMessage::Ping => {
                                                 let node_id_value = *node_id.lock().unwrap();
