@@ -1,0 +1,2 @@
+[patch."https://github.com/esclusehq/agent-core"]
+agent-ssh = { path = "../agent-core/crates/agent-ssh" }

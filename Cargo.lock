@@ -29,7 +29,7 @@ name = "agent-backup"
 version = "0.1.0"
 source = "git+https://github.com/esclusehq/agent-core#3c156fa97cbf12e78ab001b67711b91c349e8102"
 dependencies = [
- "agent-proto",
+ "agent-proto 0.1.0 (git+https://github.com/esclusehq/agent-core)",
  "anyhow",
  "chrono",
  "flate2",
@@ -50,7 +50,7 @@ name = "agent-capability"
 version = "0.1.0"
 source = "git+https://github.com/esclusehq/agent-core#3c156fa97cbf12e78ab001b67711b91c349e8102"
 dependencies = [
- "agent-proto",
+ "agent-proto 0.1.0 (git+https://github.com/esclusehq/agent-core)",
  "serde",
  "serde_json",
 ]
@@ -60,7 +60,7 @@ name = "agent-config"
 version = "0.1.0"
 source = "git+https://github.com/esclusehq/agent-core#3c156fa97cbf12e78ab001b67711b91c349e8102"
 dependencies = [
- "agent-proto",
+ "agent-proto 0.1.0 (git+https://github.com/esclusehq/agent-core)",
  "dirs",
  "hostname",
  "serde",
@@ -86,7 +86,7 @@ name = "agent-health"
 version = "0.1.0"
 source = "git+https://github.com/esclusehq/agent-core#3c156fa97cbf12e78ab001b67711b91c349e8102"
 dependencies = [
- "agent-proto",
+ "agent-proto 0.1.0 (git+https://github.com/esclusehq/agent-core)",
  "serde",
  "thiserror 2.0.18",
  "tokio",
@@ -98,12 +98,23 @@ name = "agent-metrics"
 version = "0.1.0"
 source = "git+https://github.com/esclusehq/agent-core#3c156fa97cbf12e78ab001b67711b91c349e8102"
 dependencies = [
- "agent-proto",
+ "agent-proto 0.1.0 (git+https://github.com/esclusehq/agent-core)",
  "chrono",
  "serde",
  "serde_json",
  "sysinfo",
  "tokio",
+]
+
+[[package]]
+name = "agent-proto"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "uuid",
 ]
 
 [[package]]
@@ -123,7 +134,7 @@ name = "agent-rcon"
 version = "0.1.0"
 source = "git+https://github.com/esclusehq/agent-core#3c156fa97cbf12e78ab001b67711b91c349e8102"
 dependencies = [
- "agent-proto",
+ "agent-proto 0.1.0 (git+https://github.com/esclusehq/agent-core)",
  "serde",
  "serde_json",
 ]
@@ -133,7 +144,7 @@ name = "agent-runtime"
 version = "0.1.0"
 source = "git+https://github.com/esclusehq/agent-core#3c156fa97cbf12e78ab001b67711b91c349e8102"
 dependencies = [
- "agent-proto",
+ "agent-proto 0.1.0 (git+https://github.com/esclusehq/agent-core)",
  "bollard",
  "futures-util",
  "serde",
@@ -147,7 +158,7 @@ name = "agent-security"
 version = "0.1.0"
 source = "git+https://github.com/esclusehq/agent-core#3c156fa97cbf12e78ab001b67711b91c349e8102"
 dependencies = [
- "agent-proto",
+ "agent-proto 0.1.0 (git+https://github.com/esclusehq/agent-core)",
  "chrono",
  "jsonwebtoken",
  "serde",
@@ -161,9 +172,8 @@ dependencies = [
 [[package]]
 name = "agent-ssh"
 version = "0.1.0"
-source = "git+https://github.com/esclusehq/agent-core#3c156fa97cbf12e78ab001b67711b91c349e8102"
 dependencies = [
- "agent-proto",
+ "agent-proto 0.1.0",
  "serde",
  "serde_json",
  "ssh2",
@@ -175,7 +185,7 @@ name = "agent-task"
 version = "0.1.0"
 source = "git+https://github.com/esclusehq/agent-core#3c156fa97cbf12e78ab001b67711b91c349e8102"
 dependencies = [
- "agent-proto",
+ "agent-proto 0.1.0 (git+https://github.com/esclusehq/agent-core)",
  "chrono",
  "serde",
  "serde_json",
@@ -3644,7 +3654,7 @@ dependencies = [
  "agent-event",
  "agent-health",
  "agent-metrics",
- "agent-proto",
+ "agent-proto 0.1.0 (git+https://github.com/esclusehq/agent-core)",
  "agent-rcon",
  "agent-runtime",
  "agent-security",

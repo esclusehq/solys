@@ -6,7 +6,7 @@ use std::time::Duration;
 use agent_proto::Task;
 use agent_runtime::RuntimeDetector;
 use anyhow::{Context, Result};
-use bollard::container::{Config, CreateContainerOptions, StartContainerOptions, StopContainerOptions, RemoveContainerOptions, LogsOptions};
+use bollard::container::{Config, CreateContainerOptions, StartContainerOptions, StopContainerOptions, RemoveContainerOptions, LogsOptions, ListContainersOptions};
 use bollard::image::CreateImageOptions;
 use bollard::models::HostConfig;
 use futures_util::StreamExt;
@@ -19,6 +19,20 @@ fn validate_container_name(name: &str) -> Result<String> {
     } else {
         Err(anyhow::anyhow!("Invalid container name: {:?}", name))
     }
+}
+
+/// Resolve container ID from name using bollard API instead of subprocess docker ps.
+async fn resolve_container_id(docker: &bollard::Docker, name: &str) -> Result<Option<String>> {
+    let mut filters = std::collections::HashMap::new();
+    filters.insert("name".to_string(), vec![format!("^{}$", name)]);
+    let options = ListContainersOptions {
+        all: true,
+        filters,
+        ..Default::default()
+    };
+    let containers = docker.list_containers(Some(options)).await
+        .context("Failed to list containers")?;
+    Ok(containers.into_iter().next().map(|c| c.id.unwrap_or_default()))
 }
 
 #[derive(Debug, Deserialize)]
@@ -232,18 +246,11 @@ pub async fn handle_start(task: Task, runtime: &RuntimeDetector) -> Result<serde
     info!(container_name = %container_name, "Looking up container by name");
     
     // Check if container already exists
-    use tokio::process::Command;
-    let output = Command::new("docker")
-        .args(["ps", "-a", "--filter", &format!("name=^{}$", container_name), "--format", "{{.ID}}"])
-        .output()
-        .await
-        .context("Failed to run docker ps")?;
-    
-    let id = String::from_utf8_lossy(&output.stdout).trim().to_string();
-    
-    if !id.is_empty() {
-        // Container exists, check if running
-        if let Ok(info) = docker.inspect_container(&id, None).await {
+        let id = resolve_container_id(&docker, &container_name).await?.unwrap_or_default();
+        
+        if !id.is_empty() {
+            // Container exists, check if running
+            if let Ok(info) = docker.inspect_container(&id, None).await {
             if let Some(state) = info.state {
                 if state.running == Some(true) {
                     info!(container_id = %id, "Container already running");
@@ -376,7 +383,6 @@ pub async fn handle_stop(task: Task, runtime: &RuntimeDetector) -> Result<serde_
     let container_id = if let Some(id) = container_id {
         id.to_string()
     } else {
-        // Find container by name using docker CLI
         let container_name = payload.get("container_name")
             .and_then(|v| v.as_str())
             .context("Missing container_id and container_name")?;
@@ -384,18 +390,8 @@ pub async fn handle_stop(task: Task, runtime: &RuntimeDetector) -> Result<serde_
         
         info!(container_name = %container_name, "Looking up container by name");
         
-        use tokio::process::Command;
-        let output = Command::new("docker")
-            .args(["ps", "-a", "--filter", &format!("name=^{}$", container_name), "--format", "{{.ID}}"])
-            .output()
-            .await
-            .context("Failed to run docker ps")?;
-        
-        let id = String::from_utf8_lossy(&output.stdout).trim().to_string();
-        if id.is_empty() {
-            return Ok(serde_json::json!({ "status": "not_found", "message": format!("Container {} not found", container_name) }));
-        }
-        id
+        resolve_container_id(&docker, container_name).await?
+            .ok_or_else(|| anyhow::anyhow!("Container {} not found", container_name))?
     };
 
     // Check if container is already stopped (idempotent)
@@ -432,18 +428,8 @@ pub async fn handle_restart(task: Task, runtime: &RuntimeDetector) -> Result<ser
         
         info!(container_name = %container_name, "Looking up container by name");
         
-        use tokio::process::Command;
-        let output = Command::new("docker")
-            .args(["ps", "-a", "--filter", &format!("name=^{}$", container_name), "--format", "{{.ID}}"])
-            .output()
-            .await
-            .context("Failed to run docker ps")?;
-        
-        let id = String::from_utf8_lossy(&output.stdout).trim().to_string();
-        if id.is_empty() {
-            return Ok(serde_json::json!({ "status": "not_found", "message": format!("Container {} not found", container_name) }));
-        }
-        id
+        resolve_container_id(&docker, container_name).await?
+            .ok_or_else(|| anyhow::anyhow!("Container {} not found", container_name))?
     };
 
     // Check if container is running (idempotent)
@@ -481,19 +467,10 @@ pub async fn handle_delete(task: Task, runtime: &RuntimeDetector) -> Result<serd
         
         info!(container_name = %container_name, "Looking up container by name");
         
-        use tokio::process::Command;
-        let output = Command::new("docker")
-            .args(["ps", "-a", "--filter", &format!("name=^{}$", container_name), "--format", "{{.ID}}"])
-            .output()
-            .await
-            .context("Failed to run docker ps")?;
-        
-        let id = String::from_utf8_lossy(&output.stdout).trim().to_string();
-        if id.is_empty() {
-            // Container doesn't exist - idempotent delete
-            return Ok(serde_json::json!({ "status": "not_found", "message": format!("Container {} not found, nothing to delete", container_name) }));
+        match resolve_container_id(&docker, container_name).await? {
+            Some(id) => id,
+            None => return Ok(serde_json::json!({ "status": "not_found", "message": format!("Container {} not found, nothing to delete", container_name) })),
         }
-        id
     };
 
     // Check if container exists before delete (idempotent)
