@@ -338,12 +338,48 @@ pub async fn handle_start(task: Task, runtime: &RuntimeDetector) -> Result<serde
         host_config.memory = Some(mem);
     }
     
+    /// Check if the container image is a Minecraft server that needs EULA=TRUE.
+    ///
+    /// Uses multiple signals in order of reliability:
+    /// 1. `loader` field — known Minecraft server loaders (paper, purpur, spigot,
+    ///    fabric, forge, vanilla, bukkit, magma, mohist, catserver, arclight)
+    /// 2. `image` field — known Docker image names/patterns containing
+    ///    "minecraft", "mc-", "papermc", "purpur", etc.
+    fn is_minecraft_image(image: &str, loader: Option<&str>) -> bool {
+        // Check loader first — most explicit signal
+        if let Some(loader) = loader {
+            let loader_lower = loader.to_lowercase();
+            let minecraft_loaders = [
+                "paper", "purpur", "spigot", "fabric", "forge",
+                "vanilla", "bukkit", "magma", "mohist", "catserver",
+                "arclight", "bedrock", "neoforge", "quilt",
+            ];
+            if minecraft_loaders.contains(&loader_lower.as_str()) {
+                return true;
+            }
+        }
+
+        // Fall back to image name patterns
+        let image_lower = image.to_lowercase();
+        let minecraft_patterns = [
+            "minecraft", "mc-", "papermc", "purpur", "spigot",
+            "itzg/mc", "bukkit", "fabricmc",
+        ];
+        for pattern in &minecraft_patterns {
+            if image_lower.contains(pattern) {
+                return true;
+            }
+        }
+
+        false
+    }
+    
     let mut env_vec: Vec<String> = env_vars.iter()
         .map(|(k, v)| format!("{}={}", k, v))
         .collect();
     
     let has_eula = env_vec.iter().any(|e| e.starts_with("EULA="));
-    if !has_eula {
+    if !has_eula && is_minecraft_image(image, payload.get("loader").and_then(|v| v.as_str())) {
         env_vec.push("EULA=TRUE".to_string());
     }
     
