@@ -6,10 +6,16 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use futures_util::{SinkExt, StreamExt};
 use tokio::sync::mpsc;
-use tokio_tungstenite::{connect_async, tungstenite::Message};
+use tokio_tungstenite::{
+    connect_async_tls_with_config,
+    tungstenite::client::IntoClientRequest,
+    tungstenite::Message,
+};
+use tokio_tungstenite::tungstenite::http::Uri;
+use tokio_tungstenite::tungstenite::ClientRequestBuilder;
 use tracing::{debug, error, info, trace, warn};
 use uuid::Uuid;
 
@@ -112,16 +118,6 @@ pub fn redact_json(s: &str) -> String {
         v.to_string()
     } else {
         s.to_string()
-    }
-}
-
-fn redact_url(url: &str) -> String {
-    if let Some(pos) = url.find("?api_key=") {
-        format!("{}{}", &url[..pos], "?api_key=****")
-    } else if let Some(pos) = url.find("&api_key=") {
-        format!("{}{}", &url[..pos], "&api_key=****")
-    } else {
-        url.to_string()
     }
 }
 
@@ -291,7 +287,7 @@ impl Default for DeployConfig {
     }
 }
 
-fn prepare_ws_url(backend_url: &str, api_key: Option<&str>) -> String {
+fn prepare_ws_url(backend_url: &str) -> String {
     let ws_url = if backend_url.starts_with("ws://") || backend_url.starts_with("wss://") {
         backend_url.trim_end_matches('/').to_string()
     } else if backend_url.starts_with("http://") {
@@ -302,27 +298,20 @@ fn prepare_ws_url(backend_url: &str, api_key: Option<&str>) -> String {
         format!("ws://{}", backend_url)
     };
     
-    let base = if !ws_url.contains("/api/ws/node") {
+    if !ws_url.contains("/api/ws/node") {
         format!("{}/api/ws/node", ws_url.trim_end_matches('/'))
     } else {
         ws_url.trim_end_matches('/').to_string()
-    };
-
-    if let Some(key) = api_key {
-        if !key.is_empty() {
-            return format!("{}?api_key={}", base, urlencode(key));
-        }
     }
-    base
 }
 
-fn urlencode(s: &str) -> String {
-    s.chars()
-        .map(|c| match c {
-            'A'..='Z' | 'a'..='z' | '0'..='9' | '-' | '_' | '.' | '~' => c.to_string(),
-            _ => format!("%{:02X}", c as u8),
-        })
-        .collect()
+fn build_ws_request(uri: Uri, api_key: &str) -> Result<tokio_tungstenite::tungstenite::handshake::client::Request> {
+    let auth_value = format!("Bearer {}", api_key);
+    let builder = ClientRequestBuilder::new(uri)
+        .with_header("Authorization", auth_value);
+    builder
+        .into_client_request()
+        .map_err(|e| anyhow::anyhow!("failed to build WS request: {}", e))
 }
 
 pub async fn run(
@@ -334,8 +323,7 @@ pub async fn run(
     let agent_name = config.agent_name.clone();
     let capabilities_list = capabilities.to_string_list();
     
-    let api_key_str = config.api_key.expose_secret().to_string();
-    let ws_url = prepare_ws_url(&config.backend_url, Some(&api_key_str));
+    let ws_url = prepare_ws_url(&config.backend_url);
     
     // Create data directory for buffering
     let data_dir = config.data_dir.clone();
@@ -363,16 +351,22 @@ pub async fn run(
     loop {
         reconnect_attempt = reconnect_attempt.saturating_add(1);
         debug!(
-            url = %redact_url(&ws_url),
+            url = %ws_url,
             attempt = reconnect_attempt,
             delay_secs = initial_delay.as_secs(),
             "Connecting to backend (reconnect loop)"
         );
 
-        // Wrap connect_async in a timeout so a hung TCP/WS handshake doesn't block forever
+        // Wrap connect_async_tls_with_config in a timeout so a hung TCP/WS handshake doesn't block forever
+        let uri: Uri = ws_url.parse().context("Failed to parse WebSocket URL")?;
+        let api_key = config.api_key.expose_secret().to_string();
+        let request = build_ws_request(uri, &api_key)?;
+        // Zeroize the key after building the request — no longer needed
+        drop(api_key);
+
         let connect_result = tokio::time::timeout(
             std::time::Duration::from_secs(15),
-            connect_async(&ws_url),
+            connect_async_tls_with_config(request, None, true, None),
         )
         .await;
 
