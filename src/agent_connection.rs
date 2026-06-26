@@ -409,7 +409,7 @@ pub async fn run(
                         match msg {
                             AgentToBackend::Pong(payload) => {
                                 if let Err(e) = sink.send(Message::Pong(payload)).await {
-                                    error!(error = %e, "Writer: Pong send failed, exiting");
+                                    error!(error = %e, "Writer: WebSocket send failed (Pong), exiting writer task");
                                     return;
                                 }
                             }
@@ -417,7 +417,7 @@ pub async fn run(
                                 match serde_json::to_string(&other) {
                                     Ok(text) => {
                                         if let Err(e) = sink.send(Message::Text(text.into())).await {
-                                            error!(error = %e, "Writer: Text send failed, exiting");
+                                            error!(error = %e, "Writer: WebSocket send failed (Text), exiting writer task");
                                             return;
                                         }
                                     }
