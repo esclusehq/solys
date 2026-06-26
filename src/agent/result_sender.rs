@@ -1,7 +1,5 @@
 //! ResultSender - buffers task results during disconnect, with disk persistence
 
-#![allow(dead_code)]
-
 use std::collections::VecDeque;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -158,6 +156,7 @@ impl ResultSender {
     }
 
     /// Send progress update via WebSocket
+    #[allow(dead_code)]
     pub async fn send_progress(&self, task_id: Uuid, status: &str, progress: f32, message: &str) {
         let progress_msg = AgentToBackend::TaskProgress {
             task_id,
@@ -312,11 +311,13 @@ impl ResultSender {
     }
 
     /// Get current buffer size
+    #[allow(dead_code)]
     pub async fn buffer_size(&self) -> usize {
         self.buffer.lock().await.len()
     }
 
     /// Check if connected
+    #[allow(dead_code)]
     pub fn is_connected(&self) -> bool {
         self.connected.load(Ordering::Relaxed)
     }
