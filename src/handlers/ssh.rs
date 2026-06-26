@@ -103,7 +103,9 @@ impl SshConnectionCache {
                 .min_by_key(|(_, c)| c.last_used)
                 .map(|(k, _)| k.clone())
             {
-                self.connections.remove(&oldest_key);
+                if let Some(evicted) = self.connections.remove(&oldest_key) {
+                    let _ = evicted.client.disconnect().await;
+                }
             }
         }
 
@@ -114,11 +116,20 @@ impl SshConnectionCache {
     }
 
     pub async fn remove(&mut self, key: &str) -> Option<SshClient> {
-        self.connections.remove(key).map(|c| c.client)
+        let client = self.connections.remove(key).map(|c| c.client);
+        if let Some(ref c) = client {
+            let _ = c.disconnect().await;
+        }
+        client
     }
 
     pub async fn clear(&mut self) {
-        self.connections.clear();
+        let clients: Vec<SshClient> = self.connections.drain()
+            .map(|(_, c)| c.client)
+            .collect();
+        for client in clients {
+            let _ = client.disconnect().await;
+        }
     }
 }
 
