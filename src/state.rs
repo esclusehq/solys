@@ -160,6 +160,8 @@ pub struct RelayClientHandle {
     pub subdomain: String,
     pub public_port: u16,
     pub local_mc_addr: String,
+    /// I-07: detect token rotation — tunnel is restarted when token changes.
+    pub token: String,
 }
 
 /// Multi-server relay tunnel manager.
@@ -202,12 +204,20 @@ impl RelayManager {
                 if let Some(existing) = servers.get(&new_cfg.server_id) {
                     let changed = existing.subdomain != new_cfg.subdomain
                         || existing.public_port != new_cfg.public_port
-                        || existing.local_mc_addr != new_cfg.local_mc_addr;
+                        || existing.local_mc_addr != new_cfg.local_mc_addr
+                        || existing.token != new_cfg.token;  // I-07: detect token rotation
                     if changed {
-                        tracing::info!(
-                            "RelayManager: config changed for server_id={}, restarting",
-                            new_cfg.server_id
-                        );
+                        if existing.token != new_cfg.token {
+                            tracing::info!(
+                                "RelayManager: token changed for server_id={}, restarting tunnel",
+                                new_cfg.server_id
+                            );
+                        } else {
+                            tracing::info!(
+                                "RelayManager: config changed for server_id={}, restarting",
+                                new_cfg.server_id
+                            );
+                        }
                         if let Some(handle) = servers.remove(&new_cfg.server_id) {
                             handle.cancel.cancel();
                             to_start.push(new_cfg.clone());
@@ -243,6 +253,7 @@ impl RelayManager {
                 subdomain: cfg.subdomain.clone(),
                 public_port: cfg.public_port,
                 local_mc_addr: cfg.local_mc_addr.clone(),
+                token: cfg.token.clone(),
             };
             self.servers.write().await.insert(cfg.server_id, handle);
             tracing::info!("RelayManager: started tunnel for server_id={}", cfg.server_id);
