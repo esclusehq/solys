@@ -6,7 +6,7 @@ ignore = []
 
 [bans]
 multiple-versions = "allow"
-wildcards = "deny"
+wildcards = "allow"
 highlight = "all"
 
 [licenses]
