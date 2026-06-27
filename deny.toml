@@ -2,7 +2,7 @@
 exclude-dev = true
 
 [advisories]
-severity = "high"
+severity-threshold = "high"
 ignore = []
 
 [bans]
