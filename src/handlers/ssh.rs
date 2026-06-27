@@ -10,17 +10,8 @@ use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
 use std::io::Write;
-#[cfg(unix)]
-use std::os::unix::fs::PermissionsExt;
 use tempfile::Builder;
 use tracing::info;
-
-#[cfg(unix)]
-fn set_key_perms(builder: &mut Builder) -> &mut Builder {
-    builder.permissions(PermissionsExt::from_mode(0o600))
-}
-#[cfg(not(unix))]
-fn set_key_perms(builder: &mut Builder) -> &mut Builder { builder }
 
 #[derive(Debug, Deserialize)]
 pub struct SshConnectPayload {
@@ -170,8 +161,13 @@ pub async fn handle_connect(task: Task) -> Result<serde_json::Value> {
 
     let client = match &payload.auth {
         SshAuth::Key { key_content, passphrase: _ } => {
-            let mut temp_file = set_key_perms(Builder::new())
-                .tempfile()?;
+            let mut tb = Builder::new();
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                tb.permissions(PermissionsExt::from_mode(0o600));
+            }
+            let mut temp_file = tb.tempfile()?;
             temp_file.write_all(key_content.as_bytes())?;
             let key_path = temp_file.path().to_owned();
 
