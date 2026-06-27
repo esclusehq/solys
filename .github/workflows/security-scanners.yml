@@ -23,6 +23,7 @@ permissions:
   contents: read
   checks: write
   issues: write
+  security-events: write
 
 jobs:
   gitleaks:
@@ -47,7 +48,7 @@ jobs:
       - uses: EmbarkStudios/cargo-deny-action@v2
         with:
           command: check ${{ matrix.checks }}
-          arguments: --manifest-path solys/Cargo.toml
+          arguments: --manifest-path Cargo.toml
 
   trivy-fs:
     name: Filesystem vulnerability scan (Trivy)

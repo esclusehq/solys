@@ -20,19 +20,18 @@ jobs:
         run: cargo install cargo-cyclonedx --locked
 
       - name: Generate CycloneDX SBOM
-        working-directory: solys
         run: cargo cyclonedx --all --format json --format xml
 
       - name: Upload SBOM as artifact
         uses: actions/upload-artifact@v4
         with:
           name: sbom
-          path: solys/*.cdx.*
+          path: ./*.cdx.*
 
       - name: Upload SBOM to release
         uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/tags/')
         with:
           files: |
-            solys/bom.cdx.xml
-            solys/bom.cdx.json
+            bom.cdx.xml
+            bom.cdx.json
