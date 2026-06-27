@@ -22,11 +22,6 @@ allow = [
     "CC0-1.0",
     "Zlib",
 ]
-deny = [
-    "AGPL-3.0",
-    "GPL-3.0",
-    "GPL-2.0",
-]
 exceptions = [{ name = "ring", allow = ["OpenSSL"] }]
 
 [sources]
