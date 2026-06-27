@@ -7,9 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v0.4.17] - 2026-06-27
+
+### Security
+
+- **Switch to distroless Docker image** — Base image changed from `debian:bookworm-slim` to `gcr.io/distroless/cc-debian12:nonroot`. Reduces attack surface by removing shell, package manager, and unnecessary system utilities. Container runs as non-root user (65532:65532).
+
+- **Embed dependency SBOM in release binaries** — CI workflows now use `cargo auditable build` instead of `cargo build` to embed a full list of dependencies and their versions in every release binary, enabling vulnerability scanning without access to source code.
+
+- **Add cargo-deny configuration** — `deny.toml` enforces license compliance, bans duplicate dependency versions, and restricts dependency sources to known registries. Allows `AGPL-3.0` (project license) plus standard permissive licenses; blocks `GPL-3.0`, `GPL-2.0`, `LGPL-3.0`, and `AGPL-1.0`.
+
+### Added
+
+- **Pre-signed URL upload support for backups** — Backup handler can now upload to S3-compatible storage via pre-signed URLs instead of requiring full S3 credentials, enabling zero-trust backup workflows.
+
+- **API key moved from WS query string to Authorization Bearer header** — The API key is no longer appended as a query parameter to the WebSocket URL. Instead, it is sent as `Authorization: Bearer <key>` in the WebSocket handshake request. Prevents credential leakage in server logs and URL referrer headers.
+
+- **Token change detection in relay client** — `RelayClientHandle` now tracks relay token changes and automatically reconnects tunnels when the token rotates, without requiring agent restart.
+
 ### Fixed
 
 - **`handle_create` drops `env_vars` from server create payload** — `ServerCreatePayload.env` deserialized from JSON key `"env"`, but the backend sends JSON key `"env_vars"`. Renamed the struct field to `env_vars` so `TYPE`, `VERSION`, `MEMORY` and all other environment variables reach the Docker container during initial server creation. `handle_start` was not affected because it reads `payload["env_vars"]` directly from `serde_json::Value` rather than via the struct.
+
+- **Dead code removed across multiple modules** — Eliminated unused imports, variables, and functions identified during protocol cleanup (I-01 through I-04).
+
+- **`production-path` unwrap() calls replaced with proper error handling** — Production code paths that could panic via unwrap() now return errors and are handled gracefully (I-05).
+
+- **`send().await` error handling with distinguished variants** — WebSocket send errors are now properly classified and handled instead of being silently ignored (I-06).
+
+- **RelayConfigSync handler reordered to prevent DNS record flapping** — DNS_CONFIG removal now happens before `set_servers` with a drain-delay, preventing temporary DNS record deletion when relay config is updated.
+
+- **EULA=TRUE limited to Minecraft images only** — The `EULA=TRUE` environment variable is now only set for Minecraft Docker images, preventing accidental license acceptance on non-Minecraft containers.
 
 ## [v0.4.16] - 2026-06-24
 
