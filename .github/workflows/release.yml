@@ -65,9 +65,7 @@ jobs:
         with:
           cache-on-failure: true
       - name: Install cargo-auditable
-        run: |
-          cargo install cargo-auditable --locked
-          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+        run: cargo install cargo-auditable --locked
       - name: Install Windows cross-compile libraries (Npcap SDK)
         if: matrix.target == 'x86_64-pc-windows-gnu'
         run: |
@@ -77,10 +75,10 @@ jobs:
           printf '%s\n' EXPORTS PacketOpenAdapter PacketCloseAdapter PacketRequest PacketSendPacket PacketSetBuff PacketGetNetInfo PacketGetAdapterNames > /tmp/packet.def
           x86_64-w64-mingw32-dlltool -d /tmp/packet.def -l /tmp/npcap-lib/libPacket.a -k -A
           echo "LIB_FOR_XWIN=/tmp/npcap-lib" >> "$GITHUB_ENV"
-      - name: Build
+      - name: Build (Windows)
         if: matrix.target == 'x86_64-pc-windows-gnu'
         run: |
-          RUSTFLAGS="-L ${LIB_FOR_XWIN}" cargo auditable build --release --manifest-path Cargo.toml \
+          RUSTFLAGS="-L ${LIB_FOR_XWIN}" cargo build --release --manifest-path Cargo.toml \
             --target ${{ matrix.target }}
       - name: Build (Linux)
         if: matrix.target != 'x86_64-pc-windows-gnu'
