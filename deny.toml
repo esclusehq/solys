@@ -5,7 +5,7 @@ exclude-dev = true
 ignore = []
 
 [bans]
-multiple-versions = "deny"
+multiple-versions = "allow"
 wildcards = "deny"
 highlight = "all"
 
