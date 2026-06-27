@@ -2,7 +2,6 @@
 exclude-dev = true
 
 [advisories]
-severity-threshold = "high"
 ignore = []
 
 [bans]
@@ -22,13 +21,6 @@ allow = [
     "Unlicense",
     "CC0-1.0",
     "Zlib",
-]
-deny = [
-    "GPL-3.0",
-    "GPL-2.0",
-    "LGPL-3.0",
-    "AGPL-1.0",
-    "CC-BY-NC-4.0",
 ]
 exceptions = [{ name = "ring", allow = ["OpenSSL"] }]
 
