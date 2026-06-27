@@ -9,13 +9,7 @@ RUN cargo fetch
 
 RUN cargo build --release
 
-FROM debian:bookworm-slim
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    ca-certificates \
-    curl \
-    docker.io \
-    && rm -rf /var/lib/apt/lists/*
-
+FROM gcr.io/distroless/cc-debian12:nonroot
 COPY --from=builder /build/target/release/escluse-agent /usr/local/bin/escluse-agent
-
+USER 65532:65532
 ENTRYPOINT ["/usr/local/bin/escluse-agent"]
