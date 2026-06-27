@@ -47,7 +47,9 @@ jobs:
         with:
           cache-on-failure: true
       - name: Install cargo-auditable
-        run: cargo install cargo-auditable --locked
+        run: |
+          cargo install cargo-auditable --locked
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
       - name: Install Windows cross-compile libraries (Npcap SDK)
         if: matrix.target == 'x86_64-pc-windows-gnu'
         run: |

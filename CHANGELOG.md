@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v0.4.18] - 2026-06-27
+
+### Fixed
+
+- **CI workflows fail due to local `.cargo/config.toml` path patch** — Removed `.cargo/config.toml` from git tracking and added `.cargo/` to `.gitignore`. The local-only path patch (`agent-ssh → ../agent-core/`) caused `No such file or directory` in GitHub Actions because `agent-core` is not checked out in CI. All agent-core dependencies now resolve via git URL as declared in `Cargo.toml`.
+
+- **SBOM workflow fails with wrong working directory** — `working-directory: solys` referenced a subdirectory that doesn't exist in the checkout. Removed the `working-directory` and fixed artifact paths.
+
+- **Security scanners fail due to missing `security-events: write` permission** — CodeQL SARIF upload requires `security-events: write` permission which was not set. Also fixed `--manifest-path solys/Cargo.toml` to `Cargo.toml`.
+
+- **Windows cross-compile build fails: `cargo auditable` not found** — Added `echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"` after installing `cargo-auditable` to ensure the binary is in PATH for subsequent build steps.
+
 ## [v0.4.17] - 2026-06-27
 
 ### Security
