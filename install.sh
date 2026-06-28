@@ -7,6 +7,7 @@ set -euo pipefail
 REPO="esclusehq/solys"
 INSTALL_DIR="${ESCLUSE_BIN_DIR:-/usr/local/bin}"
 VERSION="${1:-latest}"
+IS_TERMUX=false
 
 # --- Color helpers ---
 info()  { printf "\033[1;34m%s\033[0m\n" "$*"; }
@@ -126,6 +127,14 @@ configure_podman_socket() {
 
 # --- Ensure container runtime ---
 ensure_container_runtime() {
+    if [ "$IS_TERMUX" = true ]; then
+        if command -v podman &>/dev/null; then
+            info "Podman detected — using as container runtime"
+            return 0
+        fi
+        warn "No container runtime found. Agent will run in SSH-only mode."
+        return 0
+    fi
     if check_podman; then
         info "Podman detected — using as container runtime"
         return 0
@@ -155,8 +164,28 @@ ensure_container_runtime() {
     fail "Failed to install Docker. Please install Docker or Podman manually and re-run this script."
 }
 
+# --- Termux detection ---
+detect_termux() {
+    if [ -d "/data/data/com.termux/files/usr" ] && [ "$(uname -o)" = "Android" ] 2>/dev/null; then
+        IS_TERMUX=true
+        info "Termux environment detected"
+    fi
+}
+
 # --- Determine platform ---
 detect_platform() {
+    if [ "$IS_TERMUX" = true ]; then
+        OS="android"
+        ARCH=$(uname -m)
+        case "$ARCH" in
+            aarch64|arm64)  ARCH="aarch64" ;;
+            armv7l|arm)     ARCH="armv7" ;;
+            *) fail "Unsupported Android architecture: $ARCH (only aarch64 and armv7 are supported)" ;;
+        esac
+        info "Detected platform: ${OS}-${ARCH} (Termux)"
+        return 0
+    fi
+
     OS=$(uname -s | tr '[:upper:]' '[:lower:]')
     ARCH=$(uname -m)
 
@@ -192,7 +221,11 @@ build_urls() {
         info "Using version: v${V}"
     fi
 
-    ARCHIVE="solys-${OS}-${ARCH}.tar.gz"
+    if [ "$IS_TERMUX" = true ]; then
+        ARCHIVE="solys-android-${ARCH}.tar.gz"
+    else
+        ARCHIVE="solys-${OS}-${ARCH}.tar.gz"
+    fi
     BINARY="escluse-agent"
     ARCHIVE_URL="${BASE_URL}/${ARCHIVE}"
     CHECKSUM_URL="${BASE_URL}/SHA256SUMS.txt"
@@ -250,13 +283,20 @@ install_binary() {
         fail "Binary ${BINARY} not found in extracted archive."
     fi
 
-    info "Installing ${BINARY} to ${INSTALL_DIR}..."
-    if [ "$(id -u)" -eq 0 ]; then
+    if [ "$IS_TERMUX" = true ]; then
+        INSTALL_DIR="${ESCLUSE_BIN_DIR:-$PREFIX/bin}"
+        info "Installing ${BINARY} to ${INSTALL_DIR}..."
         install -m 755 "${TMPDIR}/${BINARY}" "${INSTALL_DIR}/${BINARY}" || \
-            fail "Failed to install binary to ${INSTALL_DIR}"
+            fail "Failed to install binary. Ensure $PREFIX/bin is writable."
     else
-        sudo install -m 755 "${TMPDIR}/${BINARY}" "${INSTALL_DIR}/${BINARY}" || \
-            fail "Failed to install binary to ${INSTALL_DIR} (try running with sudo)"
+        info "Installing ${BINARY} to ${INSTALL_DIR}..."
+        if [ "$(id -u)" -eq 0 ]; then
+            install -m 755 "${TMPDIR}/${BINARY}" "${INSTALL_DIR}/${BINARY}" || \
+                fail "Failed to install binary to ${INSTALL_DIR}"
+        else
+            sudo install -m 755 "${TMPDIR}/${BINARY}" "${INSTALL_DIR}/${BINARY}" || \
+                fail "Failed to install binary to ${INSTALL_DIR} (try running with sudo)"
+        fi
     fi
 
     ok "Installed ${BINARY} to ${INSTALL_DIR}/${BINARY}"
@@ -329,6 +369,9 @@ print_success() {
 
 # --- Main ---
 root_check() {
+    if [ "$IS_TERMUX" = true ]; then
+        return 0
+    fi
     if [ "$(id -u)" -ne 0 ]; then
         fail "This installer must be run as root. Please re-run with: sudo bash -c \"\$(curl -fsSL https://get.esluce.com/latest/install.sh)\""
     fi
@@ -340,6 +383,7 @@ main() {
     info "======================="
     echo ""
 
+    detect_termux
     root_check
     detect_platform
     build_urls

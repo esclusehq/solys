@@ -50,6 +50,16 @@ jobs:
             ext: ".exe"
             pkg_arch_rpm: ""
             pkg_arch_deb: ""
+          - target: aarch64-linux-android
+            os: ubuntu-latest
+            ext: ""
+            pkg_arch_rpm: ""
+            pkg_arch_deb: ""
+          - target: armv7-linux-androideabi
+            os: ubuntu-latest
+            ext: ""
+            pkg_arch_rpm: ""
+            pkg_arch_deb: ""
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
@@ -126,6 +136,14 @@ jobs:
                 cd binary-x86_64-pc-windows-gnu
                 zip ../release/solys-windows-x86_64.zip escluse-agent.exe
                 cd ..
+              fi
+              if [ -d "binary-aarch64-linux-android" ]; then
+                tar czf release/solys-android-aarch64.tar.gz \
+                  -C binary-aarch64-linux-android escluse-agent
+              fi
+              if [ -d "binary-armv7-linux-androideabi" ]; then
+                tar czf release/solys-android-armv7.tar.gz \
+                  -C binary-armv7-linux-androideabi escluse-agent
               fi
               ;;
             aarch64|arm64)
