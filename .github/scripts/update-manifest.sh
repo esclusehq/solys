@@ -32,16 +32,20 @@ jq -n \
   --arg deb_amd64 "${SHA256_MAP[escluse-agent_amd64.deb]:-}" \
   --arg deb_arm64 "${SHA256_MAP[escluse-agent_arm64.deb]:-}" \
   --arg rpm_x64 "${SHA256_MAP[escluse-agent-${VERSION}-1.x86_64.rpm]:-}" \
+  --arg tar_android "${SHA256_MAP[solys-android-aarch64.tar.gz]:-}" \
+  --arg tar_android_armv7 "${SHA256_MAP[solys-android-armv7.tar.gz]:-}" \
   '{
     latest: $version,
     versions: {
       ($version): {
-        "linux-x86_64":   { url: "\($url_prefix)/solys-linux-x86_64.tar.gz",     sha256: $tar_x64 },
-        "linux-aarch64":  { url: "\($url_prefix)/solys-linux-aarch64.tar.gz",    sha256: $tar_arm64 },
-        "windows-x86_64": { url: "\($url_prefix)/solys-windows-x86_64.zip",      sha256: $zip_x64 },
-        "deb-amd64":      { url: "\($url_prefix)/escluse-agent_amd64.deb",       sha256: $deb_amd64 },
-        "deb-arm64":      { url: "\($url_prefix)/escluse-agent_arm64.deb",       sha256: $deb_arm64 },
-        "rpm-x86_64":     { url: "\($url_prefix)/escluse-agent-\($version)-1.x86_64.rpm", sha256: $rpm_x64 }
+        "linux-x86_64":    { url: "\($url_prefix)/solys-linux-x86_64.tar.gz",     sha256: $tar_x64 },
+        "linux-aarch64":   { url: "\($url_prefix)/solys-linux-aarch64.tar.gz",    sha256: $tar_arm64 },
+        "windows-x86_64":  { url: "\($url_prefix)/solys-windows-x86_64.zip",      sha256: $zip_x64 },
+        "deb-amd64":       { url: "\($url_prefix)/escluse-agent_amd64.deb",       sha256: $deb_amd64 },
+        "deb-arm64":       { url: "\($url_prefix)/escluse-agent_arm64.deb",       sha256: $deb_arm64 },
+        "rpm-x86_64":      { url: "\($url_prefix)/escluse-agent-\($version)-1.x86_64.rpm", sha256: $rpm_x64 },
+        "android-aarch64": { url: "\($url_prefix)/solys-android-aarch64.tar.gz",  sha256: $tar_android },
+        "android-armv7":   { url: "\($url_prefix)/solys-android-armv7.tar.gz",    sha256: $tar_android_armv7 }
       }
     }
   }' > versions.json
