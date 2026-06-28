@@ -4,7 +4,7 @@
 
 use std::fs::File;
 use std::path::{Path, PathBuf};
-use std::str::FromStr;
+use std::sync::OnceLock;
 
 use agent_proto::Task;
 use anyhow::{Context, Result};
@@ -21,6 +21,12 @@ use crate::task_state::TASK_STATE_TRACKER;
 
 use agent_backup::{create_container_backup, calculate_checksum, CompressionFormat};
 use agent_backup::upload::{upload_to_s3_with_config, upload_to_local};
+
+static DATA_DIR: OnceLock<PathBuf> = OnceLock::new();
+
+pub fn init_data_dir(dir: PathBuf) {
+    DATA_DIR.set(dir).expect("DATA_DIR already initialized");
+}
 
 /// Extract a tar archive with path traversal and symlink escape protection.
 /// Blocks the current thread (I/O-bound, called from sync or spawn_blocking contexts).
@@ -101,7 +107,7 @@ pub async fn handle_create(task: Task) -> Result<serde_json::Value> {
         .unwrap_or_else(|| format!("backup-{}", chrono::Utc::now().format("%Y%m%d-%H%M%S")));
 
     // Create backup directory
-    let backup_dir = PathBuf::from("/var/lib/escluse-agent/backups")
+    let backup_dir = DATA_DIR.get().expect("DATA_DIR not initialized").join("backups")
         .join(payload.server_id.to_string());
     tokio::fs::create_dir_all(&backup_dir).await
         .context("Failed to create backup directory")?;
@@ -313,7 +319,7 @@ async fn upload_via_existing(payload: &BackupStartPayload, archive_path: &Path) 
         _ => {
             upload_to_local(
                 archive_path,
-                &std::path::PathBuf::from("/var/lib/escluse-agent/backups"),
+                &DATA_DIR.get().expect("DATA_DIR not initialized").join("backups"),
                 &payload.server_id.to_string(),
                 &payload.file_name,
             ).await
@@ -356,7 +362,7 @@ pub async fn handle_start(task: Task) -> anyhow::Result<serde_json::Value> {
     }
 
     // 1. Create archive from container data directory
-    let backup_dir = std::path::PathBuf::from("/var/lib/escluse-agent/backups")
+    let backup_dir = DATA_DIR.get().expect("DATA_DIR not initialized").join("backups")
         .join(payload.server_id.to_string());
     tokio::fs::create_dir_all(&backup_dir).await?;
 
@@ -432,7 +438,7 @@ pub async fn handle_restore(task: Task) -> Result<serde_json::Value> {
     );
 
     // Find backup file
-    let backup_dir = PathBuf::from("/var/lib/escluse-agent/backups")
+    let backup_dir = DATA_DIR.get().expect("DATA_DIR not initialized").join("backups")
         .join(payload.server_id.to_string());
 
     // Look for the backup file
@@ -497,32 +503,6 @@ pub async fn handle_restore(task: Task) -> Result<serde_json::Value> {
         "backup_id": payload.backup_id,
         "container_id": payload.container_id
     }))
-}
-
-async fn upload_to_s3(bucket: &str, region: &str, key: &str, file_path: &PathBuf) -> Result<String> {
-    use rusoto_s3::{S3, S3Client, PutObjectRequest};
-    use rusoto_core::Region;
-
-    let region = Region::from_str(region)
-        .unwrap_or_else(|_| Region::UsEast1);
-    
-    let client = S3Client::new(region);
-
-    let file_data = tokio::fs::read(file_path).await
-        .context("Failed to read backup file")?;
-
-    let request = PutObjectRequest {
-        bucket: bucket.to_string(),
-        key: key.to_string(),
-        body: Some(file_data.into()),
-        content_type: Some("application/gzip".to_string()),
-        ..Default::default()
-    };
-
-    client.put_object(request).await
-        .context("Failed to upload to S3")?;
-
-    Ok(format!("s3://{}/{}", bucket, key))
 }
 
 
