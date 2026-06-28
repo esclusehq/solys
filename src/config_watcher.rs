@@ -58,7 +58,9 @@ pub fn watch_config_file(
     config_path: Option<PathBuf>,
     on_change: impl Fn(ConfigChange) + Send + 'static + Clone,
 ) -> Option<ConfigWatcher> {
-    let config_path = config_path.unwrap_or_else(|| PathBuf::from("/etc/escluse/agent.json"));
+    let config_path = config_path.unwrap_or_else(|| {
+        dirs::config_dir().unwrap_or_else(|| PathBuf::from(".")).join("escluse-agent").join("agent.json")
+    });
     
     if !config_path.exists() {
         warn!(path = %config_path.display(), "Config file not found, skipping watcher");

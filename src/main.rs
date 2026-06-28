@@ -1,7 +1,5 @@
 //! Web Agent - Entry point with config loading, runtime detection, subsystems start
 
-#![cfg_attr(target_os = "windows", windows_subsystem = "windows")]
-
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -11,6 +9,7 @@ use tokio::signal;
 use tracing::{error, info};
 use uuid::Uuid;
 
+use crate::handlers::backup;
 use crate::state::{AgentMetadata, AgentState};
 
 mod agent;
@@ -24,9 +23,6 @@ mod rate_limit;
 mod startup;
 mod state;  // D-19: State persistence module
 mod task_state;
-
-#[cfg(target_os = "windows")]
-mod gui;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -43,7 +39,6 @@ async fn main() -> Result<()> {
         println!("FLAGS:");
         println!("  --help, -h       Prints help information");
         println!("  --version, -V    Prints version information");
-        println!("  --service, -s    Run as Windows service (Windows only)");
         println!("  --quiet, -q      Log to file only, no terminal output");
         println!();
         println!("CONFIGURATION:");
@@ -61,27 +56,6 @@ async fn main() -> Result<()> {
         return Ok(());
     }
 
-    let _is_service_mode = args.contains(&"--service".to_string()) || args.contains(&"-s".to_string());
-    
-    // On Windows, default to GUI mode unless --service flag is provided
-    #[cfg(target_os = "windows")]
-    {
-        if !_is_service_mode {
-            // GUI mode: Run agent in background and show GUI
-            let config = agent_config::load();
-            if let Err(errors) = agent_config::validate(&config) {
-                // Show error dialog for GUI mode
-                gui::show_notification("Escluse Agent Error", &format!("Configuration error: {:?}", errors));
-                std::process::exit(1);
-            }
-            
-            // Create agent future that will be spawned
-            let agent_future = Box::pin(run_agent_core(config));
-            return gui::run_gui_mode(agent_future).await;
-        }
-    }
-    
-    // Service mode (or non-Windows): Run agent directly
     let config = agent_config::load();
     if let Err(errors) = agent_config::validate(&config) {
         error!(?errors, "Configuration validation failed");
@@ -90,6 +64,8 @@ async fn main() -> Result<()> {
         }
         std::process::exit(1);
     }
+
+    backup::init_data_dir(config.data_dir.clone());
     
     run_agent_core(config).await
 }
@@ -141,7 +117,7 @@ async fn run_agent_core(config: agent_config::AgentConfig) -> Result<()> {
         layers.push(Box::new(
             tracing_subscriber::fmt::layer()
                 .with_writer(std::io::stdout)
-                .with_ansi(false)
+                .with_ansi(std::io::stdout().is_terminal())
                 .with_filter(log_filter.clone()),
         ));
     }
