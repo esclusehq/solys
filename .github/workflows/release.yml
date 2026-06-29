@@ -55,11 +55,13 @@ jobs:
             ext: ""
             pkg_arch_rpm: ""
             pkg_arch_deb: ""
+            android_api: 24
           - target: armv7-linux-androideabi
             os: ubuntu-latest
             ext: ""
             pkg_arch_rpm: ""
             pkg_arch_deb: ""
+            android_api: 24
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
@@ -71,6 +73,8 @@ jobs:
         uses: taiki-e/setup-cross-toolchain-action@v1
         with:
           target: ${{ matrix.target }}
+        env:
+          ANDROID_NDK_API: ${{ matrix.android_api }}
       - uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: true
