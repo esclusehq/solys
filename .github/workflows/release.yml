@@ -69,13 +69,33 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
-      - name: Set Android NDK API level
-        if: matrix.android_api != ''
-        run: echo "ANDROID_NDK_API=${{ matrix.android_api }}" >> "$GITHUB_ENV"
       - name: Install cross-compilation tools
         uses: taiki-e/setup-cross-toolchain-action@v1
         with:
           target: ${{ matrix.target }}
+      - name: Override Android NDK API level in linker/compiler
+        if: matrix.android_api != ''
+        run: |
+          for var in CC CXX; do
+            old_val="${!var}"
+            if echo "$old_val" | grep -q '21-clang'; then
+              new_val="${old_val/21/${{ matrix.android_api }}}"
+              if ! command -v "$new_val" >/dev/null 2>&1; then
+                wrapper_path="$(command -v "$old_val")"
+                sudo cp "$wrapper_path" "/usr/local/bin/$new_val"
+                sudo sed -i 's/21/${{ matrix.android_api }}/g' "/usr/local/bin/$new_val"
+              fi
+              echo "$var=$new_val" >> "$GITHUB_ENV"
+            fi
+          done
+          # Override cargo linker too
+          for var in "${!CARGO_TARGET_@}"; do
+            old_val="${!var}"
+            if echo "$old_val" | grep -q '21-clang'; then
+              new_val="${old_val/21/${{ matrix.android_api }}}"
+              echo "$var=$new_val" >> "$GITHUB_ENV"
+            fi
+          done
       - uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: true
