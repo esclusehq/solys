@@ -70,6 +70,7 @@ bollard = { version = "0.18", default-features = false, features = ["pipe", "htt
 [target.'cfg(target_os = "android")'.dependencies]
 openssl-sys = { version = "0.9", features = ["vendored"] }
 
+[dependencies]
 # S3 for backup storage
 aws-sdk-s3    = "1"
 aws-config    = "1"
