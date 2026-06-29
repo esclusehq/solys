@@ -62,15 +62,9 @@ tempfile = "3"
 # W-01: Zeroizing secret buffers on drop
 zeroize = "1"
 
-# Docker client (not available on Android)
-[target.'cfg(not(target_os = "android"))'.dependencies]
+# Docker client
 bollard = { version = "0.18", default-features = false, features = ["pipe", "http"] }
 
-# Force vendored openssl-sys on Android (transitive dep via ssh2/libssh2/rusoto)
-[target.'cfg(target_os = "android")'.dependencies]
-openssl-sys = { version = "0.9", features = ["vendored"] }
-
-[dependencies]
 # S3 for backup storage
 aws-sdk-s3    = "1"
 aws-config    = "1"
@@ -110,6 +104,10 @@ rand = "0.8"
 
 # W-10: Safe tar extraction (path traversal protection)
 tar = "0.4"
+
+# Force vendored openssl-sys on Android (transitive dep via ssh2/libssh2/rusoto)
+[target.'cfg(target_os = "android")'.dependencies]
+openssl-sys = { version = "0.9", features = ["vendored"] }
 
 [[bin]]
 name = "escluse-agent"
