@@ -66,6 +66,10 @@ zeroize = "1"
 [target.'cfg(not(target_os = "android"))'.dependencies]
 bollard = { version = "0.18", default-features = false, features = ["pipe", "http"] }
 
+# Force vendored openssl-sys on Android (transitive dep via ssh2/libssh2/rusoto)
+[target.'cfg(target_os = "android")'.dependencies]
+openssl-sys = { version = "0.9", features = ["vendored"] }
+
 # S3 for backup storage
 aws-sdk-s3    = "1"
 aws-config    = "1"

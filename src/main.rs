@@ -1,5 +1,6 @@
 //! Web Agent - Entry point with config loading, runtime detection, subsystems start
 
+use std::io::IsTerminal;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
