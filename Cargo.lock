@@ -11,7 +11,6 @@ checksum = "320119579fcad9c21884f5c4861d16174d0e06250625266f50fe6898340abefa"
 [[package]]
 name = "agent-backup"
 version = "0.1.0"
-source = "git+https://github.com/esclusehq/agent-core#34be5dec15e07c8ed8eeda477ee8f4f5436b588a"
 dependencies = [
  "agent-proto",
  "anyhow",
@@ -32,7 +31,6 @@ dependencies = [
 [[package]]
 name = "agent-capability"
 version = "0.1.0"
-source = "git+https://github.com/esclusehq/agent-core#34be5dec15e07c8ed8eeda477ee8f4f5436b588a"
 dependencies = [
  "agent-proto",
  "serde",
@@ -42,7 +40,6 @@ dependencies = [
 [[package]]
 name = "agent-config"
 version = "0.1.0"
-source = "git+https://github.com/esclusehq/agent-core#34be5dec15e07c8ed8eeda477ee8f4f5436b588a"
 dependencies = [
  "agent-proto",
  "dirs",
@@ -59,7 +56,6 @@ dependencies = [
 [[package]]
 name = "agent-event"
 version = "0.1.0"
-source = "git+https://github.com/esclusehq/agent-core#34be5dec15e07c8ed8eeda477ee8f4f5436b588a"
 dependencies = [
  "tokio",
  "uuid",
@@ -68,7 +64,6 @@ dependencies = [
 [[package]]
 name = "agent-health"
 version = "0.1.0"
-source = "git+https://github.com/esclusehq/agent-core#34be5dec15e07c8ed8eeda477ee8f4f5436b588a"
 dependencies = [
  "agent-proto",
  "serde",
@@ -80,7 +75,6 @@ dependencies = [
 [[package]]
 name = "agent-metrics"
 version = "0.1.0"
-source = "git+https://github.com/esclusehq/agent-core#34be5dec15e07c8ed8eeda477ee8f4f5436b588a"
 dependencies = [
  "agent-proto",
  "chrono",
@@ -93,7 +87,6 @@ dependencies = [
 [[package]]
 name = "agent-proto"
 version = "0.1.0"
-source = "git+https://github.com/esclusehq/agent-core#34be5dec15e07c8ed8eeda477ee8f4f5436b588a"
 dependencies = [
  "chrono",
  "serde",
@@ -105,7 +98,6 @@ dependencies = [
 [[package]]
 name = "agent-rcon"
 version = "0.1.0"
-source = "git+https://github.com/esclusehq/agent-core#34be5dec15e07c8ed8eeda477ee8f4f5436b588a"
 dependencies = [
  "agent-proto",
  "serde",
@@ -115,7 +107,6 @@ dependencies = [
 [[package]]
 name = "agent-runtime"
 version = "0.1.0"
-source = "git+https://github.com/esclusehq/agent-core#34be5dec15e07c8ed8eeda477ee8f4f5436b588a"
 dependencies = [
  "agent-proto",
  "bollard",
@@ -129,7 +120,6 @@ dependencies = [
 [[package]]
 name = "agent-security"
 version = "0.1.0"
-source = "git+https://github.com/esclusehq/agent-core#34be5dec15e07c8ed8eeda477ee8f4f5436b588a"
 dependencies = [
  "agent-proto",
  "chrono",
@@ -145,7 +135,6 @@ dependencies = [
 [[package]]
 name = "agent-ssh"
 version = "0.1.0"
-source = "git+https://github.com/esclusehq/agent-core#34be5dec15e07c8ed8eeda477ee8f4f5436b588a"
 dependencies = [
  "agent-proto",
  "serde",
@@ -157,7 +146,6 @@ dependencies = [
 [[package]]
 name = "agent-task"
 version = "0.1.0"
-source = "git+https://github.com/esclusehq/agent-core#34be5dec15e07c8ed8eeda477ee8f4f5436b588a"
 dependencies = [
  "agent-proto",
  "chrono",
@@ -3858,7 +3846,7 @@ dependencies = [
 
 [[package]]
 name = "solys"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "agent-backup",
  "agent-capability",
