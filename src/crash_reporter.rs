@@ -10,7 +10,7 @@ use futures_util::StreamExt;
 use uuid::Uuid;
 use anyhow::Result;
 
-use crate::agent_connection::AgentMessage;
+use agent_proto::messages::CrashReportPayload;
 
 /// Captures container exit code and last N lines of logs.
 /// Called when a managed container exits unexpectedly.
@@ -56,16 +56,16 @@ pub async fn capture_crash_data(
     Ok((exit_code as i32, log_excerpt))
 }
 
-/// Build a CrashReport AgentMessage from raw crash data.
+/// Build a CrashReportPayload from raw crash data.
 pub fn build_crash_report(
     server_id: Uuid,
     exit_code: i32,
     log_excerpt: String,
-) -> AgentMessage {
-    AgentMessage::CrashReport {
-        server_id,
+) -> CrashReportPayload {
+    CrashReportPayload {
+        agent_id: server_id,
         exit_code,
         log_excerpt,
-        timestamp: chrono::Utc::now().to_rfc3339(),
+        timestamp: chrono::Utc::now(),
     }
 }
