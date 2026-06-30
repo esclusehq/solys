@@ -388,7 +388,9 @@ pub async fn run(
                                     std::time::Duration::from_secs(5),
                                     ws_tx.send(heartbeat),
                                 ).await {
-                                    Ok(Ok(_)) => {}
+                                    Ok(Ok(_)) => {
+                                        info!("Heartbeat sent");
+                                    }
                                     Ok(Err(_closed)) => {
                                         error!("Heartbeat channel closed, WS writer likely exited");
                                         break;
