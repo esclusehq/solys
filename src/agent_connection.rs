@@ -226,10 +226,12 @@ pub async fn run(
                             Ok(backend_msg) => {
                                 match backend_msg {
                                     BackendToAgent::RegisterAck(ref ack) => {
-                                        info!(agent_id = %ack.agent_id, "Agent registered successfully");
-                                        *node_id.lock().unwrap_or_else(|e| e.into_inner()) = Some(ack.agent_id);
-                                        task_state::set_agent_node_id(ack.agent_id);
-                                        crate::audit::log_agent_registered(ack.agent_id).await;
+                                        info!(agent_id = ?ack.agent_id, "Agent registered successfully");
+                                        if let Some(id) = ack.agent_id {
+                                            *node_id.lock().unwrap_or_else(|e| e.into_inner()) = Some(id);
+                                            task_state::set_agent_node_id(id);
+                                            crate::audit::log_agent_registered(id).await;
+                                        }
                                     }
                                     BackendToAgent::BackendError(ref err) => {
                                         error!(code = %err.code, message = %err.message, "Registration error");
