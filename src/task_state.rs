@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::mpsc;
 
-use crate::agent::result_sender::AgentToBackend;
+use crate::agent::result_sender::OutboundMessage;
 
 use agent_proto::TaskStatus as ProtoTaskStatus;
 use chrono::{DateTime, Utc};
@@ -170,11 +170,11 @@ pub fn get_agent_node_id() -> Option<Uuid> {
 lazy_static::lazy_static! {
     pub static ref TASK_STATE_TRACKER: TaskStateTracker = TaskStateTracker::default();
     pub static ref AGENT_NODE_ID: std::sync::Mutex<Option<Uuid>> = std::sync::Mutex::new(None);
-    pub static ref PROGRESS_SENDER: std::sync::Mutex<Option<mpsc::Sender<AgentToBackend>>> = std::sync::Mutex::new(None);
+    pub static ref PROGRESS_SENDER: std::sync::Mutex<Option<mpsc::Sender<OutboundMessage>>> = std::sync::Mutex::new(None);
     pub static ref RESULT_SENDER: std::sync::Mutex<Option<std::sync::Arc<crate::agent::result_sender::ResultSender>>> = std::sync::Mutex::new(None);
 }
 
-pub fn set_progress_sender(sender: mpsc::Sender<AgentToBackend>) {
+pub fn set_progress_sender(sender: mpsc::Sender<OutboundMessage>) {
     if let Ok(mut guard) = PROGRESS_SENDER.lock() {
         *guard = Some(sender);
     }
@@ -190,7 +190,7 @@ pub fn get_result_sender() -> Option<std::sync::Arc<crate::agent::result_sender:
     RESULT_SENDER.lock().ok().and_then(|guard| guard.clone())
 }
 
-pub fn get_progress_sender() -> Option<mpsc::Sender<AgentToBackend>> {
+pub fn get_progress_sender() -> Option<mpsc::Sender<OutboundMessage>> {
     PROGRESS_SENDER.lock().ok().and_then(|guard| guard.clone())
 }
 
@@ -198,36 +198,46 @@ pub fn get_progress_sender() -> Option<mpsc::Sender<AgentToBackend>> {
 pub async fn send_log_output(server_id: Uuid, line: String, stream: String) {
     // Try using the global result sender first
     if let Some(sender) = get_progress_sender() {
-        let msg = AgentToBackend::LogOutput {
-            server_id,
-            timestamp: chrono::Utc::now().to_rfc3339(),
-            line,
-            stream,
-        };
+        let msg = OutboundMessage::Proto(
+            agent_proto::messages::AgentToBackend::LogLine(agent_proto::messages::LogLinePayload {
+                agent_id: server_id,
+                line,
+                timestamp: chrono::Utc::now(),
+                stream: match stream.as_str() {
+                    "stderr" | "err" => agent_proto::messages::LogStream::Stderr,
+                    _ => agent_proto::messages::LogStream::Stdout,
+                },
+            })
+        );
         let _ = sender.try_send(msg);
         return;
     }
-    
+
     // Fallback: try via result sender if available
     if let Some(rs) = get_result_sender() {
-        rs.send_log_output(
-            server_id,
-            chrono::Utc::now().to_rfc3339(),
-            line,
-            stream
-        ).await;
+        rs.send_log_output(server_id, line, stream).await;
     }
 }
 
 /// Send progress update via WebSocket
 pub async fn send_progress(task_id: Uuid, status: &str, progress: f32, message: &str) {
     if let Some(sender) = get_progress_sender() {
-        let msg = AgentToBackend::TaskProgress {
-            task_id,
-            status: status.to_string(),
-            progress,
-            message: message.to_string(),
+        let agent_id = get_agent_node_id().unwrap_or(uuid::Uuid::nil());
+        let status_enum = match status {
+            "running" => agent_proto::messages::AgentStatus::Busy,
+            "completed" => agent_proto::messages::AgentStatus::Online,
+            "failed" => agent_proto::messages::AgentStatus::Error,
+            _ => agent_proto::messages::AgentStatus::Online,
         };
+        let msg = OutboundMessage::Proto(
+            agent_proto::messages::AgentToBackend::StatusUpdate(agent_proto::messages::AgentStatusPayload {
+                agent_id,
+                status: status_enum,
+                task_id: Some(task_id),
+                progress: Some(progress),
+                message: Some(message.to_string()),
+            })
+        );
         let _ = sender.try_send(msg);
     }
 }

@@ -13,99 +13,30 @@ use tokio::sync::mpsc::error::SendError;
 use tracing::{error, info, trace, warn};
 
 use agent_proto::TaskResult;
+use agent_proto::messages::AgentToBackend as ProtoToBackend;
 use uuid::Uuid;
 
 const BUFFER_FILE_NAME: &str = "task_results.buffer";
 const MAX_BUFFER_SIZE: usize = 1000;
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-#[serde(tag = "type")]
-pub enum AgentToBackend {
-    #[serde(rename = "task_result")]
-    TaskResult(TaskResult),
-    #[serde(rename = "register")]
-    Register {
-        id: Option<Uuid>,
-        name: String,
-        ip: String,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        podman_version: Option<String>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        container_runtime: Option<String>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        os_info: Option<String>,
-        capabilities: Vec<String>,
-        #[serde(default)]
-        containers: Vec<serde_json::Value>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        total_memory: Option<i64>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        cpu_cores: Option<i32>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        agent_version: Option<String>,
-    },
-    #[serde(rename = "heartbeat")]
-    Heartbeat {
-        node_id: Uuid,
-        status: String,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        metrics: Option<serde_json::Value>,
-        #[serde(default)]
-        containers: Vec<serde_json::Value>,
-    },
-    #[serde(rename = "command_response")]
-    CommandResponse {
-        request_id: Uuid,
-        command: String,
-        server_id: Uuid,
-        success: bool,
-        output: String,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        duration_ms: Option<u64>,
-    },
-    #[serde(rename = "task_progress")]
-    TaskProgress {
-        task_id: Uuid,
-        status: String,
-        progress: f32,
-        message: String,
-    },
-    #[serde(rename = "log_output")]
-    LogOutput {
-        server_id: Uuid,
-        timestamp: String,
-        line: String,
-        stream: String,
-    },
-    #[serde(rename = "crash_report")]
-    CrashReport {
-        server_id: Uuid,
-        exit_code: i32,
-        log_excerpt: String,
-        timestamp: String,
-    },
-    #[serde(rename = "container_event")]
-    ContainerEvent {
-        node_id: Uuid,
-        event: String,
-        container_id: String,
-        container_name: String,
-    },
-    /// WebSocket control frame — handled by the writer task as Message::Pong, not JSON
-    #[serde(skip)]
+/// Thin wrapper over agent-proto's AgentToBackend that also carries
+/// WebSocket control frames (Pong bytes), which are not JSON messages.
+#[derive(Debug)]
+pub enum OutboundMessage {
+    Proto(ProtoToBackend),
     Pong(Bytes),
 }
 
 #[derive(Clone)]
 pub struct ResultSender {
-    ws_sender: Arc<Mutex<Option<mpsc::Sender<AgentToBackend>>>>,
+    ws_sender: Arc<Mutex<Option<mpsc::Sender<OutboundMessage>>>>,
     buffer: Arc<Mutex<VecDeque<TaskResult>>>,
     connected: Arc<AtomicBool>,
     buffer_path: PathBuf,
 }
 
 impl ResultSender {
-    pub fn new(ws_sender: Option<mpsc::Sender<AgentToBackend>>, data_dir: PathBuf) -> Self {
+    pub fn new(ws_sender: Option<mpsc::Sender<OutboundMessage>>, data_dir: PathBuf) -> Self {
         let buffer_path = data_dir.join(BUFFER_FILE_NAME);
 
         Self {
@@ -118,14 +49,14 @@ impl ResultSender {
 
     /// Update the sender when reconnecting. Pass `None` to mark the channel as closed
     /// (used when the writer task has exited due to a dead WebSocket).
-    pub async fn update_sender(&self, sender: Option<mpsc::Sender<AgentToBackend>>) {
+    pub async fn update_sender(&self, sender: Option<mpsc::Sender<OutboundMessage>>) {
         let mut guard = self.ws_sender.lock().await;
         *guard = sender;
         info!("WebSocket sender updated");
     }
 
     /// Get a clone of the current sender, if one is registered.
-    async fn get_sender(&self) -> Option<mpsc::Sender<AgentToBackend>> {
+    async fn get_sender(&self) -> Option<mpsc::Sender<OutboundMessage>> {
         self.ws_sender.lock().await.as_ref().cloned()
     }
 
@@ -140,7 +71,7 @@ impl ResultSender {
         // to drain it) instead of silently buffering every result to disk.
         if self.connected.load(Ordering::Relaxed) {
             if let Some(sender) = self.get_sender().await {
-                match sender.send(AgentToBackend::TaskResult(result.clone())).await {
+                match sender.send(OutboundMessage::Proto(ProtoToBackend::TaskResult(result.clone()))).await {
                     Ok(_) => {
                         trace!(task_id = %result.task_id, "Task result sent immediately");
                         return;
@@ -159,12 +90,21 @@ impl ResultSender {
     /// Send progress update via WebSocket
     #[allow(dead_code)]
     pub async fn send_progress(&self, task_id: Uuid, status: &str, progress: f32, message: &str) {
-        let progress_msg = AgentToBackend::TaskProgress {
-            task_id,
-            status: status.to_string(),
-            progress,
-            message: message.to_string(),
+        let status_enum = match status {
+            "running" => agent_proto::messages::AgentStatus::Busy,
+            "completed" => agent_proto::messages::AgentStatus::Online,
+            "failed" => agent_proto::messages::AgentStatus::Error,
+            _ => agent_proto::messages::AgentStatus::Online,
         };
+        let progress_msg = OutboundMessage::Proto(
+            ProtoToBackend::StatusUpdate(agent_proto::messages::AgentStatusPayload {
+                agent_id: uuid::Uuid::nil(),
+                status: status_enum,
+                task_id: Some(task_id),
+                progress: Some(progress),
+                message: Some(message.to_string()),
+            })
+        );
 
         // Fire-and-forget — `try_send` so a slow writer never stalls log capture
         if self.connected.load(Ordering::Relaxed) {
@@ -184,13 +124,18 @@ impl ResultSender {
     }
 
     /// Send log output via WebSocket
-    pub async fn send_log_output(&self, server_id: Uuid, timestamp: String, line: String, stream: String) {
-        let log_msg = AgentToBackend::LogOutput {
-            server_id,
-            timestamp,
-            line,
-            stream,
-        };
+    pub async fn send_log_output(&self, server_id: Uuid, line: String, stream: String) {
+        let log_msg = OutboundMessage::Proto(
+            ProtoToBackend::LogLine(agent_proto::messages::LogLinePayload {
+                agent_id: server_id,
+                line,
+                timestamp: chrono::Utc::now(),
+                stream: match stream.as_str() {
+                    "stderr" | "err" => agent_proto::messages::LogStream::Stderr,
+                    _ => agent_proto::messages::LogStream::Stdout,
+                },
+            })
+        );
 
         // Fire-and-forget — `try_send` so a slow writer never stalls log capture
         if self.connected.load(Ordering::Relaxed) {
@@ -270,7 +215,7 @@ impl ResultSender {
             // Use `send().await` so the writer task can apply backpressure to us too —
             // if the channel is full, wait for the writer to drain before pushing more.
             while let Some(result) = buffer.pop_front() {
-                match sender.send(AgentToBackend::TaskResult(result.clone())).await {
+                match sender.send(OutboundMessage::Proto(ProtoToBackend::TaskResult(result.clone()))).await {
                     Ok(_) => {
                         flushed += 1;
                     }
