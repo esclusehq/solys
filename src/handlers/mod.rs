@@ -8,6 +8,7 @@ pub mod ssh;
 pub mod sftp;
 pub mod dns;
 pub mod dns_watch;
+pub mod direct_executor;
 pub mod files;
 pub mod connectivity;
 // Phase 68 (Plan 02): relay tunnel — must be declared before `relay` in
