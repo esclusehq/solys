@@ -27,7 +27,7 @@ use crate::handlers::dns::{self, CloudflareDnsConfig};
 use crate::agent::result_sender::{OutboundMessage, ResultSender};
 use crate::task_state;
 use agent_config::AgentConfig;
-use agent_proto::messages::{AgentToBackend, BackendToAgent, RegisterPayload, HeartbeatPayload, CrashReportPayload, AgentStatus, DiskUsage};
+use agent_proto::messages::{AgentToBackend, BackendToAgent, RegisterPayload, HeartbeatPayload, NodeMetrics, CrashReportPayload, AgentStatus};
 use agent_runtime::RuntimeDetector;
 use agent_capability::CapabilityRegistry;
 use sysinfo::System;
@@ -352,36 +352,30 @@ pub async fn run(
                         _ = heartbeat_interval.tick() => {
                             let node_id_value = *node_id.lock().unwrap_or_else(|e| e.into_inner());
                             if let Some(id) = node_id_value {
-                                let (cpu_percent, memory_used, memory_total, disk_usage, net_rx_bytes, net_tx_bytes) = if let Ok(report) = metrics::collect_full_metrics().await {
-                                    (
-                                        report.system.cpu_percent as f32,
-                                        report.system.memory_used_bytes,
-                                        report.system.memory_total_bytes,
-                                        report.system.disk_usage.iter().map(|d| DiskUsage {
-                                            mount_point: d.mount_point.clone(),
-                                            used_bytes: d.used_bytes,
-                                            total_bytes: d.total_bytes,
-                                        }).collect(),
-                                        report.system.network_rx_bytes,
-                                        report.system.network_tx_bytes,
-                                    )
-                                } else {
-                                    warn!("Metrics collection failed, sending heartbeat without metrics");
-                                    (0.0, 0, 0, vec![], 0, 0)
+                                let metrics = match metrics::collect_full_metrics().await {
+                                    Ok(report) => {
+                                        let total_disk: u64 = report.system.disk_usage.iter().map(|d| d.total_bytes).sum();
+                                        let used_disk: u64 = report.system.disk_usage.iter().map(|d| d.used_bytes).sum();
+                                        Some(NodeMetrics {
+                                            cpu_usage: report.system.cpu_percent,
+                                            memory_used: report.system.memory_used_bytes,
+                                            memory_total: report.system.memory_total_bytes,
+                                            disk_used: used_disk,
+                                            disk_total: total_disk,
+                                        })
+                                    }
+                                    Err(e) => {
+                                        warn!(error = %e, "Metrics collection failed, sending heartbeat without metrics");
+                                        None
+                                    }
                                 };
 
                                 let heartbeat = OutboundMessage::Proto(
                                     AgentToBackend::Heartbeat(HeartbeatPayload {
                                         agent_id: id,
-                                        timestamp: chrono::Utc::now(),
-                                        task_count: crate::task_state::TASK_STATE_TRACKER.list_running().await.len() as u32,
-                                        status: AgentStatus::Online,
-                                        cpu_percent,
-                                        memory_used,
-                                        memory_total,
-                                        disk_usage,
-                                        net_rx_bytes,
-                                        net_tx_bytes,
+                                        status: "online".to_string(),
+                                        metrics,
+                                        containers: vec![],
                                     })
                                 );
                                 match tokio::time::timeout(
