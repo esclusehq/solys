@@ -191,6 +191,15 @@ async fn execute_single(
             // the task payload contains zone_id + record_id directly.
             "relay.remove_cname_record" => dns::handle_remove_record(task.clone()).await,
 
+            // Direct executor operations (Phase 10)
+            "direct.server.create" => direct_executor::server::handle_create(task.clone()).await,
+            "direct.server.start" => direct_executor::server::handle_start(task.clone()).await,
+            "direct.server.stop" => direct_executor::server::handle_stop(task.clone()).await,
+            "direct.server.restart" => direct_executor::server::handle_restart(task.clone()).await,
+            "direct.server.delete" => direct_executor::server::handle_delete(task.clone()).await,
+            "direct.server.logs" => direct_executor::server::handle_logs(task.clone()).await,
+            "direct.server.status" => direct_executor::server::handle_status(task.clone()).await,
+
             // Unknown
             _ => Err(anyhow::anyhow!("Unknown task type: {}", task_type)),
         }
@@ -346,6 +355,35 @@ fn get_task_config(task_type: &str) -> TaskConfig {
         },
         "relay.remove_cname_record" => TaskConfig {
             timeout: Duration::from_secs(15),
+            max_retries: 0, retry_delay_ms: 0, max_retry_delay_ms: 0, backoff_multiplier: 1.0,
+        },
+        // Direct executor task configs (Phase 10)
+        "direct.server.create" => TaskConfig {
+            timeout: Duration::from_secs(120),  // JAR download can be slow
+            max_retries: 0, retry_delay_ms: 0, max_retry_delay_ms: 0, backoff_multiplier: 1.0,
+        },
+        "direct.server.start" => TaskConfig {
+            timeout: Duration::from_secs(60),
+            max_retries: 3, retry_delay_ms: 2000, max_retry_delay_ms: 30000, backoff_multiplier: 2.0,
+        },
+        "direct.server.stop" => TaskConfig {
+            timeout: Duration::from_secs(60),
+            max_retries: 0, retry_delay_ms: 0, max_retry_delay_ms: 0, backoff_multiplier: 1.0,
+        },
+        "direct.server.restart" => TaskConfig {
+            timeout: Duration::from_secs(90),
+            max_retries: 3, retry_delay_ms: 2000, max_retry_delay_ms: 30000, backoff_multiplier: 2.0,
+        },
+        "direct.server.delete" => TaskConfig {
+            timeout: Duration::from_secs(30),
+            max_retries: 0, retry_delay_ms: 0, max_retry_delay_ms: 0, backoff_multiplier: 1.0,
+        },
+        "direct.server.logs" => TaskConfig {
+            timeout: Duration::from_secs(30),
+            max_retries: 0, retry_delay_ms: 0, max_retry_delay_ms: 0, backoff_multiplier: 1.0,
+        },
+        "direct.server.status" => TaskConfig {
+            timeout: Duration::from_secs(10),
             max_retries: 0, retry_delay_ms: 0, max_retry_delay_ms: 0, backoff_multiplier: 1.0,
         },
         _ => TaskConfig {
