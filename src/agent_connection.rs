@@ -370,12 +370,28 @@ pub async fn run(
                                     }
                                 };
 
+                                // Collect direct executor server statuses (Phase 10)
+                                let mut containers: Vec<agent_proto::messages::ContainerStatus> = Vec::new();
+                                for (server_id, name, status) in crate::handlers::direct_executor::collect_server_statuses() {
+                                    containers.push(agent_proto::messages::ContainerStatus {
+                                        id: server_id.to_string(),
+                                        name,
+                                        status,
+                                        cpu: 0.0,
+                                        memory: 0,
+                                        memory_limit: None,
+                                        disk_usage: None,
+                                        players: None,
+                                        tps: None,
+                                    });
+                                }
+
                                 let heartbeat = OutboundMessage::Proto(
                                     AgentToBackend::Heartbeat(HeartbeatPayload {
                                         agent_id: id,
                                         status: "online".to_string(),
                                         metrics,
-                                        containers: vec![],
+                                        containers,
                                     })
                                 );
                                 match tokio::time::timeout(
