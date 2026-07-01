@@ -27,7 +27,7 @@ pub struct ServerCommandPayload {
 }
 
 #[derive(Debug)]
-struct RconPacket {
+pub(crate) struct RconPacket {
     pub request_id: i32,
     pub packet_type: i32,
     pub body: String,
@@ -39,7 +39,7 @@ impl RconPacket {
     const SERVERDATA_EXECCOMMAND: i32 = 2;
     const SERVERDATA_RESPONSE_VALUE: i32 = 0;
 
-    fn new(request_id: i32, packet_type: i32, body: &str) -> Self {
+    pub(crate) fn new(request_id: i32, packet_type: i32, body: &str) -> Self {
         Self {
             request_id,
             packet_type,
@@ -47,7 +47,7 @@ impl RconPacket {
         }
     }
 
-    fn encode(&self) -> Vec<u8> {
+    pub(crate) fn encode(&self) -> Vec<u8> {
         let body_bytes = self.body.as_bytes();
         let mut packet = Vec::new();
 
