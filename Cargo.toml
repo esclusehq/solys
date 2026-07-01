@@ -13,18 +13,18 @@ repository = "https://github.com/esclusehq/solys"
 
 [dependencies]
 # Agent core crates (via git for CI, patched to paths locally via .cargo/config.toml)
-agent-proto      = { git = "https://github.com/esclusehq/agent-core", rev = "b4813cd" }
-agent-config     = { git = "https://github.com/esclusehq/agent-core", rev = "b4813cd" }
-agent-security   = { git = "https://github.com/esclusehq/agent-core", rev = "b4813cd" }
-agent-event      = { git = "https://github.com/esclusehq/agent-core", rev = "b4813cd" }
-agent-health     = { git = "https://github.com/esclusehq/agent-core", rev = "b4813cd" }
-agent-capability = { git = "https://github.com/esclusehq/agent-core", rev = "b4813cd" }
-agent-task       = { git = "https://github.com/esclusehq/agent-core", rev = "b4813cd" }
-agent-metrics    = { git = "https://github.com/esclusehq/agent-core", rev = "b4813cd" }
-agent-runtime    = { git = "https://github.com/esclusehq/agent-core", rev = "b4813cd" }
-agent-backup     = { git = "https://github.com/esclusehq/agent-core", rev = "b4813cd" }
-agent-rcon       = { git = "https://github.com/esclusehq/agent-core", rev = "b4813cd" }
-agent-ssh        = { git = "https://github.com/esclusehq/agent-core", rev = "b4813cd" }
+agent-proto      = { git = "https://github.com/esclusehq/agent-core", rev = "237d2e9" }
+agent-config     = { git = "https://github.com/esclusehq/agent-core", rev = "237d2e9" }
+agent-security   = { git = "https://github.com/esclusehq/agent-core", rev = "237d2e9" }
+agent-event      = { git = "https://github.com/esclusehq/agent-core", rev = "237d2e9" }
+agent-health     = { git = "https://github.com/esclusehq/agent-core", rev = "237d2e9" }
+agent-capability = { git = "https://github.com/esclusehq/agent-core", rev = "237d2e9" }
+agent-task       = { git = "https://github.com/esclusehq/agent-core", rev = "237d2e9" }
+agent-metrics    = { git = "https://github.com/esclusehq/agent-core", rev = "237d2e9" }
+agent-runtime    = { git = "https://github.com/esclusehq/agent-core", rev = "237d2e9" }
+agent-backup     = { git = "https://github.com/esclusehq/agent-core", rev = "237d2e9" }
+agent-rcon       = { git = "https://github.com/esclusehq/agent-core", rev = "237d2e9" }
+agent-ssh        = { git = "https://github.com/esclusehq/agent-core", rev = "237d2e9" }
 
 # Async runtime
 tokio             = { version = "1", features = ["full"] }
