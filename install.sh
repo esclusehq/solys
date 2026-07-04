@@ -211,7 +211,10 @@ detect_platform() {
 
 # --- Build download URL ---
 build_urls() {
-    if [ "$VERSION" = "latest" ]; then
+    if [ "$VERSION" = "canary" ]; then
+        BASE_URL="https://get.esluce.com/canary"
+        info "Using canary build"
+    elif [ "$VERSION" = "latest" ]; then
         BASE_URL="https://get.esluce.com/latest"
         info "Using latest version"
     else

@@ -31,6 +31,14 @@ jobs:
           - target: x86_64-pc-windows-gnu
             os: ubuntu-latest
             ext: ".exe"
+          - target: aarch64-linux-android
+            os: ubuntu-latest
+            ext: ""
+            android_api: 24
+          - target: armv7-linux-androideabi
+            os: ubuntu-latest
+            ext: ""
+            android_api: 24
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
     steps:
@@ -43,6 +51,28 @@ jobs:
         uses: taiki-e/setup-cross-toolchain-action@v1
         with:
           target: ${{ matrix.target }}
+      - name: Override Android NDK API level in linker/compiler
+        if: matrix.android_api != ''
+        run: |
+          for var in CC CXX; do
+            old_val="${!var}"
+            if echo "$old_val" | grep -q '21-clang'; then
+              new_val="${old_val/21/${{ matrix.android_api }}}"
+              if ! command -v "$new_val" >/dev/null 2>&1; then
+                wrapper_path="$(command -v "$old_val")"
+                sudo cp "$wrapper_path" "/usr/local/bin/$new_val"
+                sudo sed -i 's/21/${{ matrix.android_api }}/g' "/usr/local/bin/$new_val"
+              fi
+              echo "$var=$new_val" >> "$GITHUB_ENV"
+            fi
+          done
+          for var in "${!CARGO_TARGET_@}"; do
+            old_val="${!var}"
+            if echo "$old_val" | grep -q '21-clang'; then
+              new_val="${old_val/21/${{ matrix.android_api }}}"
+              echo "$var=$new_val" >> "$GITHUB_ENV"
+            fi
+          done
       - uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: true
@@ -107,6 +137,16 @@ jobs:
             zip ../release/solys-windows-x86_64.zip escluse-agent.exe
             cd ..
           fi
+          # Android aarch64
+          if [ -d "binary-aarch64-linux-android" ]; then
+            tar czf release/solys-android-aarch64.tar.gz \
+              -C binary-aarch64-linux-android escluse-agent
+          fi
+          # Android armv7
+          if [ -d "binary-armv7-linux-androideabi" ]; then
+            tar czf release/solys-android-armv7.tar.gz \
+              -C binary-armv7-linux-androideabi escluse-agent
+          fi
       - name: Generate SHA256 checksums
         working-directory: release/
         run: |
@@ -160,9 +200,17 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: release-signed
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            install.sh
+            install.ps1
       - name: Create version.json for canary
         run: |
           echo "{\"version\": \"${GITHUB_SHA::7}\", \"date\": \"$(date -u +%Y-%m-%d)\"}" > version.json
+      - name: Stage install scripts
+        run: |
+          cp install.sh install.ps1 . 2>/dev/null || true
       - name: Upload to R2 (canary)
         run: |
           aws s3 cp . "s3://${R2_BUCKET}/canary/" \
