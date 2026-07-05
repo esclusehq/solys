@@ -121,32 +121,27 @@ jobs:
       - name: Create archives
         run: |
           mkdir -p release
-          # Linux x86_64
-          if [ -d "binary-x86_64-unknown-linux-gnu" ]; then
-            tar czf release/solys-linux-x86_64.tar.gz \
-              -C binary-x86_64-unknown-linux-gnu escluse-agent
-          fi
-          # Linux aarch64
-          if [ -d "binary-aarch64-unknown-linux-gnu" ]; then
-            tar czf release/solys-linux-aarch64.tar.gz \
-              -C binary-aarch64-unknown-linux-gnu escluse-agent
-          fi
-          # Windows x86_64
-          if [ -d "binary-x86_64-pc-windows-gnu" ]; then
-            cd binary-x86_64-pc-windows-gnu
-            zip ../release/solys-windows-x86_64.zip escluse-agent.exe
-            cd ..
-          fi
-          # Android aarch64
-          if [ -d "binary-aarch64-linux-android" ]; then
-            tar czf release/solys-android-aarch64.tar.gz \
-              -C binary-aarch64-linux-android escluse-agent
-          fi
-          # Android armv7
-          if [ -d "binary-armv7-linux-androideabi" ]; then
-            tar czf release/solys-android-armv7.tar.gz \
-              -C binary-armv7-linux-androideabi escluse-agent
-          fi
+          for dir in binary-*/; do
+            [ -d "$dir" ] || continue
+            dir="${dir%/}"
+            case "$dir" in
+              *x86_64-unknown-linux-gnu)
+                tar czf release/solys-linux-x86_64.tar.gz -C "$dir" escluse-agent
+                ;;
+              *aarch64-unknown-linux-gnu)
+                tar czf release/solys-linux-aarch64.tar.gz -C "$dir" escluse-agent
+                ;;
+              *aarch64-linux-android)
+                tar czf release/solys-android-aarch64.tar.gz -C "$dir" escluse-agent
+                ;;
+              *armv7-linux-androideabi)
+                tar czf release/solys-android-armv7.tar.gz -C "$dir" escluse-agent
+                ;;
+              *x86_64-pc-windows-gnu)
+                (cd "$dir" && zip ../release/solys-windows-x86_64.zip escluse-agent.exe)
+                ;;
+            esac
+          done
       - name: Generate SHA256 checksums
         working-directory: release/
         run: |
