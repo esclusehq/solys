@@ -45,12 +45,13 @@ fn find_java_via_shell() -> Option<(u32, String)> {
         return None;
     }
 
-    let path_str = String::from_utf8_lossy(&output.stdout).trim().to_string();
-    if path_str.is_empty() {
+    let path_str = String::from_utf8_lossy(&output.stdout).to_string();
+    let trimmed = path_str.trim();
+    if trimmed.is_empty() {
         return None;
     }
 
-    let java_path = std::path::PathBuf::from(&path_str);
+    let java_path = std::path::PathBuf::from(trimmed);
     run_java_version(&java_path)
 }
 
