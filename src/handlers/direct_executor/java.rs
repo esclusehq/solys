@@ -9,7 +9,8 @@ use anyhow::{bail, Result};
 /// cannot be parsed.
 ///
 /// # Format support
-/// - OpenJDK:   `openjdk version "21.0.1"` → 21
+/// - OpenJDK (standard): `openjdk version "21.0.1" 2026-01-20` → 21
+/// - OpenJDK (Termux):   `openjdk 21.0.10 2026-01-20`         → 21
 /// - Oracle:    `java version "21.0.1"`     → 21
 /// - GraalVM:   `java version "21.0.1"`     → 21
 /// - IBM JDK:   `java version "1.8.0"`      → 8
@@ -84,48 +85,30 @@ fn run_java_version(java_path: &std::path::Path) -> Option<(u32, String)> {
     let first_line = first_line_raw.trim();
     tracing::debug!("java detection: {:?} first_line={:?}", java_path, first_line);
 
-    // Parse major version — capture the first number on the line.
-    // Pattern: "openjdk version \"21.0.1\"" → "21"
-    // Pattern: "java version \"1.8.0_202\"" → "8" (old format)
+    parse_java_version(first_line)
+}
+
+/// Parse the first line of `java --version` output into (major, version_string).
+///
+/// Supported formats:
+/// - `openjdk version "21.0.1" 2026-01-20` → (21, "openjdk version...")
+/// - `openjdk 21.0.10 2026-01-20`          → (21, "openjdk 21.0.10...")
+/// - `java version "1.8.0_202"`            → (8, "java version...")
+fn parse_java_version(first_line: &str) -> Option<(u32, String)> {
     let version_str = first_line
         .split('"')
         .nth(1)
-        .or_else(|| first_line.split_whitespace().last());
+        .or_else(|| first_line.split_whitespace().nth(1))?;
 
-    let version_str = match version_str {
-        Some(v) => v,
-        None => {
-            tracing::warn!("java detection: {:?} could not extract version from {:?}", java_path, first_line);
-            return None;
-        }
+    let raw_major = version_str.split('.').next()?;
+    let major_str = if raw_major == "1" {
+        version_str.split('.').nth(1).unwrap_or("8")
+    } else {
+        raw_major
     };
 
-    // Extract major: for "21.0.1" → "21", for "1.8.0" → "8"
-    let raw_major = version_str.split('.').next();
-    let major_str = match raw_major {
-        Some(m) => {
-            if m == "1" {
-                // Java 8 or earlier: "1.8.0_202" → take 2nd segment
-                version_str.split('.').nth(1).unwrap_or("8")
-            } else {
-                m
-            }
-        }
-        None => {
-            tracing::warn!("java detection: {:?} no dots in version_str={:?}", java_path, version_str);
-            return None;
-        }
-    };
-
-    let major: u32 = match major_str.parse() {
-        Ok(m) => m,
-        Err(e) => {
-            tracing::warn!("java detection: {:?} could not parse version '{}' from {:?}: {}", java_path, major_str, first_line, e);
-            return None;
-        }
-    };
-
-    Some((major, first_line.to_string()))
+    let major: u32 = major_str.parse().ok()?;
+    Some((major, first_line.trim().to_string()))
 }
 
 /// Verify Java version is sufficient for the target Minecraft version.
@@ -184,5 +167,29 @@ mod tests {
         // Java 11 works for < 1.21 but not >= 1.21
         assert!(validate_java_for_version("1.20.4", 11).is_err());
         assert!(validate_java_for_version("1.21", 11).is_err());
+    }
+
+    #[test]
+    fn test_parse_standard_quoted() {
+        let r = parse_java_version(r#"openjdk version "21.0.1" 2026-01-20"#).unwrap();
+        assert_eq!(r.0, 21);
+    }
+
+    #[test]
+    fn test_parse_termux_no_quotes() {
+        let r = parse_java_version("openjdk 21.0.10 2026-01-20").unwrap();
+        assert_eq!(r.0, 21);
+    }
+
+    #[test]
+    fn test_parse_java_8() {
+        let r = parse_java_version(r#"java version "1.8.0_202""#).unwrap();
+        assert_eq!(r.0, 8);
+    }
+
+    #[test]
+    fn test_parse_ga_version_1_8() {
+        let r = parse_java_version(r#"java version "1.8.0_202" 2026-01-01"#).unwrap();
+        assert_eq!(r.0, 8);
     }
 }

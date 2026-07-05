@@ -5,13 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v0.5.12] - 2026-07-05
+
+### Fixed
+
+- **Java not detected on Termux (finally!)** — Root cause: `java --version` output on Termux is `"openjdk 21.0.10 _2026-01-20_"` where the **last** whitespace-delimited word is the **date**, not the version. The version parsing code used `.split_whitespace().last()` which extracted `"2026-01-20"` (a date) instead of `"21.0.10"` (the actual version). Fixed to use `.nth(1)` (second word) as the fallback after quoted version parsing. Extracted version parsing into `parse_java_version()` with unit tests for Termux format, standard quoted format, and Java 8 format.
+
 ## [v0.5.11] - 2026-07-05
-
-### Changed
-
-- **Enhanced Java version parsing diagnostics** — Added per-step debug logging in `run_java_version()`: prints the actual first line from `java --version`, the extracted version string, the raw major string, and any parse errors. This will finally reveal why Java 21.0.10 detected via `command -v` fails to register as DirectExecutor on Xiaomi HyperOS Termux.
-
-## [v0.5.10] - 2026-07-05
 
 ### Fixed
 
