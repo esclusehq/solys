@@ -607,9 +607,10 @@ pub async fn run(
                                                                               .args(["-c", &format!("pgrep -f 'java.*{}'", server_id)])
                                                                               .output().await;
                                                                           let is_running = existing.map(|o| o.status.success()).unwrap_or(false);
-                                                                          if is_running {
-                                                                              info!("Java already running for server {}, skipping duplicate start", server_id);
-                                                                          } else {
+                                                                           if is_running {
+                                                                               info!("Java already running for server {}, skipping duplicate start", server_id);
+                                                                               (true, format!("Java already running for server {}", server_id))
+                                                                           } else {
                                                                               // Accept EULA (synchronous write to ensure on disk before Java starts)
                                                                               let _ = std::fs::write(
                                                                                   format!("{}/eula.txt", server_dir),
