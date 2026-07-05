@@ -5,11 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v0.5.8] - 2026-07-05
+
+### Fixed
+
+- **Java not detected on Termux (v0.5.6, v0.5.7 regressions)** — `which::which("java")` fails on some Termux environments. The v0.5.6 fallback used `Path::exists()` on hardcoded paths which failed on Xiaomi HyperOS. v0.5.7 added `sh -c "command -v java"` but had a trimming bug: `PathBuf::from` included a trailing newline from stdout. Fixed `trim()` usage so the path is properly cleaned before executing java. `find_java_via_shell()` now correctly resolves `/data/data/com.termux/files/usr/bin/java`.
+
 ## [v0.5.7] - 2026-07-05
 
 ### Fixed
 
-- **Java not detected on Termux (v0.5.6 regression)** — The v0.5.6 fallback paths (`Path::exists()` on common Termux paths) still failed on Xiaomi HyperOS, likely due to symlink resolution quirks on Android FUSE/sdcardfs. Replaced with `sh -c "command -v java"` which uses the shell's PATH resolution and works reliably across all Unix-like platforms including Termux.
+- **Java not detected on Termux (v0.5.6 regression)** — The v0.5.6 fallback paths (`Path::exists()` on common Termux paths) still failed on Xiaomi HyperOS. Added `sh -c "command -v java"` shell-based fallback.
 
 ## [v0.5.6] - 2026-07-05
 
