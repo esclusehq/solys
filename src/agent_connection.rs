@@ -579,19 +579,51 @@ pub async fn run(
                                                                 }
                                                                 Err(e) => (false, format!("docker failed: {}", e)),
                                                             }
-                                                        } else if has_java && action == "start" {
-                                                            // DirectExecutor path: create server directory if needed
-                                                            let data_dir = format!("{}/servers/{}", config.data_dir.display(), server_id);
-                                                            let _ = tokio::fs::create_dir_all(&data_dir).await;
-                                                            let r = tokio::process::Command::new("java")
-                                                                .arg("-Xmx1024M").arg("-Xms1024M")
-                                                                .arg("-jar").arg(format!("{}/server.jar", data_dir))
-                                                                .arg("--nogui")
-                                                                .current_dir(&data_dir)
-                                                                .spawn();
-                                                            match r {
-                                                                Ok(_) => (true, format!("Java server process started in {}", data_dir)),
-                                                                Err(e) => (false, format!("java failed: {}", e)),
+                                                        } else if has_java {
+                                                            let server_dir = format!("{}/servers/{}", config.data_dir.display(), server_id);
+                                                            match action {
+                                                                "start" => {
+                                                                    let _ = tokio::process::Command::new("mkdir")
+                                                                        .args(["-p", &server_dir]).output().await;
+                                                                    let r = tokio::process::Command::new("java")
+                                                                        .arg("-Xmx1024M").arg("-Xms1024M")
+                                                                        .arg("-jar").arg(format!("{}/server.jar", server_dir))
+                                                                        .arg("--nogui")
+                                                                        .current_dir(&server_dir)
+                                                                        .spawn();
+                                                                    match r {
+                                                                        Ok(_) => (true, format!("Java server started in {}", server_dir)),
+                                                                        Err(e) => (false, format!("java failed: {}", e)),
+                                                                    }
+                                                                }
+                                                                "stop" => {
+                                                                    let r = tokio::process::Command::new("sh")
+                                                                        .args(["-c", &format!("pkill -f 'java.*{}' 2>/dev/null; pkill -f '{}' 2>/dev/null", server_id, container)])
+                                                                        .output().await;
+                                                                    let killed = r.map(|o| o.status.success()).unwrap_or(false);
+                                                                    (killed, if killed { "Java server stopped".into() } else { "No running Java server found".into() })
+                                                                }
+                                                                "restart" => {
+                                                                    // Stop
+                                                                    let _ = tokio::process::Command::new("sh")
+                                                                        .args(["-c", &format!("pkill -f 'java.*{}' 2>/dev/null; pkill -f '{}' 2>/dev/null", server_id, container)])
+                                                                        .output().await;
+                                                                    tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+                                                                    // Start
+                                                                    let _ = tokio::process::Command::new("mkdir")
+                                                                        .args(["-p", &server_dir]).output().await;
+                                                                    let r = tokio::process::Command::new("java")
+                                                                        .arg("-Xmx1024M").arg("-Xms1024M")
+                                                                        .arg("-jar").arg(format!("{}/server.jar", server_dir))
+                                                                        .arg("--nogui")
+                                                                        .current_dir(&server_dir)
+                                                                        .spawn();
+                                                                    match r {
+                                                                        Ok(_) => (true, format!("Java server restarted in {}", server_dir)),
+                                                                        Err(e) => (false, format!("java restart failed: {}", e)),
+                                                                    }
+                                                                }
+                                                                _ => (false, format!("Unknown action: {}", action)),
                                                             }
                                                         } else {
                                                             let mut hints = Vec::new();
@@ -602,6 +634,22 @@ pub async fn run(
                                                                 hints.push("No Java runtime");
                                                             }
                                                             (false, format!("Cannot {} server: {}", action, hints.join("; ")))
+                                                        }
+                                                    }
+                                                    _ if cmd == "logs" => {
+                                                        // Handle logs for DirectExecutor: read latest.log
+                                                        let server_log = format!("{}/servers/{}/logs/latest.log", config.data_dir.display(), server_id);
+                                                        match tokio::fs::read_to_string(&server_log).await {
+                                                            Ok(content) => {
+                                                                if content.is_empty() {
+                                                                    (true, "Server is running but no logs yet.".into())
+                                                                } else {
+                                                                    (true, content)
+                                                                }
+                                                            }
+                                                            Err(_) => {
+                                                                (true, "Server logs not available yet.".into())
+                                                            }
                                                         }
                                                     }
                                                     _ => {
