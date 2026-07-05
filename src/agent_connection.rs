@@ -522,17 +522,99 @@ pub async fn run(
                                                 let cmd = val["command"].as_str().unwrap_or("").to_string();
                                                 let request_id = val["request_id"].as_str().and_then(|s| uuid::Uuid::parse_str(s).ok()).unwrap_or_else(uuid::Uuid::nil);
                                                 let server_id = val["server_id"].as_str().and_then(|s| uuid::Uuid::parse_str(s).ok()).unwrap_or_else(uuid::Uuid::nil);
+                                                let container_name = val["params"]["container_name"].as_str().unwrap_or("").to_string();
+
                                                 let start = std::time::Instant::now();
-                                                let result = tokio::process::Command::new("sh").arg("-c").arg(&cmd).output().await;
-                                                let duration_ms = start.elapsed().as_millis() as u64;
-                                                let (success, output) = match result {
-                                                    Ok(out) => {
-                                                        let s = String::from_utf8_lossy(&out.stdout).to_string();
-                                                        let e = String::from_utf8_lossy(&out.stderr).to_string();
-                                                        (out.status.success(), if e.is_empty() { s } else { format!("{}\n{}", s, e) })
+                                                let (success, output) = match cmd.as_str() {
+                                                    "start" | "stop" | "restart" => {
+                                                        // Try container runtime via CLI (podman/docker)
+                                                        let container = if container_name.is_empty() {
+                                                            format!("mc-{}", server_id)
+                                                        } else {
+                                                            container_name.clone()
+                                                        };
+
+                                                        let action = match cmd.as_str() {
+                                                            "start" => "start",
+                                                            "stop" => "stop",
+                                                            "restart" => "restart",
+                                                            _ => unreachable!(),
+                                                        };
+
+                                                        // Check which CLIs are available
+                                                        let has_podman = tokio::process::Command::new("which")
+                                                            .arg("podman").output().await
+                                                            .map(|o| o.status.success()).unwrap_or(false);
+                                                        let has_docker = tokio::process::Command::new("which")
+                                                            .arg("docker").output().await
+                                                            .map(|o| o.status.success()).unwrap_or(false);
+                                                        let has_java = tokio::process::Command::new("which")
+                                                            .arg("java").output().await
+                                                            .map(|o| o.status.success()).unwrap_or(false);
+
+                                                        if has_podman {
+                                                            let r = tokio::process::Command::new("podman")
+                                                                .arg(action).arg(&container).output().await;
+                                                            match r {
+                                                                Ok(out) => {
+                                                                    let s = String::from_utf8_lossy(&out.stdout).to_string();
+                                                                    let e = String::from_utf8_lossy(&out.stderr).to_string();
+                                                                    let combined = if e.is_empty() { s } else { format!("{}\n{}", s, e) };
+                                                                    (out.status.success(), combined)
+                                                                }
+                                                                Err(e) => (false, format!("podman failed: {}", e)),
+                                                            }
+                                                        } else if has_docker {
+                                                            let r = tokio::process::Command::new("docker")
+                                                                .arg(action).arg(&container).output().await;
+                                                            match r {
+                                                                Ok(out) => {
+                                                                    let s = String::from_utf8_lossy(&out.stdout).to_string();
+                                                                    let e = String::from_utf8_lossy(&out.stderr).to_string();
+                                                                    let combined = if e.is_empty() { s } else { format!("{}\n{}", s, e) };
+                                                                    (out.status.success(), combined)
+                                                                }
+                                                                Err(e) => (false, format!("docker failed: {}", e)),
+                                                            }
+                                                        } else if has_java && action == "start" {
+                                                            // DirectExecutor path: create server directory if needed
+                                                            let data_dir = format!("{}/servers/{}", config.data_dir.display(), server_id);
+                                                            let _ = tokio::fs::create_dir_all(&data_dir).await;
+                                                            let r = tokio::process::Command::new("java")
+                                                                .arg("-Xmx1024M").arg("-Xms1024M")
+                                                                .arg("-jar").arg(format!("{}/server.jar", data_dir))
+                                                                .arg("--nogui")
+                                                                .current_dir(&data_dir)
+                                                                .spawn();
+                                                            match r {
+                                                                Ok(_) => (true, format!("Java server process started in {}", data_dir)),
+                                                                Err(e) => (false, format!("java failed: {}", e)),
+                                                            }
+                                                        } else {
+                                                            let mut hints = Vec::new();
+                                                            if !has_podman && !has_docker {
+                                                                hints.push("No container runtime (podman/docker)");
+                                                            }
+                                                            if !has_java {
+                                                                hints.push("No Java runtime");
+                                                            }
+                                                            (false, format!("Cannot {} server: {}", action, hints.join("; ")))
+                                                        }
                                                     }
-                                                    Err(e) => (false, format!("Failed: {}", e)),
+                                                    _ => {
+                                                        // Generic shell fallback for unknown commands
+                                                        let r = tokio::process::Command::new("sh").arg("-c").arg(&cmd).output().await;
+                                                        match r {
+                                                            Ok(out) => {
+                                                                let s = String::from_utf8_lossy(&out.stdout).to_string();
+                                                                let e = String::from_utf8_lossy(&out.stderr).to_string();
+                                                                (out.status.success(), if e.is_empty() { s } else { format!("{}\n{}", s, e) })
+                                                            }
+                                                            Err(e) => (false, format!("Failed: {}", e)),
+                                                        }
+                                                    }
                                                 };
+                                                let duration_ms = start.elapsed().as_millis() as u64;
                                                 let response = serde_json::json!({
                                                     "type": "command_response",
                                                     "request_id": request_id,
