@@ -200,6 +200,7 @@ jobs:
           sparse-checkout: |
             install.sh
             install.ps1
+          clean: false
       - name: Create version.json for canary
         run: |
           echo "{\"version\": \"${GITHUB_SHA::7}\", \"date\": \"$(date -u +%Y-%m-%d)\"}" > version.json
