@@ -110,6 +110,52 @@ pub fn detect_runtime(
     Ok((detector, registry))
 }
 
+/// Auto-install Java on Termux if not already available.
+///
+/// This is intended to be spawned as a background task from `main.rs`.
+/// It checks whether we're running in Termux, and if Java is not found,
+/// runs `pkg install openjdk-17 -y` and verifies the result.
+pub async fn auto_install_java_if_termux() {
+    let is_termux = std::env::var("PREFIX")
+        .map(|p| p.contains("com.termux"))
+        .unwrap_or(false);
+
+    if !is_termux {
+        return;
+    }
+
+    info!("Termux detected, checking for Java...");
+
+    if java::detect_java_version().is_some() {
+        info!("Java already available on Termux");
+        return;
+    }
+
+    info!("Java not found, installing openjdk-17 via pkg (this may take a while)...");
+
+    let status = tokio::process::Command::new("pkg")
+        .args(["install", "openjdk-17", "-y"])
+        .status()
+        .await;
+
+    match status {
+        Ok(s) if s.success() => {
+            info!("openjdk-17 installed successfully via pkg");
+            if java::detect_java_version().is_some() {
+                info!("Java verified after installation — DirectExecutor will be available on next Start Server command");
+            } else {
+                warn!("pkg install succeeded but java not found on PATH — try restarting the agent");
+            }
+        }
+        Ok(s) => {
+            warn!("pkg install failed with exit code: {:?}", s.code());
+        }
+        Err(e) => {
+            warn!("Failed to run pkg install: {}", e);
+        }
+    }
+}
+
 fn register_server_capabilities(registry: &mut CapabilityRegistry) {
     registry.register(Capability::ServerCreate);
     registry.register(Capability::ServerStart);

@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [v0.5.5] - 2026-07-05
 
 ### Added
 
@@ -16,6 +16,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Agent crashes on `execute_command` from backend** — Backend sends `execute_command` messages (e.g. Start/Stop server) but the agent's `BackendToAgent` enum predates this message type. Added a raw JSON fallback that parses `execute_command`, runs the command via `sh -c`, and replies with `command_response`. Added `OutboundMessage::Raw` variant to support sending raw JSON response payloads without modifying the agent-proto dependency.
 
 - **Raw JSON fallback fails to start/stop server** — The `execute_command` raw JSON fallback ran `sh -c "start"` instead of routing to podman/docker/Java. Now parses `container_name` from params and tries podman/docker CLI, then Java DirectExecutor, returning a clear error if no runtime is available on the node.
+
+- **Auto-install Java on Termux when no runtime found** — On Termux (Android), if no podman/docker/Java is available at startup, the agent now auto-installs `openjdk-17` via `pkg install -y` in a background task. Once installed, subsequent "Start Server" commands use the Java DirectExecutor path automatically.
 
 ## [v0.4.18] - 2026-06-27
 
