@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v0.5.15] - 2026-07-05
+
+### Fixed
+
+- **PaperMC download fails after API v2 sunset** — PaperMC's API v2 (`api.papermc.io/v2/projects/paper`) has been fully sunset and now returns `{"ok":false,"error":"sunset"}`. Replaced with the new Fill API v3 (`fill.papermc.io/v3/projects/paper`), which returns builds as a direct array with `id` instead of `build` and a nested `downloads.server:default.url` structure.
+
 ## [v0.5.14] - 2026-07-05
 
 ### Added
