@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v0.5.13] - 2026-07-05
+
+### Fixed
+
+- **Stop/Restart/Logs buttons broken on Termux** — The execute_command raw JSON fallback only handled `action == "start"` for Java DirectExecutor; `stop` and `restart` fell through to the "No container runtime" error. Added full DirectExecutor action handling: `stop` uses `pkill -f java.*{server_id}` to kill the Java process, `restart` stops then starts. Also added `logs` handling before the generic `sh -c` fallback — reads `{data_dir}/servers/{server_id}/logs/latest.log` for DirectExecutor servers instead of running `sh -c "logs"` which always failed with `logs: not found`.
+
 ## [v0.5.12] - 2026-07-05
 
 ### Fixed
