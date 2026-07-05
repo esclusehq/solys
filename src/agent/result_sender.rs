@@ -25,6 +25,7 @@ const MAX_BUFFER_SIZE: usize = 1000;
 pub enum OutboundMessage {
     Proto(ProtoToBackend),
     Pong(Bytes),
+    Raw(String),
 }
 
 #[derive(Clone)]

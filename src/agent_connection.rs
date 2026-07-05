@@ -193,6 +193,12 @@ pub async fn run(
                                     }
                                 }
                             }
+                            OutboundMessage::Raw(text) => {
+                                if let Err(e) = sink.send(Message::Text(text.into())).await {
+                                    error!(error = %e, "Writer: WebSocket send failed (Raw), exiting writer task");
+                                    return;
+                                }
+                            }
                         }
                     }
                     trace!("Writer exiting: channel closed");
@@ -503,15 +509,46 @@ pub async fn run(
                                             BackendToAgent::BackendError(err) => {
                                                 error!(code = %err.code, message = %err.message, "Backend error received");
                                             }
+
                                             BackendToAgent::RegisterAck(_) => {
                                                 info!("Unexpected RegisterAck in main dispatch loop");
                                             }
                                         }
                                     } else {
-                                        let err = serde_json::from_str::<serde_json::Value>(&text_str)
-                                            .map(|v| format!("raw json type field: {}", v["type"]))
-                                            .unwrap_or_else(|_| "not valid json".into());
-                                        warn!("Failed to parse BackendToAgent — {}", err);
+                                        if let Ok(val) = serde_json::from_str::<serde_json::Value>(&text_str) {
+                                            let msg_type = val["type"].as_str().unwrap_or("");
+                                            if msg_type == "execute_command" {
+                                                info!("Executing command via raw JSON fallback");
+                                                let cmd = val["command"].as_str().unwrap_or("").to_string();
+                                                let request_id = val["request_id"].as_str().and_then(|s| uuid::Uuid::parse_str(s).ok()).unwrap_or_else(uuid::Uuid::nil);
+                                                let server_id = val["server_id"].as_str().and_then(|s| uuid::Uuid::parse_str(s).ok()).unwrap_or_else(uuid::Uuid::nil);
+                                                let start = std::time::Instant::now();
+                                                let result = tokio::process::Command::new("sh").arg("-c").arg(&cmd).output().await;
+                                                let duration_ms = start.elapsed().as_millis() as u64;
+                                                let (success, output) = match result {
+                                                    Ok(out) => {
+                                                        let s = String::from_utf8_lossy(&out.stdout).to_string();
+                                                        let e = String::from_utf8_lossy(&out.stderr).to_string();
+                                                        (out.status.success(), if e.is_empty() { s } else { format!("{}\n{}", s, e) })
+                                                    }
+                                                    Err(e) => (false, format!("Failed: {}", e)),
+                                                };
+                                                let response = serde_json::json!({
+                                                    "type": "command_response",
+                                                    "request_id": request_id,
+                                                    "command": cmd,
+                                                    "server_id": server_id,
+                                                    "success": success,
+                                                    "output": output,
+                                                    "duration_ms": duration_ms,
+                                                });
+                                                let _ = ws_tx.send(OutboundMessage::Raw(response.to_string())).await;
+                                                continue;
+                                            }
+                                            warn!("Failed to parse BackendToAgent — type: {}", msg_type);
+                                        } else {
+                                            warn!("Failed to parse BackendToAgent — not valid json");
+                                        }
                                     }
                                 }
                                 Err(e) => {
