@@ -26,6 +26,10 @@ pub fn detect_java_version() -> Option<(u32, String)> {
         }
     }
 
+    tracing::warn!(
+        "Java detection exhausted {:?} candidates — none produced version output",
+        candidates.iter().map(|s| s.as_str()).collect::<Vec<_>>()
+    );
     None
 }
 
@@ -64,13 +68,27 @@ fn java_candidates() -> Vec<String> {
 }
 
 fn run_java_version(java_path: &std::path::Path) -> Option<(u32, String)> {
-    let output = std::process::Command::new(java_path)
+    let output = match std::process::Command::new(java_path)
         .arg("--version")
         .output()
-        .ok()?;
+    {
+        Ok(o) => o,
+        Err(e) => {
+            tracing::warn!("java detection: failed to run {:?}: {}", java_path, e);
+            return None;
+        }
+    };
 
     let stdout = String::from_utf8_lossy(&output.stdout);
-    let first_line = stdout.lines().next()?;
+    let first_line = match stdout.lines().next() {
+        Some(l) => l,
+        None => {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            let exit = output.status.code().map(|c| c.to_string()).unwrap_or_else(|| "signal".into());
+            tracing::warn!("java detection: {:?} ran but stdout was empty (stderr={:?}, exit={})", java_path, stderr.trim(), exit);
+            return None;
+        }
+    };
 
     // Parse major version — capture the first number on the line.
     // Pattern: "openjdk version \"21.0.1\"" → "21"
