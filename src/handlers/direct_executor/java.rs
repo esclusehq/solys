@@ -15,25 +15,43 @@ use anyhow::{bail, Result};
 /// - IBM JDK:   `java version "1.8.0"`      → 8
 ///
 /// Uses std::process::Command (sync, called once at startup).
-/// Falls back to common paths (e.g. Termux) if `which::which` fails.
+/// Tries multiple detection strategies for broad platform coverage.
 pub fn detect_java_version() -> Option<(u32, String)> {
-    let java_path = which::which("java").ok()
-        .or_else(|| {
-            // Common Termux/Android paths
-            ["/data/data/com.termux/files/usr/bin/java",
-             "/data/data/com.termux/files/usr/lib/jvm/java-21-openjdk/bin/java",
-             "/data/data/com.termux/files/usr/lib/jvm/java-17-openjdk/bin/java"]
-                .iter()
-                .find(|p| std::path::Path::new(p).exists())
-                .map(|p| std::path::PathBuf::from(p))
-        })?;
+    // Strategy 1: which crate (Rust-native PATH search)
+    if let Some(res) = which::which("java").ok()
+        .and_then(|p| run_java_version(&p)) {
+        return Some(res);
+    }
 
+    // Strategy 2: shell's `command -v` (works on Termux where which::which fails)
+    if let Some(res) = find_java_via_shell() {
+        return Some(res);
+    }
+
+    // Strategy 3: bare `java` (let the OS resolve via inherited PATH)
+    run_java_version(&std::path::PathBuf::from("java"))
+}
+
+/// Find Java using `sh -c "command -v java"` which uses the shell's
+/// PATH resolution. This works on platforms like Termux where
+/// `which::which` may fail due to symlink/stat quirks.
+fn find_java_via_shell() -> Option<(u32, String)> {
+    let output = std::process::Command::new("sh")
+        .args(["-c", "command -v java"])
+        .output()
+        .ok()?;
+
+    if !output.status.success() {
+        return None;
+    }
+
+    let path_str = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    if path_str.is_empty() {
+        return None;
+    }
+
+    let java_path = std::path::PathBuf::from(&path_str);
     run_java_version(&java_path)
-        .or_else(|| {
-            // Last resort: try bare `java` in case shell PATH works
-            // even though which() did not
-            run_java_version(&std::path::PathBuf::from("java"))
-        })
 }
 
 fn run_java_version(java_path: &std::path::Path) -> Option<(u32, String)> {
