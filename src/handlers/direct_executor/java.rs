@@ -17,42 +17,50 @@ use anyhow::{bail, Result};
 /// Uses std::process::Command (sync, called once at startup).
 /// Tries multiple detection strategies for broad platform coverage.
 pub fn detect_java_version() -> Option<(u32, String)> {
-    // Strategy 1: which crate (Rust-native PATH search)
-    if let Some(res) = which::which("java").ok()
-        .and_then(|p| run_java_version(&p)) {
-        return Some(res);
+    // Collect all candidate paths to try
+    let candidates = java_candidates();
+
+    for candidate in &candidates {
+        if let Some(res) = run_java_version(&std::path::PathBuf::from(candidate)) {
+            return Some(res);
+        }
     }
 
-    // Strategy 2: shell's `command -v` (works on Termux where which::which fails)
-    if let Some(res) = find_java_via_shell() {
-        return Some(res);
-    }
-
-    // Strategy 3: bare `java` (let the OS resolve via inherited PATH)
-    run_java_version(&std::path::PathBuf::from("java"))
+    None
 }
 
-/// Find Java using `sh -c "command -v java"` which uses the shell's
-/// PATH resolution. This works on platforms like Termux where
-/// `which::which` may fail due to symlink/stat quirks.
-fn find_java_via_shell() -> Option<(u32, String)> {
+/// Return a list of candidate Java paths to try, ordered by preference.
+/// Includes direct paths, shell resolution, and bare command name.
+fn java_candidates() -> Vec<String> {
+    let mut candidates = Vec::new();
+
+    // Strategy 1: which crate (Rust-native PATH search)
+    if let Ok(p) = which::which("java") {
+        candidates.push(p.to_string_lossy().to_string());
+    }
+
+    // Strategy 2: known Termux paths (direct binary, no symlink chain)
+    candidates.push("/data/data/com.termux/files/usr/lib/jvm/java-21-openjdk/bin/java".into());
+    candidates.push("/data/data/com.termux/files/usr/lib/jvm/java-17-openjdk/bin/java".into());
+
+    // Strategy 3: shell's `command -v` (works on Termux when which::which fails)
     let output = std::process::Command::new("sh")
         .args(["-c", "command -v java"])
         .output()
-        .ok()?;
-
-    if !output.status.success() {
-        return None;
+        .ok();
+    if let Some(out) = output {
+        if out.status.success() {
+            let trimmed = String::from_utf8_lossy(&out.stdout).trim().to_string();
+            if !trimmed.is_empty() {
+                candidates.push(trimmed);
+            }
+        }
     }
 
-    let path_str = String::from_utf8_lossy(&output.stdout).to_string();
-    let trimmed = path_str.trim();
-    if trimmed.is_empty() {
-        return None;
-    }
+    // Strategy 4: bare `java` (let the OS resolve via inherited PATH)
+    candidates.push("java".into());
 
-    let java_path = std::path::PathBuf::from(trimmed);
-    run_java_version(&java_path)
+    candidates
 }
 
 fn run_java_version(java_path: &std::path::Path) -> Option<(u32, String)> {
