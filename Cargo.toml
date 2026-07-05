@@ -4,7 +4,7 @@ exclude = ["api", "opt/relay"]
 
 [package]
 name    = "solys"
-version = "0.5.3"
+version = "0.5.4"
 edition = "2021"
 authors = ["Founder <founder.escluse@gmail.com>"]
 license = "AGPL-3.0-only"
@@ -83,6 +83,12 @@ tracing-appender = "0.2"
 
 # System info
 sysinfo       = "0.32"
+
+# Version comparison for auto-update
+semver = { version = "1", features = ["serde"] }
+
+# Gzip decompression for update archive extraction
+flate2 = "1"
 
 # Use zlib-ng for cross-compile
 libz-sys = { version = "1", features = ["zlib-ng-no-cmake-experimental-community-maintained"] }

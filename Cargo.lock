@@ -3597,6 +3597,10 @@ name = "semver"
 version = "1.0.28"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8a7852d02fc848982e0c167ef163aaff9cd91dc640ba85e263cb1ce46fae51cd"
+dependencies = [
+ "serde",
+ "serde_core",
+]
 
 [[package]]
 name = "serde"
@@ -3846,7 +3850,7 @@ dependencies = [
 
 [[package]]
 name = "solys"
-version = "0.5.1"
+version = "0.5.3"
 dependencies = [
  "agent-backup",
  "agent-capability",
@@ -3869,6 +3873,7 @@ dependencies = [
  "bytes",
  "chrono",
  "dirs",
+ "flate2",
  "futures",
  "futures-util",
  "hex",
@@ -3881,6 +3886,7 @@ dependencies = [
  "openssl-sys",
  "rand 0.8.6",
  "reqwest 0.12.4",
+ "semver",
  "serde",
  "serde_json",
  "sha2 0.10.9",

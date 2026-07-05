@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Auto-update mechanism** — The agent now checks `https://get.esluce.com/versions.json` every 24h (configurable via `[updater]` section in `config.toml`) for newer versions. When an update is found, it downloads the archive, verifies SHA256, replaces the running binary, and restarts. Config: `[updater] enabled = true/false`, `channel = "stable"/"canary"`, `interval = 86400`. Disabled by setting `enabled = false`.
+
 ### Fixed
 
 - **Agent crashes on `execute_command` from backend** — Backend sends `execute_command` messages (e.g. Start/Stop server) but the agent's `BackendToAgent` enum predates this message type. Added a raw JSON fallback that parses `execute_command`, runs the command via `sh -c`, and replies with `command_response`. Added `OutboundMessage::Raw` variant to support sending raw JSON response payloads without modifying the agent-proto dependency.
