@@ -602,26 +602,35 @@ pub async fn run(
                                                                         }
                                                                     }
                                                                       if jar.exists() {
-                                                                          // Accept EULA (synchronous write to ensure on disk before Java starts)
-                                                                          let _ = std::fs::write(
-                                                                              format!("{}/eula.txt", server_dir),
-                                                                              "eula=true\n",
-                                                                          );
-                                                                         let r = tokio::process::Command::new("java")
-                                                                             .arg("-Xmx1024M").arg("-Xms1024M")
-                                                                             .arg("-jar").arg(jar_path)
-                                                                             .arg("--nogui")
-                                                                             .current_dir(&server_dir)
-                                                                             .spawn();
-                                                                         match r {
-                                                                             Ok(_) => (true, format!("Java server started in {}", server_dir)),
-                                                                             Err(e) => (false, format!("java failed: {}", e)),
-                                                                         }
-                                                                     } else {
-                                                                         (false, format!("Cannot start: server.jar not found and download failed"))
-                                                                     }
-                                                                 }
-                                                                 "stop" => {
+                                                                          // Dedup: check if Java is already running for this server
+                                                                          let existing = tokio::process::Command::new("sh")
+                                                                              .args(["-c", &format!("pgrep -f 'java.*{}'", server_id)])
+                                                                              .output().await;
+                                                                          let is_running = existing.map(|o| o.status.success()).unwrap_or(false);
+                                                                          if is_running {
+                                                                              info!("Java already running for server {}, skipping duplicate start", server_id);
+                                                                          } else {
+                                                                              // Accept EULA (synchronous write to ensure on disk before Java starts)
+                                                                              let _ = std::fs::write(
+                                                                                  format!("{}/eula.txt", server_dir),
+                                                                                  "eula=true\n",
+                                                                              );
+                                                                              let r = tokio::process::Command::new("java")
+                                                                                  .arg("-Xmx1024M").arg("-Xms1024M")
+                                                                                  .arg("-jar").arg(jar_path)
+                                                                                  .arg("--nogui")
+                                                                                  .current_dir(&server_dir)
+                                                                                  .spawn();
+                                                                              match r {
+                                                                                  Ok(_) => (true, format!("Java server started in {}", server_dir)),
+                                                                                  Err(e) => (false, format!("java failed: {}", e)),
+                                                                              }
+                                                                          }
+                                                                      } else {
+                                                                          (false, format!("Cannot start: server.jar not found and download failed"))
+                                                                      }
+                                                                  }
+                                                                  "stop" => {
                                                                     // pkill by server_id UUID + container name fallback
                                                                     let _ = tokio::process::Command::new("sh")
                                                                         .args(["-c", &format!(
@@ -650,17 +659,22 @@ pub async fn run(
                                                                             Path::new(&server_dir),
                                                                         ).await;
                                                                     }
-                                                                    if jar.exists() {
-                                                                        let r = tokio::process::Command::new("java")
-                                                                            .arg("-Xmx1024M").arg("-Xms1024M")
-                                                                            .arg("-jar").arg(jar_path)
-                                                                            .arg("--nogui")
-                                                                            .current_dir(&server_dir)
-                                                                            .spawn();
-                                                                        match r {
-                                                                            Ok(_) => (true, format!("Java server restarted in {}", server_dir)),
-                                                                            Err(e) => (false, format!("java restart failed: {}", e)),
-                                                                        }
+                                                                     if jar.exists() {
+                                                                         let _ = std::fs::write(
+                                                                             format!("{}/eula.txt", server_dir),
+                                                                             "eula=true\n",
+                                                                         );
+                                                                         let r = tokio::process::Command::new("java")
+                                                                             .arg("-Xmx1024M").arg("-Xms1024M")
+                                                                             .arg("-jar").arg(jar_path)
+                                                                             .arg("--nogui")
+                                                                             .current_dir(&server_dir)
+                                                                             .spawn();
+                                                                         match r {
+                                                                             Ok(_) => (true, format!("Java server started in {}", server_dir)),
+                                                                             Err(e) => (false, format!("java failed: {}", e)),
+                                                                         }
+                                                                     }
                                                                     } else {
                                                                         (false, "Cannot restart: server.jar not found and download failed".into())
                                                                     }
