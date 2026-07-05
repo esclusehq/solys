@@ -670,14 +670,13 @@ pub async fn run(
                                                                              .arg("--nogui")
                                                                              .current_dir(&server_dir)
                                                                              .spawn();
-                                                                         match r {
-                                                                             Ok(_) => (true, format!("Java server started in {}", server_dir)),
-                                                                             Err(e) => (false, format!("java failed: {}", e)),
-                                                                         }
+                                                                          match r {
+                                                                              Ok(_) => (true, format!("Java server started in {}", server_dir)),
+                                                                              Err(e) => (false, format!("java failed: {}", e)),
+                                                                          }
+                                                                     } else {
+                                                                         (false, "Cannot restart: server.jar not found and download failed".into())
                                                                      }
-                                                                    } else {
-                                                                        (false, "Cannot restart: server.jar not found and download failed".into())
-                                                                    }
                                                                 }
                                                                 _ => (false, format!("Unknown action: {}", action)),
                                                             }
