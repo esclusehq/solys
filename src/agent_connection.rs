@@ -617,21 +617,15 @@ pub async fn run(
                                                                     }
                                                                 }
                                                                 "stop" => {
-                                                                    // Try pkill by server_id UUID, then by server.jar, then try docker on the off chance
-                                                                    let result = tokio::process::Command::new("sh")
+                                                                    // pkill by server_id UUID + container name fallback
+                                                                    let _ = tokio::process::Command::new("sh")
                                                                         .args(["-c", &format!(
                                                                             "pkill -f 'java.*{}' 2>/dev/null; pkill -f '{}' 2>/dev/null; docker stop {} 2>/dev/null",
                                                                             server_id, container, container
                                                                         )])
                                                                         .output().await;
-                                                                    let out = String::from_utf8_lossy(&result.as_ref().map(|o| &o.stdout[..]).unwrap_or(&[])).to_string();
-                                                                    let err = String::from_utf8_lossy(&result.as_ref().map(|o| &o.stderr[..]).unwrap_or(&[])).to_string();
-                                                                    let success = result.map(|o| o.status.success()).unwrap_or(false);
-                                                                    if success {
-                                                                        (true, format!("Server stopped ({}{})", out, err))
-                                                                    } else {
-                                                                        (false, format!("Could not stop server: no Java process ({}) and Docker not available. Delete this server and create a new one with Java type.", server_id))
-                                                                    }
+                                                                    // pkill returns non-zero when no process found, which is fine — "already stopped" is success
+                                                                    (true, format!("Server stop requested ({})", server_id))
                                                                 }
                                                                 "restart" => {
                                                                     let _ = tokio::process::Command::new("sh")
