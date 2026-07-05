@@ -5,11 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v0.5.7] - 2026-07-05
+
+### Fixed
+
+- **Java not detected on Termux (v0.5.6 regression)** — The v0.5.6 fallback paths (`Path::exists()` on common Termux paths) still failed on Xiaomi HyperOS, likely due to symlink resolution quirks on Android FUSE/sdcardfs. Replaced with `sh -c "command -v java"` which uses the shell's PATH resolution and works reliably across all Unix-like platforms including Termux.
+
 ## [v0.5.6] - 2026-07-05
 
 ### Fixed
 
-- **Java not detected on Termux despite being installed** — `which::which("java")` fails to find the Java binary on some Termux setups even though it's on `$PATH`. Added fallback path search for known Termux Java installation paths (`/data/data/com.termux/files/usr/bin/java` and the JDK bin directories). Also added a last-resort bare `java` command attempt. `detect_java_version()` now finds Java 21 installed via `pkg install openjdk-17` on Xiaomi HyperOS Termux.
+- **Java not detected on Termux despite being installed** — `which::which("java")` fails to find the Java binary on some Termux setups even though it's on `$PATH`. Added fallback path search for known Termux Java installation paths.
 
 ## [v0.5.5] - 2026-07-05
 
