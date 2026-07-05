@@ -7,6 +7,7 @@ use std::sync::Arc;
 
 use anyhow::Result;
 use tokio::signal;
+use tokio::sync::watch;
 use tracing::{error, info};
 use uuid::Uuid;
 
@@ -24,6 +25,7 @@ mod rate_limit;
 mod startup;
 mod state;  // D-19: State persistence module
 mod task_state;
+mod updater;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -255,6 +257,23 @@ async fn run_agent_core(config: agent_config::AgentConfig) -> Result<()> {
             shutdown_clone.store(true, Ordering::Relaxed);
         }
     });
+
+    // 7b. Spawn auto-updater
+    let (updater_tx, updater_rx) = watch::channel(false);
+    let updater_shutdown = updater_tx.clone();
+    let shutdown_for_updater = shutdown.clone();
+    tokio::spawn(async move {
+        while !shutdown_for_updater.load(Ordering::Relaxed) {
+            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        }
+        let _ = updater_shutdown.send(true);
+    });
+    updater::spawn(
+        config.auto_update.clone(),
+        env!("CARGO_PKG_VERSION").to_string(),
+        config.data_dir.clone(),
+        updater_rx,
+    );
 
     // 8. Start HTTP API server for GUI communication
     let api_shutdown = shutdown.clone();
