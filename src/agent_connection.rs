@@ -542,15 +542,18 @@ pub async fn run(
                                                         };
 
                                                         // Check which CLIs are available
-                                                        let has_podman = tokio::process::Command::new("which")
-                                                            .arg("podman").output().await
-                                                            .map(|o| o.status.success()).unwrap_or(false);
-                                                        let has_docker = tokio::process::Command::new("which")
-                                                            .arg("docker").output().await
-                                                            .map(|o| o.status.success()).unwrap_or(false);
-                                                        let has_java = tokio::process::Command::new("which")
-                                                            .arg("java").output().await
-                                                            .map(|o| o.status.success()).unwrap_or(false);
+                                                        // Uses `command -v` (POSIX) instead of `which` (not always installed)
+                                                        let check_cmd =
+                                                            |name: &'static str| async move {
+                                                                tokio::process::Command::new("sh")
+                                                                    .args(["-c", &format!("command -v {}", name)])
+                                                                    .output().await
+                                                                    .map(|o| o.status.success())
+                                                                    .unwrap_or(false)
+                                                            };
+                                                        let has_podman = check_cmd("podman").await;
+                                                        let has_docker = check_cmd("docker").await;
+                                                        let has_java = check_cmd("java").await;
 
                                                         if has_podman {
                                                             let r = tokio::process::Command::new("podman")

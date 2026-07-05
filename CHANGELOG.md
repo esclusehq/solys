@@ -5,11 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v0.5.9] - 2026-07-05
+
+### Fixed
+
+- **"No Java runtime" always shown on Termux phones** — The raw JSON fallback in `execute_command` used `which java` (system `which` command) to check for Java, but `which` is not installed on most Termux environments. Replaced with POSIX `command -v java` which is a shell builtin available on every Unix-like system. Combined with `java_candidates()` detection (known Termux paths + shell resolution + bare `java`), the agent now correctly detects Java 21 and routes Start/Stop Server buttons through the Java DirectExecutor.
+
 ## [v0.5.8] - 2026-07-05
 
 ### Fixed
 
-- **Java not detected on Termux (v0.5.6, v0.5.7 regressions)** — `which::which("java")` fails on some Termux environments. The v0.5.6 fallback used `Path::exists()` on hardcoded paths which failed on Xiaomi HyperOS. v0.5.7 added `sh -c "command -v java"` but had a trimming bug: `PathBuf::from` included a trailing newline from stdout. Fixed `trim()` usage so the path is properly cleaned before executing java. `find_java_via_shell()` now correctly resolves `/data/data/com.termux/files/usr/bin/java`.
+- **Java not detected on Termux (v0.5.6, v0.5.7 regressions)** — `which::which("java")` fails on some Termux environments. The v0.5.6 fallback used `Path::exists()` on hardcoded paths which failed on Xiaomi HyperOS. v0.5.7 added `sh -c "command -v java"` but had a trimming bug: `PathBuf::from` included a trailing newline from stdout. Fixed `trim()` usage so the path is properly cleaned before executing java.
 
 ## [v0.5.7] - 2026-07-05
 
