@@ -15,10 +15,29 @@ use anyhow::{bail, Result};
 /// - IBM JDK:   `java version "1.8.0"`      → 8
 ///
 /// Uses std::process::Command (sync, called once at startup).
+/// Falls back to common paths (e.g. Termux) if `which::which` fails.
 pub fn detect_java_version() -> Option<(u32, String)> {
-    let java_path = which::which("java").ok()?;
+    let java_path = which::which("java").ok()
+        .or_else(|| {
+            // Common Termux/Android paths
+            ["/data/data/com.termux/files/usr/bin/java",
+             "/data/data/com.termux/files/usr/lib/jvm/java-21-openjdk/bin/java",
+             "/data/data/com.termux/files/usr/lib/jvm/java-17-openjdk/bin/java"]
+                .iter()
+                .find(|p| std::path::Path::new(p).exists())
+                .map(|p| std::path::PathBuf::from(p))
+        })?;
 
-    let output = std::process::Command::new(&java_path)
+    run_java_version(&java_path)
+        .or_else(|| {
+            // Last resort: try bare `java` in case shell PATH works
+            // even though which() did not
+            run_java_version(&std::path::PathBuf::from("java"))
+        })
+}
+
+fn run_java_version(java_path: &std::path::Path) -> Option<(u32, String)> {
+    let output = std::process::Command::new(java_path)
         .arg("--version")
         .output()
         .ok()?;
