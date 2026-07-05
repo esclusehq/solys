@@ -3,6 +3,7 @@
 //! This module handles the WebSocket connection to the backend
 //! and processes incoming commands.
 
+use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
@@ -18,6 +19,8 @@ use tokio_tungstenite::tungstenite::http::Uri;
 use tokio_tungstenite::tungstenite::ClientRequestBuilder;
 use tracing::{debug, error, info, trace, warn};
 use uuid::Uuid;
+
+use crate::handlers::direct_executor::{download_jar, McLoader};
 
 use zeroize::Zeroizing;
 
@@ -585,42 +588,82 @@ pub async fn run(
                                                                 "start" => {
                                                                     let _ = tokio::process::Command::new("mkdir")
                                                                         .args(["-p", &server_dir]).output().await;
-                                                                    let r = tokio::process::Command::new("java")
-                                                                        .arg("-Xmx1024M").arg("-Xms1024M")
-                                                                        .arg("-jar").arg(format!("{}/server.jar", server_dir))
-                                                                        .arg("--nogui")
-                                                                        .current_dir(&server_dir)
-                                                                        .spawn();
-                                                                    match r {
-                                                                        Ok(_) => (true, format!("Java server started in {}", server_dir)),
-                                                                        Err(e) => (false, format!("java failed: {}", e)),
+                                                                    let jar_path = format!("{}/server.jar", server_dir);
+                                                                    let jar = Path::new(&jar_path);
+                                                                    if !jar.exists() {
+                                                                        info!("server.jar not found, auto-downloading Paper 1.21.4...");
+                                                                        if let Err(e) = download_jar(
+                                                                            &McLoader::Paper,
+                                                                            "1.21.4",
+                                                                            jar,
+                                                                            Path::new(&server_dir),
+                                                                        ).await {
+                                                                            error!("Failed to download server.jar: {}", e);
+                                                                        }
+                                                                    }
+                                                                    if jar.exists() {
+                                                                        let r = tokio::process::Command::new("java")
+                                                                            .arg("-Xmx1024M").arg("-Xms1024M")
+                                                                            .arg("-jar").arg(jar_path)
+                                                                            .arg("--nogui")
+                                                                            .current_dir(&server_dir)
+                                                                            .spawn();
+                                                                        match r {
+                                                                            Ok(_) => (true, format!("Java server started in {}", server_dir)),
+                                                                            Err(e) => (false, format!("java failed: {}", e)),
+                                                                        }
+                                                                    } else {
+                                                                        (false, format!("Cannot start: server.jar not found and download failed"))
                                                                     }
                                                                 }
                                                                 "stop" => {
-                                                                    let r = tokio::process::Command::new("sh")
-                                                                        .args(["-c", &format!("pkill -f 'java.*{}' 2>/dev/null; pkill -f '{}' 2>/dev/null", server_id, container)])
+                                                                    // Try pkill by server_id UUID, then by server.jar, then try docker on the off chance
+                                                                    let result = tokio::process::Command::new("sh")
+                                                                        .args(["-c", &format!(
+                                                                            "pkill -f 'java.*{}' 2>/dev/null; pkill -f '{}' 2>/dev/null; docker stop {} 2>/dev/null",
+                                                                            server_id, container, container
+                                                                        )])
                                                                         .output().await;
-                                                                    let killed = r.map(|o| o.status.success()).unwrap_or(false);
-                                                                    (killed, if killed { "Java server stopped".into() } else { "No running Java server found".into() })
+                                                                    let out = String::from_utf8_lossy(&result.as_ref().map(|o| &o.stdout[..]).unwrap_or(&[])).to_string();
+                                                                    let err = String::from_utf8_lossy(&result.as_ref().map(|o| &o.stderr[..]).unwrap_or(&[])).to_string();
+                                                                    let success = result.map(|o| o.status.success()).unwrap_or(false);
+                                                                    if success {
+                                                                        (true, format!("Server stopped ({}{})", out, err))
+                                                                    } else {
+                                                                        (false, format!("Could not stop server: no Java process ({}) and Docker not available. Delete this server and create a new one with Java type.", server_id))
+                                                                    }
                                                                 }
                                                                 "restart" => {
-                                                                    // Stop
                                                                     let _ = tokio::process::Command::new("sh")
                                                                         .args(["-c", &format!("pkill -f 'java.*{}' 2>/dev/null; pkill -f '{}' 2>/dev/null", server_id, container)])
                                                                         .output().await;
                                                                     tokio::time::sleep(std::time::Duration::from_secs(2)).await;
-                                                                    // Start
                                                                     let _ = tokio::process::Command::new("mkdir")
                                                                         .args(["-p", &server_dir]).output().await;
-                                                                    let r = tokio::process::Command::new("java")
-                                                                        .arg("-Xmx1024M").arg("-Xms1024M")
-                                                                        .arg("-jar").arg(format!("{}/server.jar", server_dir))
-                                                                        .arg("--nogui")
-                                                                        .current_dir(&server_dir)
-                                                                        .spawn();
-                                                                    match r {
-                                                                        Ok(_) => (true, format!("Java server restarted in {}", server_dir)),
-                                                                        Err(e) => (false, format!("java restart failed: {}", e)),
+                                                                    let jar_path = format!("{}/server.jar", server_dir);
+                                                                    let jar = Path::new(&jar_path);
+                                                                    if !jar.exists() {
+                                                                        info!("server.jar not found, auto-downloading Paper 1.21.4...");
+                                                                        let _ = download_jar(
+                                                                            &McLoader::Paper,
+                                                                            "1.21.4",
+                                                                            jar,
+                                                                            Path::new(&server_dir),
+                                                                        ).await;
+                                                                    }
+                                                                    if jar.exists() {
+                                                                        let r = tokio::process::Command::new("java")
+                                                                            .arg("-Xmx1024M").arg("-Xms1024M")
+                                                                            .arg("-jar").arg(jar_path)
+                                                                            .arg("--nogui")
+                                                                            .current_dir(&server_dir)
+                                                                            .spawn();
+                                                                        match r {
+                                                                            Ok(_) => (true, format!("Java server restarted in {}", server_dir)),
+                                                                            Err(e) => (false, format!("java restart failed: {}", e)),
+                                                                        }
+                                                                    } else {
+                                                                        (false, "Cannot restart: server.jar not found and download failed".into())
                                                                     }
                                                                 }
                                                                 _ => (false, format!("Unknown action: {}", action)),
