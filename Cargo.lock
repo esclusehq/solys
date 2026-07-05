@@ -3850,7 +3850,7 @@ dependencies = [
 
 [[package]]
 name = "solys"
-version = "0.5.12"
+version = "0.5.14"
 dependencies = [
  "agent-backup",
  "agent-capability",

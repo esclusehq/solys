@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v0.5.14] - 2026-07-05
+
+### Added
+
+- **Auto-download server.jar on start** — When a server is started but `server.jar` is missing (and Docker is not available), the agent automatically downloads Paper 1.21.4 from PaperMC API and starts it via Java DirectExecutor. No more manual deploy needed for Java servers.
+
 ## [v0.5.13] - 2026-07-05
 
 ### Fixed
