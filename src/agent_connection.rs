@@ -601,22 +601,27 @@ pub async fn run(
                                                                             error!("Failed to download server.jar: {}", e);
                                                                         }
                                                                     }
-                                                                    if jar.exists() {
-                                                                        let r = tokio::process::Command::new("java")
-                                                                            .arg("-Xmx1024M").arg("-Xms1024M")
-                                                                            .arg("-jar").arg(jar_path)
-                                                                            .arg("--nogui")
-                                                                            .current_dir(&server_dir)
-                                                                            .spawn();
-                                                                        match r {
-                                                                            Ok(_) => (true, format!("Java server started in {}", server_dir)),
-                                                                            Err(e) => (false, format!("java failed: {}", e)),
-                                                                        }
-                                                                    } else {
-                                                                        (false, format!("Cannot start: server.jar not found and download failed"))
-                                                                    }
-                                                                }
-                                                                "stop" => {
+                                                                     if jar.exists() {
+                                                                         // Accept EULA
+                                                                         let _ = tokio::fs::write(
+                                                                             format!("{}/eula.txt", server_dir),
+                                                                             "eula=true\n",
+                                                                         ).await;
+                                                                         let r = tokio::process::Command::new("java")
+                                                                             .arg("-Xmx1024M").arg("-Xms1024M")
+                                                                             .arg("-jar").arg(jar_path)
+                                                                             .arg("--nogui")
+                                                                             .current_dir(&server_dir)
+                                                                             .spawn();
+                                                                         match r {
+                                                                             Ok(_) => (true, format!("Java server started in {}", server_dir)),
+                                                                             Err(e) => (false, format!("java failed: {}", e)),
+                                                                         }
+                                                                     } else {
+                                                                         (false, format!("Cannot start: server.jar not found and download failed"))
+                                                                     }
+                                                                 }
+                                                                 "stop" => {
                                                                     // pkill by server_id UUID + container name fallback
                                                                     let _ = tokio::process::Command::new("sh")
                                                                         .args(["-c", &format!(
