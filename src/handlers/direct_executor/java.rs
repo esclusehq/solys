@@ -80,15 +80,9 @@ fn run_java_version(java_path: &std::path::Path) -> Option<(u32, String)> {
     };
 
     let stdout = String::from_utf8_lossy(&output.stdout);
-    let first_line = match stdout.lines().next() {
-        Some(l) => l,
-        None => {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            let exit = output.status.code().map(|c| c.to_string()).unwrap_or_else(|| "signal".into());
-            tracing::warn!("java detection: {:?} ran but stdout was empty (stderr={:?}, exit={})", java_path, stderr.trim(), exit);
-            return None;
-        }
-    };
+    let first_line_raw = stdout.lines().next()?;
+    let first_line = first_line_raw.trim();
+    tracing::debug!("java detection: {:?} first_line={:?}", java_path, first_line);
 
     // Parse major version — capture the first number on the line.
     // Pattern: "openjdk version \"21.0.1\"" → "21"
@@ -96,18 +90,42 @@ fn run_java_version(java_path: &std::path::Path) -> Option<(u32, String)> {
     let version_str = first_line
         .split('"')
         .nth(1)
-        .or_else(|| first_line.split_whitespace().last())?;
+        .or_else(|| first_line.split_whitespace().last());
 
-    // Extract major: for "21.0.1" → "21", for "1.8.0" → "8"
-    let major_str = if version_str.starts_with("1.") {
-        // Java 8 or earlier: "1.8.0_202" → "8"
-        version_str.split('.').nth(1)?
-    } else {
-        version_str.split('.').next()?
+    let version_str = match version_str {
+        Some(v) => v,
+        None => {
+            tracing::warn!("java detection: {:?} could not extract version from {:?}", java_path, first_line);
+            return None;
+        }
     };
 
-    let major: u32 = major_str.parse().ok()?;
-    Some((major, first_line.trim().to_string()))
+    // Extract major: for "21.0.1" → "21", for "1.8.0" → "8"
+    let raw_major = version_str.split('.').next();
+    let major_str = match raw_major {
+        Some(m) => {
+            if m == "1" {
+                // Java 8 or earlier: "1.8.0_202" → take 2nd segment
+                version_str.split('.').nth(1).unwrap_or("8")
+            } else {
+                m
+            }
+        }
+        None => {
+            tracing::warn!("java detection: {:?} no dots in version_str={:?}", java_path, version_str);
+            return None;
+        }
+    };
+
+    let major: u32 = match major_str.parse() {
+        Ok(m) => m,
+        Err(e) => {
+            tracing::warn!("java detection: {:?} could not parse version '{}' from {:?}: {}", java_path, major_str, first_line, e);
+            return None;
+        }
+    };
+
+    Some((major, first_line.to_string()))
 }
 
 /// Verify Java version is sufficient for the target Minecraft version.

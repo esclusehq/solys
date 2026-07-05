@@ -5,13 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [v0.5.10] - 2026-07-05
+## [v0.5.11] - 2026-07-05
 
 ### Changed
 
-- **Added debug logging to Java detection** — `run_java_version()` now logs warnings with the attempted path, system error message, and captured stderr when Java fails to run or produces no version output. `detect_java_version()` logs all tried candidates on failure. Helps diagnose why Java is not detected on specific Android/Termux environments.
+- **Enhanced Java version parsing diagnostics** — Added per-step debug logging in `run_java_version()`: prints the actual first line from `java --version`, the extracted version string, the raw major string, and any parse errors. This will finally reveal why Java 21.0.10 detected via `command -v` fails to register as DirectExecutor on Xiaomi HyperOS Termux.
 
-## [v0.5.9] - 2026-07-05
+## [v0.5.10] - 2026-07-05
 
 ### Fixed
 
