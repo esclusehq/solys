@@ -601,12 +601,12 @@ pub async fn run(
                                                                             error!("Failed to download server.jar: {}", e);
                                                                         }
                                                                     }
-                                                                     if jar.exists() {
-                                                                         // Accept EULA
-                                                                         let _ = tokio::fs::write(
-                                                                             format!("{}/eula.txt", server_dir),
-                                                                             "eula=true\n",
-                                                                         ).await;
+                                                                      if jar.exists() {
+                                                                          // Accept EULA (synchronous write to ensure on disk before Java starts)
+                                                                          let _ = std::fs::write(
+                                                                              format!("{}/eula.txt", server_dir),
+                                                                              "eula=true\n",
+                                                                          );
                                                                          let r = tokio::process::Command::new("java")
                                                                              .arg("-Xmx1024M").arg("-Xms1024M")
                                                                              .arg("-jar").arg(jar_path)
