@@ -527,8 +527,28 @@ pub async fn run(
                                                 let server_id = val["server_id"].as_str().and_then(|s| uuid::Uuid::parse_str(s).ok()).unwrap_or_else(uuid::Uuid::nil);
                                                 let container_name = val["params"]["container_name"].as_str().unwrap_or("").to_string();
 
+                                                // Extract version, loader, RAM from deploy_config or params
+                                                let deploy = val["deploy_config"].as_object().map(|o| o.clone()).unwrap_or_default();
+                                                let params = val["params"].as_object().map(|o| o.clone()).unwrap_or_default();
+                                                let mc_version = deploy.get("version").and_then(|v| v.as_str()).unwrap_or("1.21.4").to_string();
+                                                let mc_loader_str = deploy.get("loader").and_then(|v| v.as_str()).unwrap_or("paper").to_string();
+                                                let mc_loader = McLoader::from_str(&mc_loader_str).unwrap_or(McLoader::Paper);
+                                                let ram_mb: u64 = deploy.get("ram_mb").and_then(|v| v.as_u64()).or_else(|| params.get("ram_mb").and_then(|v| v.as_u64())).unwrap_or(1024);
+
                                                 let start = std::time::Instant::now();
                                                 let (success, output) = match cmd.as_str() {
+                                                    "create" => {
+                                                        let server_dir = format!("{}/servers/{}", config.data_dir.display(), server_id);
+                                                        let _ = tokio::process::Command::new("mkdir")
+                                                            .args(["-p", &server_dir]).output().await;
+                                                        let jar_path = format!("{}/server.jar", server_dir);
+                                                        let jar = Path::new(&jar_path);
+                                                        info!("server.jar not found, downloading {} {}...", mc_loader_str, mc_version);
+                                                        match download_jar(&mc_loader, &mc_version, jar, Path::new(&server_dir)).await {
+                                                            Ok(_) => (true, format!("Downloaded {} {}", mc_loader_str, mc_version)),
+                                                            Err(e) => (false, format!("Download failed: {}", e)),
+                                                        }
+                                                    }
                                                     "start" | "stop" | "restart" => {
                                                         // Try container runtime via CLI (podman/docker)
                                                         let container = if container_name.is_empty() {
@@ -591,13 +611,8 @@ pub async fn run(
                                                                     let jar_path = format!("{}/server.jar", server_dir);
                                                                     let jar = Path::new(&jar_path);
                                                                     if !jar.exists() {
-                                                                        info!("server.jar not found, auto-downloading Paper 1.21.4...");
-                                                                        if let Err(e) = download_jar(
-                                                                            &McLoader::Paper,
-                                                                            "1.21.4",
-                                                                            jar,
-                                                                            Path::new(&server_dir),
-                                                                        ).await {
+                                                                        info!("server.jar not found, downloading {} {}...", mc_loader_str, mc_version);
+                                                                        if let Err(e) = download_jar(&mc_loader, &mc_version, jar, Path::new(&server_dir)).await {
                                                                             error!("Failed to download server.jar: {}", e);
                                                                         }
                                                                     }
@@ -617,7 +632,7 @@ pub async fn run(
                                                                                   "eula=true\n",
                                                                               );
                                                                               let r = tokio::process::Command::new("java")
-                                                                                  .arg("-Xmx1024M").arg("-Xms1024M")
+                                                                                  .arg(format!("-Xmx{}M", ram_mb)).arg(format!("-Xms{}M", ram_mb))
                                                                                   .arg("-jar").arg(jar_path)
                                                                                   .arg("--nogui")
                                                                                   .current_dir(&server_dir)
@@ -628,11 +643,11 @@ pub async fn run(
                                                                                       registry.insert(server_id, ServerState {
                                                                                           server_id,
                                                                                           display_name: format!("mc-{}", server_id),
-                                                                                          mc_loader: McLoader::Paper,
-                                                                                          mc_version: "LATEST".to_string(),
+                                                                                          mc_loader,
+                                                                                          mc_version: mc_version.clone(),
                                                                                           status: ServerStatus::Running,
                                                                                           port: 25565,
-                                                                                          allocated_ram: 1024,
+                                                                                          allocated_ram: ram_mb,
                                                                                           path: std::path::PathBuf::from(&server_dir),
                                                                                           rcon_port: 25575,
                                                                                           rcon_password: String::new(),
@@ -649,7 +664,7 @@ pub async fn run(
                                                                        } else {
                                                                            (false, format!("Cannot start: server.jar not found and download failed"))
                                                                        }
-                                                                   }
+                                                                    }
                                                                     "stop" => {
                                                                      // pkill by server_id UUID + container name fallback
                                                                      let _ = tokio::process::Command::new("sh")
@@ -665,9 +680,9 @@ pub async fn run(
                                                                      // pkill returns non-zero when no process found, which is fine — "already stopped" is success
                                                                      (true, format!("Server stop requested ({})", server_id))
                                                                  }
-                                                                "restart" => {
-                                                                    let _ = tokio::process::Command::new("sh")
-                                                                        .args(["-c", &format!("pkill -f 'java.*{}' 2>/dev/null; pkill -f '{}' 2>/dev/null", server_id, container)])
+                                                                 "restart" => {
+                                                                     let _ = tokio::process::Command::new("sh")
+                                                                         .args(["-c", &format!("pkill -f 'java.*{}' 2>/dev/null; pkill -f '{}' 2>/dev/null", server_id, container)])
                                                                          .output().await;
                                                                      // Remove from DIRECT_SERVERS for heartbeat tracking
                                                                      {
@@ -675,41 +690,36 @@ pub async fn run(
                                                                          registry.remove(&server_id);
                                                                      }
                                                                      tokio::time::sleep(std::time::Duration::from_secs(2)).await;
-                                                                    let _ = tokio::process::Command::new("mkdir")
-                                                                        .args(["-p", &server_dir]).output().await;
-                                                                    let jar_path = format!("{}/server.jar", server_dir);
-                                                                    let jar = Path::new(&jar_path);
-                                                                    if !jar.exists() {
-                                                                        info!("server.jar not found, auto-downloading Paper 1.21.4...");
-                                                                        let _ = download_jar(
-                                                                            &McLoader::Paper,
-                                                                            "1.21.4",
-                                                                            jar,
-                                                                            Path::new(&server_dir),
-                                                                        ).await;
-                                                                    }
-                                                                     if jar.exists() {
-                                                                         let _ = std::fs::write(
+                                                                     let _ = tokio::process::Command::new("mkdir")
+                                                                         .args(["-p", &server_dir]).output().await;
+                                                                     let jar_path = format!("{}/server.jar", server_dir);
+                                                                     let jar = Path::new(&jar_path);
+                                                                     if !jar.exists() {
+                                                                         info!("server.jar not found, downloading {} {}...", mc_loader_str, mc_version);
+                                                                         let _ = download_jar(&mc_loader, &mc_version, jar, Path::new(&server_dir)).await;
+                                                                     }
+                                                                      if jar.exists() {
+                                                                          let _ = std::fs::write(
                                                                              format!("{}/eula.txt", server_dir),
                                                                              "eula=true\n",
                                                                          );
-                                                                         let r = tokio::process::Command::new("java")
-                                                                             .arg("-Xmx1024M").arg("-Xms1024M")
-                                                                             .arg("-jar").arg(jar_path)
-                                                                             .arg("--nogui")
-                                                                             .current_dir(&server_dir)
-                                                                             .spawn();
-                                                                          match r {
-                                                                              Ok(_) => {
-                                                                                  let mut registry = DIRECT_SERVERS.lock().unwrap();
-                                                                                  registry.insert(server_id, ServerState {
-                                                                                      server_id,
-                                                                                      display_name: format!("mc-{}", server_id),
-                                                                                      mc_loader: McLoader::Paper,
-                                                                                      mc_version: "LATEST".to_string(),
-                                                                                      status: ServerStatus::Running,
-                                                                                      port: 25565,
-                                                                                      allocated_ram: 1024,
+                                                                          let r = tokio::process::Command::new("java")
+                                                                              .arg(format!("-Xmx{}M", ram_mb)).arg(format!("-Xms{}M", ram_mb))
+                                                                              .arg("-jar").arg(jar_path)
+                                                                              .arg("--nogui")
+                                                                              .current_dir(&server_dir)
+                                                                              .spawn();
+                                                                           match r {
+                                                                               Ok(_) => {
+                                                                                   let mut registry = DIRECT_SERVERS.lock().unwrap();
+                                                                                   registry.insert(server_id, ServerState {
+                                                                                       server_id,
+                                                                                       display_name: format!("mc-{}", server_id),
+                                                                                       mc_loader,
+                                                                                       mc_version: mc_version.clone(),
+                                                                                       status: ServerStatus::Running,
+                                                                                       port: 25565,
+                                                                                       allocated_ram: ram_mb,
                                                                                       path: std::path::PathBuf::from(&server_dir),
                                                                                       rcon_port: 25575,
                                                                                       rcon_password: String::new(),
