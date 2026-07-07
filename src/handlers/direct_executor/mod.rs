@@ -279,7 +279,14 @@ pub fn collect_server_statuses() -> Vec<(Uuid, String, String)> {
         .iter()
         .map(|(id, state)| {
             let status = match state.status {
-                ServerStatus::Running => "running",
+                ServerStatus::Running => {
+                    let is_alive = std::process::Command::new("sh")
+                        .args(["-c", &format!("pgrep -f 'java.*{}' >/dev/null 2>&1", id)])
+                        .status()
+                        .map(|s| s.success())
+                        .unwrap_or(false);
+                    if is_alive { "running" } else { "stopped" }
+                }
                 ServerStatus::Stopped => "stopped",
                 ServerStatus::Crashed => "crashed",
             };
