@@ -275,9 +275,11 @@ async fn run_agent_core(config: agent_config::AgentConfig) -> Result<()> {
         updater_rx,
     );
 
-    // 7c. Auto-install Java on Termux if not available (background)
+    // 7c. Auto-install prerequisites per-platform (background)
     tokio::spawn(async {
         startup::auto_install_java_if_termux().await;
+        startup::auto_install_prerequisites_linux().await;
+        startup::auto_install_prerequisites_windows().await;
     });
 
     // 8. Start HTTP API server for GUI communication

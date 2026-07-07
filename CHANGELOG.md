@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v0.5.16] - 2026-07-07
+
+### Fixed
+
+- **Dashboard version/loader selection ignored in DirectExecutor fallback** — The `execute_command` raw JSON fallback in `agent_connection.rs` hardcoded Paper 1.21.4 + 1024MB RAM for every server, ignoring the version, loader, and RAM sent by the backend in `deploy_config`. Now reads `version`, `loader`, and `ram_mb` from `deploy_config` or `params` and uses them for download + Java spawn. Added `"create"` handler to trigger JAR download before `"start"`.
+
 ## [v0.5.15] - 2026-07-05
 
 ### Fixed
