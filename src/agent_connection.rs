@@ -20,7 +20,7 @@ use tokio_tungstenite::tungstenite::ClientRequestBuilder;
 use tracing::{debug, error, info, trace, warn};
 use uuid::Uuid;
 
-use crate::handlers::direct_executor::{download_jar, McLoader};
+use crate::handlers::direct_executor::{download_jar, DIRECT_SERVERS, ServerState, ServerStatus, McLoader};
 
 use zeroize::Zeroizing;
 
@@ -623,30 +623,58 @@ pub async fn run(
                                                                                   .current_dir(&server_dir)
                                                                                   .spawn();
                                                                               match r {
-                                                                                  Ok(_) => (true, format!("Java server started in {}", server_dir)),
+                                                                                  Ok(_) => {
+                                                                                      let mut registry = DIRECT_SERVERS.lock().unwrap();
+                                                                                      registry.insert(server_id, ServerState {
+                                                                                          server_id,
+                                                                                          display_name: format!("mc-{}", server_id),
+                                                                                          mc_loader: McLoader::Paper,
+                                                                                          mc_version: "LATEST".to_string(),
+                                                                                          status: ServerStatus::Running,
+                                                                                          port: 25565,
+                                                                                          allocated_ram: 1024,
+                                                                                          path: std::path::PathBuf::from(&server_dir),
+                                                                                          rcon_port: 25575,
+                                                                                          rcon_password: String::new(),
+                                                                                          child: None,
+                                                                                          eula_accepted: true,
+                                                                                          auto_restart: false,
+                                                                                      });
+                                                                                      drop(registry);
+                                                                                      (true, format!("Java server started in {}", server_dir))
+                                                                                  }
                                                                                   Err(e) => (false, format!("java failed: {}", e)),
                                                                               }
-                                                                          }
-                                                                      } else {
-                                                                          (false, format!("Cannot start: server.jar not found and download failed"))
-                                                                      }
-                                                                  }
-                                                                  "stop" => {
-                                                                    // pkill by server_id UUID + container name fallback
-                                                                    let _ = tokio::process::Command::new("sh")
-                                                                        .args(["-c", &format!(
-                                                                            "pkill -f 'java.*{}' 2>/dev/null; pkill -f '{}' 2>/dev/null; docker stop {} 2>/dev/null",
-                                                                            server_id, container, container
-                                                                        )])
-                                                                        .output().await;
-                                                                    // pkill returns non-zero when no process found, which is fine — "already stopped" is success
-                                                                    (true, format!("Server stop requested ({})", server_id))
-                                                                }
+                                                                           }
+                                                                       } else {
+                                                                           (false, format!("Cannot start: server.jar not found and download failed"))
+                                                                       }
+                                                                   }
+                                                                    "stop" => {
+                                                                     // pkill by server_id UUID + container name fallback
+                                                                     let _ = tokio::process::Command::new("sh")
+                                                                         .args(["-c", &format!(
+                                                                             "pkill -f 'java.*{}' 2>/dev/null; pkill -f '{}' 2>/dev/null; docker stop {} 2>/dev/null",
+                                                                             server_id, container, container
+                                                                         )])
+                                                                         .output().await;
+                                                                     // Remove from DIRECT_SERVERS for heartbeat tracking
+                                                                     let mut registry = DIRECT_SERVERS.lock().unwrap();
+                                                                     registry.remove(&server_id);
+                                                                     drop(registry);
+                                                                     // pkill returns non-zero when no process found, which is fine — "already stopped" is success
+                                                                     (true, format!("Server stop requested ({})", server_id))
+                                                                 }
                                                                 "restart" => {
                                                                     let _ = tokio::process::Command::new("sh")
                                                                         .args(["-c", &format!("pkill -f 'java.*{}' 2>/dev/null; pkill -f '{}' 2>/dev/null", server_id, container)])
-                                                                        .output().await;
-                                                                    tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+                                                                         .output().await;
+                                                                     // Remove from DIRECT_SERVERS for heartbeat tracking
+                                                                     {
+                                                                         let mut registry = DIRECT_SERVERS.lock().unwrap();
+                                                                         registry.remove(&server_id);
+                                                                     }
+                                                                     tokio::time::sleep(std::time::Duration::from_secs(2)).await;
                                                                     let _ = tokio::process::Command::new("mkdir")
                                                                         .args(["-p", &server_dir]).output().await;
                                                                     let jar_path = format!("{}/server.jar", server_dir);
@@ -672,7 +700,26 @@ pub async fn run(
                                                                              .current_dir(&server_dir)
                                                                              .spawn();
                                                                           match r {
-                                                                              Ok(_) => (true, format!("Java server started in {}", server_dir)),
+                                                                              Ok(_) => {
+                                                                                  let mut registry = DIRECT_SERVERS.lock().unwrap();
+                                                                                  registry.insert(server_id, ServerState {
+                                                                                      server_id,
+                                                                                      display_name: format!("mc-{}", server_id),
+                                                                                      mc_loader: McLoader::Paper,
+                                                                                      mc_version: "LATEST".to_string(),
+                                                                                      status: ServerStatus::Running,
+                                                                                      port: 25565,
+                                                                                      allocated_ram: 1024,
+                                                                                      path: std::path::PathBuf::from(&server_dir),
+                                                                                      rcon_port: 25575,
+                                                                                      rcon_password: String::new(),
+                                                                                      child: None,
+                                                                                      eula_accepted: true,
+                                                                                      auto_restart: false,
+                                                                                  });
+                                                                                  drop(registry);
+                                                                                  (true, format!("Java server started in {}", server_dir))
+                                                                              }
                                                                               Err(e) => (false, format!("java failed: {}", e)),
                                                                           }
                                                                      } else {
