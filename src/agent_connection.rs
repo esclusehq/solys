@@ -535,15 +535,31 @@ pub async fn run(
                                                 let mc_loader = McLoader::from_str(&mc_loader_str).unwrap_or(McLoader::Paper);
                                                 let ram_mb: u64 = deploy.get("ram_mb").and_then(|v| v.as_u64()).or_else(|| params.get("ram_mb").and_then(|v| v.as_u64())).unwrap_or(1024);
 
+                                                // Helper to send progress updates to backend
+                                                let send_status = |status: &str, message: &str| {
+                                                    let msg = serde_json::json!({
+                                                        "type": "command_status",
+                                                        "request_id": request_id,
+                                                        "command": cmd,
+                                                        "server_id": server_id,
+                                                        "status": status,
+                                                        "message": message,
+                                                    });
+                                                    let tx = ws_tx.clone();
+                                                    async move {
+                                                        let _ = tx.send(OutboundMessage::Raw(msg.to_string())).await;
+                                                    }
+                                                };
+
                                                 let start = std::time::Instant::now();
                                                 let (success, output) = match cmd.as_str() {
                                                     "create" => {
+                                                        send_status("downloading", &format!("Downloading {} {}...", mc_loader_str, mc_version)).await;
                                                         let server_dir = format!("{}/servers/{}", config.data_dir.display(), server_id);
                                                         let _ = tokio::process::Command::new("mkdir")
                                                             .args(["-p", &server_dir]).output().await;
                                                         let jar_path = format!("{}/server.jar", server_dir);
                                                         let jar = Path::new(&jar_path);
-                                                        info!("server.jar not found, downloading {} {}...", mc_loader_str, mc_version);
                                                         match download_jar(&mc_loader, &mc_version, jar, Path::new(&server_dir)).await {
                                                             Ok(_) => (true, format!("Downloaded {} {}", mc_loader_str, mc_version)),
                                                             Err(e) => (false, format!("Download failed: {}", e)),
@@ -565,7 +581,6 @@ pub async fn run(
                                                         };
 
                                                         // Check which CLIs are available
-                                                        // Uses `command -v` (POSIX) instead of `which` (not always installed)
                                                         let check_cmd =
                                                             |name: &'static str| async move {
                                                                 tokio::process::Command::new("sh")
@@ -579,6 +594,7 @@ pub async fn run(
                                                         let has_java = check_cmd("java").await;
 
                                                         if has_podman {
+                                                            send_status("executing", &format!("{} container {} via podman", action, container)).await;
                                                             let r = tokio::process::Command::new("podman")
                                                                 .arg(action).arg(&container).output().await;
                                                             match r {
@@ -591,6 +607,7 @@ pub async fn run(
                                                                 Err(e) => (false, format!("podman failed: {}", e)),
                                                             }
                                                         } else if has_docker {
+                                                            send_status("executing", &format!("{} container {} via docker", action, container)).await;
                                                             let r = tokio::process::Command::new("docker")
                                                                 .arg(action).arg(&container).output().await;
                                                             match r {
@@ -611,7 +628,7 @@ pub async fn run(
                                                                     let jar_path = format!("{}/server.jar", server_dir);
                                                                     let jar = Path::new(&jar_path);
                                                                     if !jar.exists() {
-                                                                        info!("server.jar not found, downloading {} {}...", mc_loader_str, mc_version);
+                                                                        send_status("downloading", &format!("Downloading {} {}...", mc_loader_str, mc_version)).await;
                                                                         if let Err(e) = download_jar(&mc_loader, &mc_version, jar, Path::new(&server_dir)).await {
                                                                             error!("Failed to download server.jar: {}", e);
                                                                         }
@@ -626,6 +643,7 @@ pub async fn run(
                                                                                info!("Java already running for server {}, skipping duplicate start", server_id);
                                                                                (true, format!("Java already running for server {}", server_id))
                                                                            } else {
+                                                                               send_status("starting", "Starting Java server...").await;
                                                                               // Accept EULA (synchronous write to ensure on disk before Java starts)
                                                                               let _ = std::fs::write(
                                                                                   format!("{}/eula.txt", server_dir),
@@ -661,44 +679,46 @@ pub async fn run(
                                                                                   Err(e) => (false, format!("java failed: {}", e)),
                                                                               }
                                                                            }
-                                                                       } else {
-                                                                           (false, format!("Cannot start: server.jar not found and download failed"))
-                                                                       }
-                                                                    }
-                                                                    "stop" => {
-                                                                     // pkill by server_id UUID + container name fallback
-                                                                     let _ = tokio::process::Command::new("sh")
-                                                                         .args(["-c", &format!(
-                                                                             "pkill -f 'java.*{}' 2>/dev/null; pkill -f '{}' 2>/dev/null; docker stop {} 2>/dev/null",
-                                                                             server_id, container, container
-                                                                         )])
-                                                                         .output().await;
-                                                                     // Remove from DIRECT_SERVERS for heartbeat tracking
-                                                                     let mut registry = DIRECT_SERVERS.lock().unwrap();
-                                                                     registry.remove(&server_id);
-                                                                     drop(registry);
-                                                                     // pkill returns non-zero when no process found, which is fine — "already stopped" is success
-                                                                     (true, format!("Server stop requested ({})", server_id))
-                                                                 }
-                                                                 "restart" => {
-                                                                     let _ = tokio::process::Command::new("sh")
-                                                                         .args(["-c", &format!("pkill -f 'java.*{}' 2>/dev/null; pkill -f '{}' 2>/dev/null", server_id, container)])
-                                                                         .output().await;
-                                                                     // Remove from DIRECT_SERVERS for heartbeat tracking
-                                                                     {
-                                                                         let mut registry = DIRECT_SERVERS.lock().unwrap();
-                                                                         registry.remove(&server_id);
+                                                                        } else {
+                                                                            (false, format!("Cannot start: server.jar not found and download failed"))
+                                                                        }
                                                                      }
-                                                                     tokio::time::sleep(std::time::Duration::from_secs(2)).await;
-                                                                     let _ = tokio::process::Command::new("mkdir")
-                                                                         .args(["-p", &server_dir]).output().await;
-                                                                     let jar_path = format!("{}/server.jar", server_dir);
-                                                                     let jar = Path::new(&jar_path);
-                                                                     if !jar.exists() {
-                                                                         info!("server.jar not found, downloading {} {}...", mc_loader_str, mc_version);
-                                                                         let _ = download_jar(&mc_loader, &mc_version, jar, Path::new(&server_dir)).await;
-                                                                     }
-                                                                      if jar.exists() {
+                                                                     "stop" => {
+                                                                      send_status("stopping", "Stopping server...").await;
+                                                                      // pkill by server_id UUID + container name fallback
+                                                                      let _ = tokio::process::Command::new("sh")
+                                                                          .args(["-c", &format!(
+                                                                              "pkill -f 'java.*{}' 2>/dev/null; pkill -f '{}' 2>/dev/null; docker stop {} 2>/dev/null",
+                                                                              server_id, container, container
+                                                                          )])
+                                                                          .output().await;
+                                                                      // Remove from DIRECT_SERVERS for heartbeat tracking
+                                                                      let mut registry = DIRECT_SERVERS.lock().unwrap();
+                                                                      registry.remove(&server_id);
+                                                                      drop(registry);
+                                                                      // pkill returns non-zero when no process found, which is fine — "already stopped" is success
+                                                                      (true, format!("Server stop requested ({})", server_id))
+                                                                  }
+                                                                  "restart" => {
+                                                                      send_status("stopping", "Restarting server...").await;
+                                                                      let _ = tokio::process::Command::new("sh")
+                                                                          .args(["-c", &format!("pkill -f 'java.*{}' 2>/dev/null; pkill -f '{}' 2>/dev/null", server_id, container)])
+                                                                          .output().await;
+                                                                      // Remove from DIRECT_SERVERS for heartbeat tracking
+                                                                      {
+                                                                          let mut registry = DIRECT_SERVERS.lock().unwrap();
+                                                                          registry.remove(&server_id);
+                                                                      }
+                                                                      tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+                                                                      let _ = tokio::process::Command::new("mkdir")
+                                                                          .args(["-p", &server_dir]).output().await;
+                                                                      let jar_path = format!("{}/server.jar", server_dir);
+                                                                      let jar = Path::new(&jar_path);
+                                                                      if !jar.exists() {
+                                                                          send_status("downloading", &format!("Downloading {} {}...", mc_loader_str, mc_version)).await;
+                                                                          let _ = download_jar(&mc_loader, &mc_version, jar, Path::new(&server_dir)).await;
+                                                                      }
+                                                                       if jar.exists() {
                                                                           let _ = std::fs::write(
                                                                              format!("{}/eula.txt", server_dir),
                                                                              "eula=true\n",
