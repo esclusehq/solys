@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [v0.5.16] - 2026-07-07
 
+### Added
+
+- **Progress notifications during server start/stop/restart** — Agent now sends `command_status` messages to the backend at each stage (downloading → starting → ready) so the dashboard can show loading indicators and status text. No more silent operations.
+
 ### Fixed
 
 - **Dashboard version/loader selection ignored in DirectExecutor fallback** — The `execute_command` raw JSON fallback in `agent_connection.rs` hardcoded Paper 1.21.4 + 1024MB RAM for every server, ignoring the version, loader, and RAM sent by the backend in `deploy_config`. Now reads `version`, `loader`, and `ram_mb` from `deploy_config` or `params` and uses them for download + Java spawn. Added `"create"` handler to trigger JAR download before `"start"`.
