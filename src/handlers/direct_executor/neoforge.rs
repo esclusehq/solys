@@ -18,12 +18,58 @@ const NEOFORGE_MAVEN_BASE: &str =
 
 /// Get the installer JAR URL for a NeoForge version.
 ///
-/// `version` is the NeoForge version string, e.g. "21.4.54-beta".
-/// For MC 1.21+, the format is 21.{minor}.{patch}.
+/// `version` is either a full NeoForge version (e.g. "21.4.54-beta")
+/// or a Minecraft version (e.g. "1.21.4") — if it looks like an MC version,
+/// the latest matching NeoForge build is resolved from Maven metadata.
 pub async fn get_installer_url(version: &str) -> Result<String> {
+    let neoforge_version = if version.starts_with("1.") {
+        resolve_latest_neoforge_version(version).await?
+    } else {
+        version.to_string()
+    };
     Ok(format!(
         "{}/{}/neoforge-{}-installer.jar",
-        NEOFORGE_MAVEN_BASE, version, version
+        NEOFORGE_MAVEN_BASE, neoforge_version, neoforge_version
+    ))
+}
+
+/// Resolve the latest NeoForge build for a given Minecraft version.
+///
+/// Strips the "1." prefix from the MC version (e.g. "1.21.4" → "21.4"),
+/// then searches the NeoForge Maven metadata for the newest version
+/// starting with that prefix.
+async fn resolve_latest_neoforge_version(mc_version: &str) -> Result<String> {
+    let prefix = mc_version
+        .strip_prefix("1.")
+        .unwrap_or(mc_version);
+    let metadata_url = format!(
+        "{}/maven-metadata.xml",
+        NEOFORGE_MAVEN_BASE
+    );
+    let response = reqwest::get(&metadata_url)
+        .await
+        .context("Failed to fetch NeoForge Maven metadata")?;
+    let text = response.text().await?;
+
+    let mut best: Option<String> = None;
+    for line in text.lines() {
+        let trimmed = line.trim();
+        if let Some(ver) = trimmed
+            .strip_prefix("<version>")
+            .and_then(|s| s.strip_suffix("</version>"))
+        {
+            if ver.starts_with(prefix) {
+                match (&best, ver) {
+                    (Some(b), v) if v > b.as_str() => best = Some(v.to_string()),
+                    (None, v) => best = Some(v.to_string()),
+                    _ => {}
+                }
+            }
+        }
+    }
+
+    best.ok_or_else(|| anyhow::anyhow!(
+        "No NeoForge version found for MC {}", mc_version
     ))
 }
 
