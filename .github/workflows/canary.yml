@@ -84,8 +84,8 @@ jobs:
           curl -sL "https://npcap.com/dist/npcap-sdk-1.13.zip" -o /tmp/npcap-sdk.zip
           unzip -q -o /tmp/npcap-sdk.zip -d /tmp/npcap-sdk/
           mkdir -p /tmp/npcap-lib
-          printf '%s\n' EXPORTS PacketOpenAdapter PacketCloseAdapter PacketRequest PacketSendPacket PacketSetBuff PacketGetNetInfo PacketGetAdapterNames > /tmp/packet.def
-          x86_64-w64-mingw32-dlltool -d /tmp/packet.def -l /tmp/npcap-lib/libPacket.a -k -A
+          printf '%s\n' 'LIBRARY wpcap.dll' EXPORTS PacketOpenAdapter PacketCloseAdapter PacketRequest PacketSendPacket PacketSetBuff PacketGetNetInfo PacketGetAdapterNames > /tmp/packet.def
+          x86_64-w64-mingw32-dlltool -d /tmp/packet.def -l /tmp/npcap-lib/libPacket.a -k
           echo "LIB_FOR_XWIN=/tmp/npcap-lib" >> "$GITHUB_ENV"
       - name: Build (Windows)
         if: matrix.target == 'x86_64-pc-windows-gnu'
