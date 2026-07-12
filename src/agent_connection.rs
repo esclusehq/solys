@@ -22,6 +22,7 @@ use uuid::Uuid;
 
 use crate::handlers::direct_executor::{download_jar, DIRECT_SERVERS, ServerState, ServerStatus, McLoader};
 
+use base64::Engine;
 use zeroize::Zeroizing;
 
 use crate::handlers;
@@ -843,7 +844,28 @@ pub async fn run(
                                                              Err(e) => (false, e),
                                                          }
                                                      }
-                                                     "write_file" | "file.write_file" => {
+                                                      "upload_file" | "file.upload_file" => {
+                                                          let base = std::path::PathBuf::from(format!("{}/servers/{}", config.data_dir.display(), server_id));
+                                                          let req_path = params.get("path").and_then(|v| v.as_str()).unwrap_or("");
+                                                          let b64_content = params.get("content").and_then(|v| v.as_str()).unwrap_or("");
+                                                          let target = resolve_server_path(&base, req_path);
+                                                          match target {
+                                                              Ok(file) => {
+                                                                  if let Some(parent) = file.parent() {
+                                                                      let _ = tokio::fs::create_dir_all(parent).await;
+                                                                  }
+                                                                  match base64::engine::general_purpose::STANDARD.decode(b64_content) {
+                                                                      Ok(bytes) => match tokio::fs::write(&file, &bytes).await {
+                                                                          Ok(_) => (true, "written".into()),
+                                                                          Err(e) => (false, format!("Failed to write file: {}", e)),
+                                                                      },
+                                                                      Err(e) => (false, format!("Failed to decode base64: {}", e)),
+                                                                  }
+                                                              }
+                                                              Err(e) => (false, e),
+                                                          }
+                                                      }
+                                                      "write_file" | "file.write_file" => {
                                                          let base = std::path::PathBuf::from(format!("{}/servers/{}", config.data_dir.display(), server_id));
                                                          let req_path = params.get("path").and_then(|v| v.as_str()).unwrap_or("");
                                                          let content = params.get("content").and_then(|v| v.as_str()).unwrap_or("");
