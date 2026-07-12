@@ -58,7 +58,10 @@ async fn resolve_latest_neoforge_version(mc_version: &str) -> Result<String> {
             .strip_prefix("<version>")
             .and_then(|s| s.strip_suffix("</version>"))
         {
-            if ver.starts_with(prefix) {
+            if ver.starts_with(prefix)
+                && (ver.len() == prefix.len()
+                    || ver.as_bytes().get(prefix.len()) == Some(&b'.'))
+            {
                 match (&best, ver) {
                     (Some(b), v) if v > b.as_str() => best = Some(v.to_string()),
                     (None, v) => best = Some(v.to_string()),
