@@ -107,6 +107,19 @@ pub async fn handle_create(task: Task) -> Result<serde_json::Value> {
         .and_then(|v| v.as_u64())
         .map(|p| p as u16)
         .unwrap_or(25565u16);
+
+    // Check if requested port is available; auto-assign next free if not
+    let actual_port = find_available_port(port, 100);
+    if actual_port != port {
+        info!(
+            server_id = %server_id,
+            requested = port,
+            actual = actual_port,
+            "Port {} already in use, auto-assigned {} instead",
+            port, actual_port,
+        );
+    }
+
     let ram: u64 = payload
         .get("ram")
         .and_then(|v| v.as_u64())
@@ -147,8 +160,8 @@ pub async fn handle_create(task: Task) -> Result<serde_json::Value> {
     // RCON port: 25575 + deterministic offset from server_id
     let rcon_port: u16 = 25575u16.wrapping_add((server_id.as_u128() % 1024) as u16);
 
-    // Write server.properties
-    let props = generate_server_properties(port, rcon_port, &rcon_password, &overrides);
+    // Write server.properties with the actual (possibly re-assigned) port
+    let props = generate_server_properties(actual_port, rcon_port, &rcon_password, &overrides);
     let props_path = server_dir.join("server.properties");
     tokio::fs::write(&props_path, &props)
         .await
@@ -168,7 +181,7 @@ pub async fn handle_create(task: Task) -> Result<serde_json::Value> {
         mc_loader: loader,
         mc_version: version.clone(),
         status: ServerStatus::Stopped,
-        port,
+        port: actual_port,
         allocated_ram: ram,
         path: server_dir,
         rcon_port,
@@ -189,6 +202,7 @@ pub async fn handle_create(task: Task) -> Result<serde_json::Value> {
         "status": "created",
         "server_id": server_id,
         "name": name,
+        "port": actual_port,
     }))
 }
 
@@ -231,12 +245,15 @@ pub async fn handle_start(task: Task) -> Result<serde_json::Value> {
             state.display_name.clone(),
             state.mc_version.clone(),
             state.path.clone(),
+            state.port,
+            state.rcon_port,
+            state.rcon_password.clone(),
             state.allocated_ram,
             state.auto_restart,
         )
     };
 
-    let (_sid, _name, mc_version, path, ram, _auto_restart) = state_clone;
+    let (_sid, _name, mc_version, path, port, rcon_port, rcon_password, ram, _auto_restart) = state_clone;
 
     // Validate Java version (D-08)
     let java_info = java::detect_java_version()
@@ -246,6 +263,44 @@ pub async fn handle_start(task: Task) -> Result<serde_json::Value> {
     let jar_path = path.join("server.jar");
     if !jar_path.exists() {
         return Err(anyhow::anyhow!("Server JAR not found at {}", jar_path.display()));
+    }
+
+    // Check if the port is still available; auto-assign next free if not
+    let actual_port = find_available_port(port, 100);
+    if actual_port != port {
+        info!(
+            server_id = %server_id,
+            requested = port,
+            actual = actual_port,
+            "Port {} already in use at start time, auto-assigned {} instead",
+            port, actual_port,
+        );
+        // Update server-port line in server.properties (preserves all overrides)
+        let props_path = path.join("server.properties");
+        let old_content = tokio::fs::read_to_string(&props_path)
+            .await
+            .unwrap_or_default();
+        let new_content = old_content
+            .lines()
+            .map(|line| {
+                if line.starts_with("server-port=") {
+                    format!("server-port={}", actual_port)
+                } else {
+                    line.to_string()
+                }
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+        tokio::fs::write(&props_path, &new_content)
+            .await
+            .with_context(|| format!("Failed to update server.properties to {}", props_path.display()))?;
+        // Update ServerState with new port
+        {
+            let mut registry = DIRECT_SERVERS.lock().unwrap();
+            if let Some(state) = registry.get_mut(&server_id) {
+                state.port = actual_port;
+            }
+        }
     }
 
     send_progress(task_id, "running", 10.0, "Starting server process").await;
