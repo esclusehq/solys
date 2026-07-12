@@ -787,22 +787,170 @@ pub async fn run(
                                                         }
                                                     }
                                                     _ if cmd == "logs" => {
-                                                        // Handle logs for DirectExecutor: read latest.log
-                                                        let server_log = format!("{}/servers/{}/logs/latest.log", config.data_dir.display(), server_id);
-                                                        match tokio::fs::read_to_string(&server_log).await {
-                                                            Ok(content) => {
-                                                                if content.is_empty() {
-                                                                    (true, "Server is running but no logs yet.".into())
-                                                                } else {
-                                                                    (true, content)
-                                                                }
-                                                            }
-                                                            Err(_) => {
-                                                                (true, "Server logs not available yet.".into())
-                                                            }
-                                                        }
-                                                    }
-                                                    _ => {
+                                                         // Handle logs for DirectExecutor: read latest.log
+                                                         let server_log = format!("{}/servers/{}/logs/latest.log", config.data_dir.display(), server_id);
+                                                         match tokio::fs::read_to_string(&server_log).await {
+                                                             Ok(content) => {
+                                                                 if content.is_empty() {
+                                                                     (true, "Server is running but no logs yet.".into())
+                                                                 } else {
+                                                                     (true, content)
+                                                                 }
+                                                             }
+                                                             Err(_) => {
+                                                                 (true, "Server logs not available yet.".into())
+                                                             }
+                                                         }
+                                                     }
+                                                     "list_dir" | "file.list_dir" => {
+                                                         let base = std::path::PathBuf::from(format!("{}/servers/{}", config.data_dir.display(), server_id));
+                                                         let req_path = params.get("path").and_then(|v| v.as_str()).unwrap_or(".");
+                                                         let target = resolve_server_path(&base, req_path);
+                                                         match target {
+                                                             Ok(dir) => {
+                                                                 let mut entries = String::new();
+                                                                 let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs();
+                                                                 match tokio::fs::read_dir(&dir).await {
+                                                                     Ok(mut rd) => {
+                                                                         while let Ok(Some(entry)) = rd.next_entry().await {
+                                                                             let name = entry.file_name().to_string_lossy().to_string();
+                                                                             if name == "." || name == ".." { continue; }
+                                                                             let meta = match entry.metadata().await { Ok(m) => m, Err(_) => continue };
+                                                                             let mode = if meta.is_dir() { "drwxr-xr-x" } else { "-rw-r--r--" };
+                                                                             let size = meta.len();
+                                                                             let mtime = meta.modified().ok().and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok()).map(|d| d.as_secs()).unwrap_or(now);
+                                                                             entries.push_str(&format!("{} 1 owner group {} {} {}\n", mode, size, mtime, name));
+                                                                         }
+                                                                         (true, entries)
+                                                                     }
+                                                                     Err(e) => (false, format!("Failed to list directory: {}", e)),
+                                                                 }
+                                                             }
+                                                             Err(e) => (false, e),
+                                                         }
+                                                     }
+                                                     "read_file" | "file.read_file" => {
+                                                         let base = std::path::PathBuf::from(format!("{}/servers/{}", config.data_dir.display(), server_id));
+                                                         let req_path = params.get("path").and_then(|v| v.as_str()).unwrap_or("");
+                                                         let target = resolve_server_path(&base, req_path);
+                                                         match target {
+                                                             Ok(file) => {
+                                                                 match tokio::fs::read_to_string(&file).await {
+                                                                     Ok(content) => (true, content),
+                                                                     Err(e) => (false, format!("Failed to read file: {}", e)),
+                                                                 }
+                                                             }
+                                                             Err(e) => (false, e),
+                                                         }
+                                                     }
+                                                     "write_file" | "file.write_file" => {
+                                                         let base = std::path::PathBuf::from(format!("{}/servers/{}", config.data_dir.display(), server_id));
+                                                         let req_path = params.get("path").and_then(|v| v.as_str()).unwrap_or("");
+                                                         let content = params.get("content").and_then(|v| v.as_str()).unwrap_or("");
+                                                         let target = resolve_server_path(&base, req_path);
+                                                         match target {
+                                                             Ok(file) => {
+                                                                 if let Some(parent) = file.parent() {
+                                                                     let _ = tokio::fs::create_dir_all(parent).await;
+                                                                 }
+                                                                 match tokio::fs::write(&file, content).await {
+                                                                     Ok(_) => (true, "written".into()),
+                                                                     Err(e) => (false, format!("Failed to write file: {}", e)),
+                                                                 }
+                                                             }
+                                                             Err(e) => (false, e),
+                                                         }
+                                                     }
+                                                     "delete" | "file.delete" => {
+                                                         let base = std::path::PathBuf::from(format!("{}/servers/{}", config.data_dir.display(), server_id));
+                                                         let req_path = params.get("path").and_then(|v| v.as_str()).unwrap_or("");
+                                                         let target = resolve_server_path(&base, req_path);
+                                                         match target {
+                                                             Ok(p) => {
+                                                                 let r = if p.is_dir() { tokio::fs::remove_dir_all(&p).await } else { tokio::fs::remove_file(&p).await };
+                                                                 match r {
+                                                                     Ok(_) => (true, "deleted".into()),
+                                                                     Err(e) => (false, format!("Failed to delete: {}", e)),
+                                                                 }
+                                                             }
+                                                             Err(e) => (false, e),
+                                                         }
+                                                     }
+                                                     "mkdir" | "file.mkdir" => {
+                                                         let base = std::path::PathBuf::from(format!("{}/servers/{}", config.data_dir.display(), server_id));
+                                                         let req_path = params.get("path").and_then(|v| v.as_str()).unwrap_or("");
+                                                         let target = resolve_server_path(&base, req_path);
+                                                         match target {
+                                                             Ok(p) => {
+                                                                 match tokio::fs::create_dir_all(&p).await {
+                                                                     Ok(_) => (true, "created".into()),
+                                                                     Err(e) => (false, format!("Failed to create directory: {}", e)),
+                                                                 }
+                                                             }
+                                                             Err(e) => (false, e),
+                                                         }
+                                                     }
+                                                     "rename" | "file.rename" => {
+                                                         let base = std::path::PathBuf::from(format!("{}/servers/{}", config.data_dir.display(), server_id));
+                                                         let src = params.get("source_path").and_then(|v| v.as_str()).unwrap_or("");
+                                                         let dst = params.get("dest_path").and_then(|v| v.as_str()).unwrap_or("");
+                                                         let source = resolve_server_path(&base, src);
+                                                         let dest = resolve_server_path(&base, dst);
+                                                         match (source, dest) {
+                                                             (Ok(s), Ok(d)) => {
+                                                                 if let Some(parent) = d.parent() {
+                                                                     let _ = tokio::fs::create_dir_all(parent).await;
+                                                                 }
+                                                                 match tokio::fs::rename(&s, &d).await {
+                                                                     Ok(_) => (true, "renamed".into()),
+                                                                     Err(e) => (false, format!("Failed to rename: {}", e)),
+                                                                 }
+                                                             }
+                                                             (Err(e), _) | (_, Err(e)) => (false, e),
+                                                         }
+                                                     }
+                                                     "copy" | "file.copy" => {
+                                                         let base = std::path::PathBuf::from(format!("{}/servers/{}", config.data_dir.display(), server_id));
+                                                         let src = params.get("source_path").and_then(|v| v.as_str()).unwrap_or("");
+                                                         let dst = params.get("dest_path").and_then(|v| v.as_str()).unwrap_or("");
+                                                         let source = resolve_server_path(&base, src);
+                                                         let dest = resolve_server_path(&base, dst);
+                                                         match (source, dest) {
+                                                             (Ok(s), Ok(d)) => {
+                                                                 if let Some(parent) = d.parent() {
+                                                                     let _ = tokio::fs::create_dir_all(parent).await;
+                                                                 }
+                                                                 let r = if s.is_dir() {
+                                                                     tokio::task::spawn_blocking(move || {
+                                                                         fn copy_dir_recursive(src: &std::path::Path, dst: &std::path::Path) -> std::io::Result<()> {
+                                                                             if !dst.exists() { std::fs::create_dir_all(dst)?; }
+                                                                             for entry in std::fs::read_dir(src)? {
+                                                                                 let entry = entry?;
+                                                                                 let ty = entry.file_type()?;
+                                                                                 let next_src = entry.path();
+                                                                                 let next_dst = dst.join(entry.file_name());
+                                                                                 if ty.is_dir() {
+                                                                                     copy_dir_recursive(&next_src, &next_dst)?;
+                                                                                 } else {
+                                                                                     std::fs::copy(&next_src, &next_dst)?;
+                                                                                 }
+                                                                             }
+                                                                             Ok(())
+                                                                         }
+                                                                         copy_dir_recursive(&s, &d)
+                                                                     }).await.unwrap_or(Ok(()))
+                                                                 } else {
+                                                                     tokio::fs::copy(&s, &d).await.map(|_| ())
+                                                                 };
+                                                                 match r {
+                                                                     Ok(_) => (true, "copied".into()),
+                                                                     Err(e) => (false, format!("Failed to copy: {}", e)),
+                                                                 }
+                                                             }
+                                                             (Err(e), _) | (_, Err(e)) => (false, e),
+                                                         }
+                                                     }
+                                                     _ => {
                                                         // Generic shell fallback for unknown commands
                                                         let r = tokio::process::Command::new("sh").arg("-c").arg(&cmd).output().await;
                                                         match r {
@@ -882,5 +1030,21 @@ pub async fn run(
     // Return node_id (nil if shutdown)
     let result = node_id.lock().unwrap_or_else(|e| e.into_inner()).unwrap_or(Uuid::nil());
     Ok(result)
+}
+
+/// Resolve a server-relative path with traversal protection
+fn resolve_server_path(base: &std::path::Path, requested: &str) -> Result<std::path::PathBuf, String> {
+    let clean = requested.trim_start_matches('/');
+    let target = if clean.is_empty() || clean == "." {
+        base.to_path_buf()
+    } else {
+        base.join(clean)
+    };
+    let canonical = std::fs::canonicalize(&target)
+        .map_err(|e| format!("Path resolution failed: {} (path must exist)", e))?;
+    if !canonical.starts_with(base) {
+        return Err("Path traversal blocked".into());
+    }
+    Ok(canonical)
 }
 
