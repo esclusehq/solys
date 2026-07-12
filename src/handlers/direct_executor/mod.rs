@@ -170,6 +170,29 @@ async fn download_to_file(url: &str, dest: &Path) -> Result<()> {
 }
 
 // ---------------------------------------------------------------------------
+// Port availability helpers
+// ---------------------------------------------------------------------------
+
+/// Check whether a TCP port is free by attempting to bind to it.
+/// Drops the listener immediately after the check so the port is released.
+pub fn is_port_available(port: u16) -> bool {
+    std::net::TcpListener::bind(("0.0.0.0", port)).is_ok()
+}
+
+/// Find the first available port starting from `preferred`, trying up to
+/// `max_attempts` consecutive ports.  Returns the preferred port if none
+/// of the candidates are free (the caller will get a bind error at start).
+pub fn find_available_port(preferred: u16, max_attempts: u16) -> u16 {
+    let end = preferred.saturating_add(max_attempts);
+    for port in preferred..end {
+        if is_port_available(port) {
+            return port;
+        }
+    }
+    preferred
+}
+
+// ---------------------------------------------------------------------------
 // server.properties generation
 // ---------------------------------------------------------------------------
 
