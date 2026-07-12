@@ -644,17 +644,34 @@ pub async fn run(
                                                                                (true, format!("Java already running for server {}", server_id))
                                                                            } else {
                                                                                send_status("starting", "Starting Java server...").await;
-                                                                              // Accept EULA (synchronous write to ensure on disk before Java starts)
-                                                                              let _ = std::fs::write(
-                                                                                  format!("{}/eula.txt", server_dir),
-                                                                                  "eula=true\n",
-                                                                              );
-                                                                              let r = tokio::process::Command::new("java")
-                                                                                  .arg(format!("-Xmx{}M", ram_mb)).arg(format!("-Xms{}M", ram_mb))
-                                                                                  .arg("-jar").arg(jar_path)
-                                                                                  .arg("--nogui")
-                                                                                  .current_dir(&server_dir)
-                                                                                  .spawn();
+                                                                               // Accept EULA (synchronous write to ensure on disk before Java starts)
+                                                                               let _ = std::fs::write(
+                                                                                   format!("{}/eula.txt", server_dir),
+                                                                                   "eula=true\n",
+                                                                               );
+                                                                               let is_neoforge = matches!(mc_loader, McLoader::NeoForge);
+                                                                               let is_forge = matches!(mc_loader, McLoader::Forge);
+                                                                               let run_sh = format!("{}/run.sh", server_dir);
+                                                                               let r = if (is_neoforge || is_forge)
+                                                                                   && Path::new(&run_sh).exists()
+                                                                               {
+                                                                                   let _ = std::fs::write(
+                                                                                       format!("{}/user_jvm_args.txt", server_dir),
+                                                                                       format!("-Xmx{}M\n-Xms{}M\n", ram_mb, ram_mb),
+                                                                                   );
+                                                                                   tokio::process::Command::new("sh")
+                                                                                       .arg("run.sh")
+                                                                                       .arg("--nogui")
+                                                                                       .current_dir(&server_dir)
+                                                                                       .spawn()
+                                                                               } else {
+                                                                                   tokio::process::Command::new("java")
+                                                                                       .arg(format!("-Xmx{}M", ram_mb)).arg(format!("-Xms{}M", ram_mb))
+                                                                                       .arg("-jar").arg(jar_path)
+                                                                                       .arg("--nogui")
+                                                                                       .current_dir(&server_dir)
+                                                                                       .spawn()
+                                                                               };
                                                                               match r {
                                                                                   Ok(_) => {
                                                                                       let mut registry = DIRECT_SERVERS.lock().unwrap();

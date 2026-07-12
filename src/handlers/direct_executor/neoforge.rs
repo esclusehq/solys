@@ -134,12 +134,21 @@ pub fn resolve_launcher_jar(server_dir: &Path) -> Result<std::path::PathBuf> {
     if lib_path.exists() {
         if let Ok(entries) = std::fs::read_dir(&lib_path) {
             for entry in entries.flatten() {
-                let dir_name = entry.file_name();
-                let version_jar = entry
-                    .path()
-                    .join(format!("neoforge-{}.jar", dir_name.to_string_lossy()));
-                if version_jar.exists() {
-                    return Ok(version_jar);
+                let version_dir = entry.path();
+                if !version_dir.is_dir() {
+                    continue;
+                }
+                if let Ok(files) = std::fs::read_dir(&version_dir) {
+                    for file in files.flatten() {
+                        let name = file.file_name();
+                        let name_str = name.to_string_lossy();
+                        if name_str.starts_with("neoforge-")
+                            && name_str.ends_with(".jar")
+                            && !name_str.contains("installer")
+                        {
+                            return Ok(file.path());
+                        }
+                    }
                 }
             }
         }
@@ -156,8 +165,8 @@ pub fn resolve_launcher_jar(server_dir: &Path) -> Result<std::path::PathBuf> {
         if let Some(ext) = path.extension() {
             if ext == "jar" {
                 if let Ok(meta) = std::fs::metadata(&path) {
-                    // Launcher JAR is typically > 1MB
-                    if meta.len() > 1_000_000 {
+                    // Launcher JAR is typically > 1MB, installer is NOT a launcher
+                    if meta.len() > 1_000_000 && !path.to_string_lossy().contains("installer") {
                         return Ok(path);
                     }
                 }
