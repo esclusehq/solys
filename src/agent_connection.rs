@@ -1054,7 +1054,9 @@ pub async fn run(
     Ok(result)
 }
 
-/// Resolve a server-relative path with traversal protection
+/// Resolve a server-relative path with traversal protection.
+/// Creates base directory if it doesn't exist. Handles non-existent targets
+/// by canonicalizing the parent for path traversal validation.
 fn resolve_server_path(base: &std::path::Path, requested: &str) -> Result<std::path::PathBuf, String> {
     let clean = requested.trim_start_matches('/');
     let target = if clean.is_empty() || clean == "." {
@@ -1062,8 +1064,25 @@ fn resolve_server_path(base: &std::path::Path, requested: &str) -> Result<std::p
     } else {
         base.join(clean)
     };
-    let canonical = std::fs::canonicalize(&target)
-        .map_err(|e| format!("Path resolution failed: {} (path must exist)", e))?;
+
+    // Ensure base directory exists before attempting canonicalization
+    if !base.exists() {
+        std::fs::create_dir_all(base)
+            .map_err(|e| format!("Failed to create base directory: {}", e))?;
+    }
+
+    let canonical = if target.exists() {
+        std::fs::canonicalize(&target)
+            .map_err(|e| format!("Path canonicalization failed: {}", e))?
+    } else {
+        // Target doesn't exist yet — canonicalize parent for security check
+        let parent = target.parent().ok_or_else(|| "Invalid path: no parent".to_string())?;
+        let canonical_parent = std::fs::canonicalize(parent)
+            .map_err(|e| format!("Parent path canonicalization failed: {}", e))?;
+        let file_name = target.file_name().ok_or_else(|| "Invalid path: no filename".to_string())?;
+        canonical_parent.join(file_name)
+    };
+
     if !canonical.starts_with(base) {
         return Err("Path traversal blocked".into());
     }
