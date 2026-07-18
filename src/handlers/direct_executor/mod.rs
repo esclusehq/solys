@@ -217,7 +217,6 @@ pub fn generate_server_properties(
     props.push_str("enable-query=false\n");
     props.push_str("enable-status=true\n");
     props.push_str("online-mode=true\n");
-    props.push_str("level-type=default\n");
     props.push_str("max-players=20\n");
     props.push_str("gamemode=survival\n");
     props.push_str("difficulty=easy\n");
@@ -297,19 +296,45 @@ pub fn server_log_path(data_dir: &Path, server_id: &Uuid) -> PathBuf {
 /// Collect statuses of all direct-executor servers for heartbeat payload.
 /// Returns Vec of (server_id, display_name, status_string).
 pub fn collect_server_statuses() -> Vec<(Uuid, String, String)> {
-    let registry = DIRECT_SERVERS.lock().unwrap();
-    registry
-        .iter()
-        .map(|(id, state)| {
-            let status = match state.status {
-                ServerStatus::Running => {
+    // First pass: collect IDs of servers that are marked Running but whose
+    // Java process has died. Drop the lock before updating so we don't deadlock.
+    let dead_ids: Vec<Uuid> = {
+        let registry = DIRECT_SERVERS.lock().unwrap_or_else(|e| e.into_inner());
+        registry
+            .iter()
+            .filter_map(|(id, state)| {
+                if matches!(state.status, ServerStatus::Running) {
                     let is_alive = std::process::Command::new("sh")
                         .args(["-c", &format!("pgrep -f 'java.*{}' >/dev/null 2>&1", id)])
                         .status()
                         .map(|s| s.success())
                         .unwrap_or(false);
-                    if is_alive { "running" } else { "stopped" }
+                    if !is_alive { Some(*id) } else { None }
+                } else {
+                    None
                 }
+            })
+            .collect()
+    };
+
+    // Update DIRECT_SERVERS entries for dead processes so the backend sees
+    // the correct status without waiting for the next lifecycle event.
+    if !dead_ids.is_empty() {
+        let mut registry = DIRECT_SERVERS.lock().unwrap_or_else(|e| e.into_inner());
+        for id in &dead_ids {
+            if let Some(entry) = registry.get_mut(id) {
+                entry.status = ServerStatus::Stopped;
+            }
+        }
+    }
+
+    // Build status result from the updated registry.
+    let registry = DIRECT_SERVERS.lock().unwrap_or_else(|e| e.into_inner());
+    registry
+        .iter()
+        .map(|(id, state)| {
+            let status = match state.status {
+                ServerStatus::Running => "running",
                 ServerStatus::Stopped => "stopped",
                 ServerStatus::Crashed => "crashed",
             };

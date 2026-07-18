@@ -9,7 +9,7 @@ if [ -z "$VERSION" ]; then
   exit 1
 fi
 
-BASE_URL="https://get.esluce.com/v${VERSION}"
+BASE_URL="https://get.esclusehg.com/v${VERSION}"
 
 cd "$ARTIFACTS_DIR"
 

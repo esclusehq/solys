@@ -49,7 +49,7 @@ async fn main() -> Result<()> {
         println!("  Environment:  ESCLUSE_AGENT_* or AGENT_* env vars");
         println!();
         println!("  Required:");
-        println!("    backend_url    WebSocket URL (e.g. wss://app.esluce.com/api/ws/node)");
+        println!("    backend_url    WebSocket URL (e.g. wss://app.esclusehg.com/api/ws/node)");
         println!("    api_key        API key from Escluse Dashboard");
         return Ok(());
     }

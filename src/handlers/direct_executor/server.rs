@@ -192,7 +192,7 @@ pub async fn handle_create(task: Task) -> Result<serde_json::Value> {
     };
 
     {
-        let mut registry = DIRECT_SERVERS.lock().unwrap();
+        let mut registry = DIRECT_SERVERS.lock().unwrap_or_else(|e| e.into_inner());
         registry.insert(server_id, state);
     }
 
@@ -232,7 +232,7 @@ pub async fn handle_start(task: Task) -> Result<serde_json::Value> {
 
     // Clone state fields while holding lock
     let state_clone = {
-        let registry = DIRECT_SERVERS.lock().unwrap();
+        let registry = DIRECT_SERVERS.lock().unwrap_or_else(|e| e.into_inner());
         let state = registry
             .get(&server_id)
             .ok_or_else(|| anyhow::anyhow!("Server {} not found", server_id))?;
@@ -255,10 +255,8 @@ pub async fn handle_start(task: Task) -> Result<serde_json::Value> {
 
     let (_sid, _name, mc_version, path, port, rcon_port, rcon_password, ram, _auto_restart) = state_clone;
 
-    // Validate Java version (D-08)
-    let java_info = java::detect_java_version()
-        .ok_or_else(|| anyhow::anyhow!("Java not found on PATH"))?;
-    java::validate_java_for_version(&mc_version, java_info.0)?;
+    // Validate Java version (D-08) — auto-installs on Termux if needed
+    java::ensure_java_for_mc_version(&mc_version).await?;
 
     let jar_path = path.join("server.jar");
     if !jar_path.exists() {
@@ -296,7 +294,7 @@ pub async fn handle_start(task: Task) -> Result<serde_json::Value> {
             .with_context(|| format!("Failed to update server.properties to {}", props_path.display()))?;
         // Update ServerState with new port
         {
-            let mut registry = DIRECT_SERVERS.lock().unwrap();
+            let mut registry = DIRECT_SERVERS.lock().unwrap_or_else(|e| e.into_inner());
             if let Some(state) = registry.get_mut(&server_id) {
                 state.port = actual_port;
             }
@@ -329,7 +327,7 @@ pub async fn handle_start(task: Task) -> Result<serde_json::Value> {
 
     // Store child handle in registry
     {
-        let mut registry = DIRECT_SERVERS.lock().unwrap();
+        let mut registry = DIRECT_SERVERS.lock().unwrap_or_else(|e| e.into_inner());
         if let Some(state) = registry.get_mut(&server_id) {
             state.status = ServerStatus::Running;
             state.child = Some(child);
@@ -383,7 +381,7 @@ pub async fn handle_start(task: Task) -> Result<serde_json::Value> {
         tokio::time::sleep(Duration::from_millis(100)).await;
 
         let child = {
-            let mut registry = DIRECT_SERVERS.lock().unwrap();
+            let mut registry = DIRECT_SERVERS.lock().unwrap_or_else(|e| e.into_inner());
             registry.get_mut(&server_id).and_then(|s| s.child.take())
         };
 
@@ -403,7 +401,7 @@ pub async fn handle_start(task: Task) -> Result<serde_json::Value> {
 
             // Update status to Crashed
             {
-                let mut registry = DIRECT_SERVERS.lock().unwrap();
+                let mut registry = DIRECT_SERVERS.lock().unwrap_or_else(|e| e.into_inner());
                 if let Some(state) = registry.get_mut(&sid_crash) {
                     state.status = ServerStatus::Crashed;
                     state.child = None;
@@ -436,7 +434,7 @@ pub async fn handle_start(task: Task) -> Result<serde_json::Value> {
         } else {
             // Normal exit — update status to Stopped
             {
-                let mut registry = DIRECT_SERVERS.lock().unwrap();
+                let mut registry = DIRECT_SERVERS.lock().unwrap_or_else(|e| e.into_inner());
                 if let Some(state) = registry.get_mut(&sid_crash) {
                     state.status = ServerStatus::Stopped;
                     state.child = None;
@@ -469,7 +467,7 @@ pub async fn handle_stop(task: Task) -> Result<serde_json::Value> {
         .context("Missing or invalid server_id")?;
 
     let (rcon_port, rcon_password) = {
-        let registry = DIRECT_SERVERS.lock().unwrap();
+        let registry = DIRECT_SERVERS.lock().unwrap_or_else(|e| e.into_inner());
         let state = registry
             .get(&server_id)
             .ok_or_else(|| anyhow::anyhow!("Server {} not found", server_id))?;
@@ -484,7 +482,7 @@ pub async fn handle_stop(task: Task) -> Result<serde_json::Value> {
 
     // Kill the child process (regardless of RCON result)
     let child = {
-        let mut registry = DIRECT_SERVERS.lock().unwrap();
+        let mut registry = DIRECT_SERVERS.lock().unwrap_or_else(|e| e.into_inner());
         registry.get_mut(&server_id).and_then(|s| s.child.take())
     };
 
@@ -495,7 +493,7 @@ pub async fn handle_stop(task: Task) -> Result<serde_json::Value> {
 
     // Update status
     {
-        let mut registry = DIRECT_SERVERS.lock().unwrap();
+        let mut registry = DIRECT_SERVERS.lock().unwrap_or_else(|e| e.into_inner());
         if let Some(state) = registry.get_mut(&server_id) {
             state.status = ServerStatus::Stopped;
             state.child = None;
@@ -528,7 +526,7 @@ pub async fn handle_restart(task: Task) -> Result<serde_json::Value> {
 
     // Check current state
     let status = {
-        let registry = DIRECT_SERVERS.lock().unwrap();
+        let registry = DIRECT_SERVERS.lock().unwrap_or_else(|e| e.into_inner());
         registry.get(&server_id).map(|s| s.status)
     };
 
@@ -567,7 +565,7 @@ pub async fn handle_delete(task: Task) -> Result<serde_json::Value> {
         .context("Missing or invalid server_id")?;
 
     let server_path = {
-        let mut registry = DIRECT_SERVERS.lock().unwrap();
+        let mut registry = DIRECT_SERVERS.lock().unwrap_or_else(|e| e.into_inner());
         let state = registry.remove(&server_id);
         match state {
             Some(mut s) => {
@@ -616,7 +614,7 @@ pub async fn handle_logs(task: Task) -> Result<serde_json::Value> {
     let tail = task.payload.get("tail").and_then(|v| v.as_u64()).unwrap_or(200) as usize;
 
     let log_path = {
-        let registry = DIRECT_SERVERS.lock().unwrap();
+        let registry = DIRECT_SERVERS.lock().unwrap_or_else(|e| e.into_inner());
         let state = registry
             .get(&server_id)
             .ok_or_else(|| anyhow::anyhow!("Server {} not found", server_id))?;
@@ -660,7 +658,7 @@ pub async fn handle_status(task: Task) -> Result<serde_json::Value> {
         .and_then(|s| s.parse().ok())
         .context("Missing or invalid server_id")?;
 
-    let registry = DIRECT_SERVERS.lock().unwrap();
+    let registry = DIRECT_SERVERS.lock().unwrap_or_else(|e| e.into_inner());
     let state = registry
         .get(&server_id)
         .ok_or_else(|| anyhow::anyhow!("Server {} not found", server_id))?;

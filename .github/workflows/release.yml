@@ -309,7 +309,7 @@ jobs:
           curl -fsSL -X POST "https://api.cloudflare.com/client/v4/zones/${{ secrets.CLOUDFLARE_ZONE_ID }}/purge_cache" \
             -H "Authorization: Bearer ${{ secrets.CLOUDFLARE_API_TOKEN }}" \
             -H "Content-Type: application/json" \
-            -d '{"prefixes":["get.esluce.com/"]}'
+            -d '{"prefixes":["get.esclusehg.com/"]}'
 
   manifest:
     needs: [upload, validate]
