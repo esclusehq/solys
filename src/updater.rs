@@ -4,7 +4,7 @@ use anyhow::{Context, Result};
 use semver::Version;
 use serde::Deserialize;
 use tokio::sync::watch;
-use tracing::{debug, error, info};
+use tracing::{debug, error, info, warn};
 
 use agent_config::UpdateChannel;
 
@@ -20,25 +20,24 @@ struct ReleaseAsset {
     sha256: String,
 }
 
-fn platform_key() -> &'static str {
+fn platform_key() -> Option<&'static str> {
     match (std::env::consts::OS, std::env::consts::ARCH) {
-        ("linux", "x86_64") => "linux-x86_64",
-        ("linux", "aarch64") => "linux-aarch64",
-        ("android", "aarch64") => "android-aarch64",
-        ("android", "arm") => "android-armv7",
-        ("windows", "x86_64") => "windows-x86_64",
-        _ => {
-            info!(
-                "Unknown platform {}-{}, falling back to linux-x86_64",
-                std::env::consts::OS,
-                std::env::consts::ARCH
+        ("linux", "x86_64") => Some("linux-x86_64"),
+        ("linux", "aarch64") => Some("linux-aarch64"),
+        ("android", "aarch64") => Some("android-aarch64"),
+        ("android", "arm") => Some("android-armv7"),
+        ("windows", "x86_64") => Some("windows-x86_64"),
+        (os, arch) => {
+            warn!(
+                "Unknown platform {}-{}, update skipped — no binary available for this platform",
+                os, arch
             );
-            "linux-x86_64"
+            None
         }
     }
 }
 
-const MANIFEST_URL: &str = "https://get.esluce.com/versions.json";
+const MANIFEST_URL: &str = "https://get.esclusehg.com/versions.json";
 
 async fn fetch_manifest(client: &reqwest::Client) -> Result<Manifest> {
     let resp = client
@@ -166,10 +165,16 @@ pub fn spawn(
 
     tokio::spawn(async move {
         let mut shutdown = shutdown;
-        let client = reqwest::Client::builder()
+        let client = match reqwest::Client::builder()
             .user_agent(format!("escluse-agent/{}", current_version))
             .build()
-            .expect("Failed to build HTTP client");
+        {
+            Ok(c) => c,
+            Err(e) => {
+                error!("Failed to build HTTP client: {}", e);
+                return;
+            }
+        };
 
         // First check after 60s (give agent time to connect)
         tokio::time::sleep(std::time::Duration::from_secs(60)).await;
@@ -260,7 +265,10 @@ async fn check_and_update(
         }
     };
 
-    let key = platform_key();
+    let key = match platform_key() {
+        Some(k) => k,
+        None => return Ok(false),
+    };
     let asset = match releases.get(key) {
         Some(a) => a,
         None => {
@@ -292,8 +300,11 @@ mod tests {
 
     #[test]
     fn test_platform_key() {
-        let key = platform_key();
-        assert!(!key.is_empty());
-        assert!(key.contains('-'));
+        // Most test hosts are linux-x86_64
+        if let Some(key) = platform_key() {
+            assert!(!key.is_empty());
+            assert!(key.contains('-'));
+        }
+        // If the test runs on an unknown platform, the key is None — that's fine
     }
 }

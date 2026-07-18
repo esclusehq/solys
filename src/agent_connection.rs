@@ -592,9 +592,45 @@ pub async fn run(
                                                             };
                                                         let has_podman = check_cmd("podman").await;
                                                         let has_docker = check_cmd("docker").await;
-                                                        let has_java = check_cmd("java").await;
+                                                        let (has_java, java_path): (bool, String) = {
+                                                            // Check standard PATH first
+                                                            if check_cmd("java").await {
+                                                                (true, "java".to_string())
+                                                            }
+                                                            // Check common alternate paths on Termux/Android
+                                                            else if check_cmd("~/jdk/bin/java").await {
+                                                                (true, "~/jdk/bin/java".to_string())
+                                                            }
+                                                            // Check system Java paths
+                                                            else {
+                                                                let found = tokio::process::Command::new("sh")
+                                                                    .args(["-c", "ls /usr/lib/jvm/*/bin/java 2>/dev/null | head -1"])
+                                                                    .output().await
+                                                                    .map(|o| o.status.success() && !o.stdout.is_empty())
+                                                                    .unwrap_or(false);
+                                                                if found {
+                                                                    (true, "/usr/lib/jvm/*/bin/java".to_string())
+                                                                } else {
+                                                                    (false, "java".to_string())
+                                                                }
+                                                            }
+                                                        };
 
-                                                        if has_podman {
+                                                        // Handle stop unconditionally — works without java in PATH or any container runtime.
+                                                        // On Termux/phones the stop path just needs pkill, which is always available.
+                                                        if action == "stop" {
+                                                            send_status("stopping", "Stopping server...").await;
+                                                            let _ = tokio::process::Command::new("sh")
+                                                                .args(["-c", &format!(
+                                                                    "pkill -f 'java.*{}' 2>/dev/null; pkill -f '{}' 2>/dev/null",
+                                                                    server_id, container
+                                                                )])
+                                                                .output().await;
+                                                            let mut registry = DIRECT_SERVERS.lock().unwrap_or_else(|e| e.into_inner());
+                                                            registry.remove(&server_id);
+                                                            drop(registry);
+                                                            (true, format!("Server stop requested ({})", server_id))
+                                                        } else if has_podman {
                                                             send_status("executing", &format!("{} container {} via podman", action, container)).await;
                                                             let r = tokio::process::Command::new("podman")
                                                                 .arg(action).arg(&container).output().await;
@@ -665,17 +701,17 @@ pub async fn run(
                                                                                        .arg("--nogui")
                                                                                        .current_dir(&server_dir)
                                                                                        .spawn()
-                                                                               } else {
-                                                                                   tokio::process::Command::new("java")
-                                                                                       .arg(format!("-Xmx{}M", ram_mb)).arg(format!("-Xms{}M", ram_mb))
-                                                                                       .arg("-jar").arg(jar_path)
-                                                                                       .arg("--nogui")
-                                                                                       .current_dir(&server_dir)
-                                                                                       .spawn()
-                                                                               };
+                                                                                } else {
+                                                                                    tokio::process::Command::new(&java_path)
+                                                                                        .arg(format!("-Xmx{}M", ram_mb)).arg(format!("-Xms{}M", ram_mb))
+                                                                                        .arg("-jar").arg(jar_path)
+                                                                                        .arg("--nogui")
+                                                                                        .current_dir(&server_dir)
+                                                                                        .spawn()
+                                                                                };
                                                                               match r {
                                                                                   Ok(_) => {
-                                                                                      let mut registry = DIRECT_SERVERS.lock().unwrap();
+                                                                                      let mut registry = DIRECT_SERVERS.lock().unwrap_or_else(|e| e.into_inner());
                                                                                       registry.insert(server_id, ServerState {
                                                                                           server_id,
                                                                                           display_name: format!("mc-{}", server_id),
@@ -701,22 +737,6 @@ pub async fn run(
                                                                             (false, format!("Cannot start: server.jar not found and download failed"))
                                                                         }
                                                                      }
-                                                                     "stop" => {
-                                                                      send_status("stopping", "Stopping server...").await;
-                                                                      // pkill by server_id UUID + container name fallback
-                                                                      let _ = tokio::process::Command::new("sh")
-                                                                          .args(["-c", &format!(
-                                                                              "pkill -f 'java.*{}' 2>/dev/null; pkill -f '{}' 2>/dev/null; docker stop {} 2>/dev/null",
-                                                                              server_id, container, container
-                                                                          )])
-                                                                          .output().await;
-                                                                      // Remove from DIRECT_SERVERS for heartbeat tracking
-                                                                      let mut registry = DIRECT_SERVERS.lock().unwrap();
-                                                                      registry.remove(&server_id);
-                                                                      drop(registry);
-                                                                      // pkill returns non-zero when no process found, which is fine — "already stopped" is success
-                                                                      (true, format!("Server stop requested ({})", server_id))
-                                                                  }
                                                                   "restart" => {
                                                                       send_status("stopping", "Restarting server...").await;
                                                                       let _ = tokio::process::Command::new("sh")
@@ -724,7 +744,7 @@ pub async fn run(
                                                                           .output().await;
                                                                       // Remove from DIRECT_SERVERS for heartbeat tracking
                                                                       {
-                                                                          let mut registry = DIRECT_SERVERS.lock().unwrap();
+                                                                          let mut registry = DIRECT_SERVERS.lock().unwrap_or_else(|e| e.into_inner());
                                                                           registry.remove(&server_id);
                                                                       }
                                                                       tokio::time::sleep(std::time::Duration::from_secs(2)).await;
@@ -741,15 +761,15 @@ pub async fn run(
                                                                              format!("{}/eula.txt", server_dir),
                                                                              "eula=true\n",
                                                                          );
-                                                                          let r = tokio::process::Command::new("java")
-                                                                              .arg(format!("-Xmx{}M", ram_mb)).arg(format!("-Xms{}M", ram_mb))
-                                                                              .arg("-jar").arg(jar_path)
-                                                                              .arg("--nogui")
-                                                                              .current_dir(&server_dir)
-                                                                              .spawn();
-                                                                           match r {
+                                                                           let r = tokio::process::Command::new(&java_path)
+                                                                               .arg(format!("-Xmx{}M", ram_mb)).arg(format!("-Xms{}M", ram_mb))
+                                                                               .arg("-jar").arg(jar_path)
+                                                                               .arg("--nogui")
+                                                                               .current_dir(&server_dir)
+                                                                               .spawn();
+                                                                            match r {
                                                                                Ok(_) => {
-                                                                                   let mut registry = DIRECT_SERVERS.lock().unwrap();
+                                                                                   let mut registry = DIRECT_SERVERS.lock().unwrap_or_else(|e| e.into_inner());
                                                                                    registry.insert(server_id, ServerState {
                                                                                        server_id,
                                                                                        display_name: format!("mc-{}", server_id),

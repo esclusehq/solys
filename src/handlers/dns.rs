@@ -195,7 +195,7 @@ pub async fn handle_delete_record(task: Task) -> Result<serde_json::Value, anyho
 // ---------------------------------------------------------------------------
 // Phase 68: remove_record — issued by the relay client's self-loop on
 // tunnel disconnect (D-13 / RESOLVED Q7). Removes the stale A record at
-// `<subdomain>.play.esluce.com` so a future re-resolve doesn't get cached
+// `<subdomain>.play.esclusehg.com` so a future re-resolve doesn't get cached
 // at a now-defunct IP. Resolves the zone_id and record_id from the task
 // payload (NOT from DNS_CONFIG) because the agent may have lost DNS
 // credentials by the time this fires — the payload carries everything

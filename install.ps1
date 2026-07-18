@@ -1,7 +1,7 @@
 #!/usr/bin/env pwsh
 # Escluse Agent Windows Installer
-# Usage: powershell -c "irm https://get.esluce.com/latest/install.ps1 | iex"
-#        powershell -c "irm https://get.esluce.com/latest/install.ps1 | iex" -Version 1.2.3
+# Usage: powershell -c "irm https://get.esclusehg.com/latest/install.ps1 | iex"
+#        powershell -c "irm https://get.esclusehg.com/latest/install.ps1 | iex" -Version 1.2.3
 
 param(
     [string]$Version = "latest"
@@ -31,11 +31,11 @@ function Get-Urls {
     param([string]$Version)
 
     if ($Version -eq "latest") {
-        $baseUrl = "https://get.esluce.com/latest"
+        $baseUrl = "https://get.esclusehg.com/latest"
     } else {
         # Strip leading 'v' if present
         $v = $Version -replace '^v', ''
-        $baseUrl = "https://get.esluce.com/v$v"
+        $baseUrl = "https://get.esclusehg.com/v$v"
     }
 
     $archive = "solys-windows-${Script:arch}.zip"

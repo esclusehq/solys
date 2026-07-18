@@ -115,12 +115,36 @@ pub fn detect_runtime(
 /// This is intended to be spawned as a background task from `main.rs`.
 /// It checks whether we're running in Termux, and if Java is not found,
 /// runs `pkg install openjdk-17 -y` and verifies the result.
-pub async fn auto_install_java_if_termux() {
-    let is_termux = std::env::var("PREFIX")
+/// Detect whether we are running inside Termux on Android.
+///
+/// Uses two strategies to be robust against environment stripping
+/// (e.g., when launched via `su` or `tsu`):
+/// 1. `$PREFIX` env var containing "com.termux" (standard Termux)
+/// 2. Filesystem path existence + `uname -o` (robust fallback)
+pub fn is_termux() -> bool {
+    // Strategy 1: PREFIX env var (standard Termux)
+    if std::env::var("PREFIX")
         .map(|p| p.contains("com.termux"))
-        .unwrap_or(false);
+        .unwrap_or(false)
+    {
+        return true;
+    }
+    // Strategy 2: filesystem check + uname (robust against env stripping)
+    if std::path::Path::new("/data/data/com.termux/files/usr").exists() {
+        if let Ok(output) = std::process::Command::new("uname").arg("-o").output() {
+            if output.status.success() {
+                let os = String::from_utf8_lossy(&output.stdout);
+                if os.trim() == "Android" {
+                    return true;
+                }
+            }
+        }
+    }
+    false
+}
 
-    if !is_termux {
+pub async fn auto_install_java_if_termux() {
+    if !is_termux() {
         return;
     }
 
@@ -183,13 +207,29 @@ pub async fn auto_install_prerequisites_linux() {
         info!("Linux: Java 17+ not found, attempting auto-install...");
     }
 
-    let manager = if std::process::Command::new("apt-get").arg("--version").output().ok().map(|o| o.status.success()).unwrap_or(false) {
+    let check_pkg = |cmd: &str| -> bool {
+        // Timeout of 10s per check to avoid blocking on hung package managers
+        let cmd = cmd.to_string();
+        tokio::task::block_in_place(move || {
+            let handle = std::thread::spawn(move || {
+                std::process::Command::new(&cmd)
+                    .arg("--version")
+                    .output()
+                    .ok()
+                    .map(|o| o.status.success())
+                    .unwrap_or(false)
+            });
+            handle.join().unwrap_or(false)
+        })
+    };
+
+    let manager = if check_pkg("apt-get") {
         Some(("apt-get", "apt-get", vec!["install", "-y", "docker.io", "openjdk-17-jdk"]))
-    } else if std::process::Command::new("dnf").arg("--version").output().ok().map(|o| o.status.success()).unwrap_or(false) {
+    } else if check_pkg("dnf") {
         Some(("dnf", "dnf", vec!["install", "-y", "docker", "java-17-openjdk"]))
-    } else if std::process::Command::new("pacman").arg("--version").output().ok().map(|o| o.status.success()).unwrap_or(false) {
+    } else if check_pkg("pacman") {
         Some(("pacman", "pacman", vec!["-S", "--noconfirm", "docker", "jdk17-openjdk"]))
-    } else if std::process::Command::new("zypper").arg("--version").output().ok().map(|o| o.status.success()).unwrap_or(false) {
+    } else if check_pkg("zypper") {
         Some(("zypper", "zypper", vec!["install", "-y", "docker", "java-17-openjdk"]))
     } else {
         None

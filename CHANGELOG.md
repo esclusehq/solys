@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Hardcoded `level-type=default` prevents world type override** — `generate_server_properties()` unconditionally wrote `level-type=default`, which always won against any override in the `overrides` HashMap because Minecraft uses last-occurrence-wins for `server.properties`. Removed the hardcoded line so the backend-supplied `level_type` override takes effect.
+
 ### Added
 
 - **Port conflict detection with auto-assign** — Agent now checks if the requested server port is available before starting. If the port is already in use (e.g. another server running on the same host), it automatically assigns the next free port (up to +100 attempts). The actual port is returned in the create response and `server.properties` is updated accordingly.
