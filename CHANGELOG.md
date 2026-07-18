@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v0.5.17] - 2026-07-19
+
 ### Fixed
 
 - **Hardcoded `level-type=default` prevents world type override** — `generate_server_properties()` unconditionally wrote `level-type=default`, which always won against any override in the `overrides` HashMap because Minecraft uses last-occurrence-wins for `server.properties`. Removed the hardcoded line so the backend-supplied `level_type` override takes effect.
