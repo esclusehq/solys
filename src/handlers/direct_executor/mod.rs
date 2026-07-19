@@ -473,12 +473,20 @@ pub fn collect_server_statuses() -> Vec<(Uuid, String, String)> {
 
     // Update DIRECT_SERVERS entries for dead processes so the backend sees
     // the correct status without waiting for the next lifecycle event.
+    // Also stop relay tunnels so the backend sees tunnel disconnect.
     if !dead_ids.is_empty() {
         let mut registry = DIRECT_SERVERS.lock().unwrap_or_else(|e| e.into_inner());
         for id in &dead_ids {
             if let Some(entry) = registry.get_mut(id) {
                 entry.status = ServerStatus::Stopped;
             }
+        }
+        drop(registry);
+        for id in &dead_ids {
+            let sid = *id;
+            tokio::spawn(async move {
+                crate::state::relay_manager().stop_server(&sid).await;
+            });
         }
     }
 

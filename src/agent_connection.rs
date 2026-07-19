@@ -510,6 +510,13 @@ pub async fn run(
                                                 tokio::time::sleep(std::time::Duration::from_millis(500)).await;
                                                 crate::state::relay_manager().set_servers(configs).await;
                                             }
+                                            BackendToAgent::RelayDisconnect(payload) => {
+                                                info!(
+                                                    "RelayDisconnect received: stopping tunnel for server_id={}",
+                                                    payload.server_id
+                                                );
+                                                crate::state::relay_manager().stop_server(&payload.server_id).await;
+                                            }
                                             BackendToAgent::BackendError(err) => {
                                                 error!(code = %err.code, message = %err.message, "Backend error received");
                                             }
