@@ -21,6 +21,8 @@ use serde::{Deserialize, Serialize};
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
+use crate::state::ServerEntry;
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -287,6 +289,158 @@ pub fn server_log_dir(data_dir: &Path, server_id: &Uuid) -> PathBuf {
 /// Construct the latest.log path.
 pub fn server_log_path(data_dir: &Path, server_id: &Uuid) -> PathBuf {
     server_log_dir(data_dir, server_id).join("latest.log")
+}
+
+// ---------------------------------------------------------------------------
+// Heartbeat helper
+// ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// Startup reconciliation
+// ---------------------------------------------------------------------------
+
+/// Parse a loader string into McLoader, defaulting to Vanilla.
+fn parse_mc_loader(s: &Option<String>) -> McLoader {
+    match s.as_deref() {
+        Some("paper") => McLoader::Paper,
+        Some("fabric") => McLoader::Fabric,
+        Some("forge") => McLoader::Forge,
+        Some("vanilla") | Some("neoforge") => McLoader::Vanilla,
+        _ => McLoader::Vanilla,
+    }
+}
+
+/// Rebuild `DIRECT_SERVERS` from persisted state + directory scan.
+///
+/// Called once at agent startup after `state::load_state()`. All entries are
+/// given `status: Stopped` — any process that was running before the restart
+/// died with the agent. The next heartbeat cycle will report correct statuses
+/// to the backend.
+pub fn reconcile_direct_servers(
+    loaded_entries: &[crate::state::ServerEntry],
+    data_dir: &Path,
+) {
+    let mut registry = DIRECT_SERVERS.lock().unwrap_or_else(|e| e.into_inner());
+
+    for entry in loaded_entries {
+        let server_dir = data_dir.join("servers").join(entry.server_id.to_string());
+        let state = ServerState {
+            server_id: entry.server_id,
+            display_name: entry.name.clone(),
+            mc_loader: parse_mc_loader(&entry.mc_loader),
+            mc_version: entry.mc_version.clone().unwrap_or_default(),
+            status: ServerStatus::Stopped,
+            port: entry.port,
+            allocated_ram: entry.allocated_ram,
+            path: server_dir,
+            rcon_port: entry.rcon_port,
+            rcon_password: entry.rcon_password.clone(),
+            child: None,
+            eula_accepted: true,
+            auto_restart: entry.auto_restart,
+        };
+        registry.insert(entry.server_id, state);
+    }
+
+    // Fallback: scan {data_dir}/servers/ for UUID directories not in state
+    let servers_dir = data_dir.join("servers");
+    if servers_dir.exists() {
+        if let Ok(read_dir) = std::fs::read_dir(&servers_dir) {
+            for dir_entry in read_dir.flatten() {
+                let name_os = dir_entry.file_name();
+                let name_str = name_os.to_string_lossy();
+                if let Ok(sid) = Uuid::parse_str(&name_str) {
+                    if !registry.contains_key(&sid) {
+                        // Read port from server.properties if available
+                        let props_path = dir_entry.path().join("server.properties");
+                        let port = std::fs::read_to_string(&props_path)
+                            .ok()
+                            .and_then(|s| {
+                                s.lines()
+                                    .find(|l| l.starts_with("server-port="))
+                                    .and_then(|l| l.split('=').nth(1))
+                                    .and_then(|p| p.trim().parse().ok())
+                            })
+                            .unwrap_or(25565u16);
+
+                        let state = ServerState {
+                            server_id: sid,
+                            display_name: sid.to_string(),
+                            mc_loader: McLoader::Vanilla,
+                            mc_version: String::new(),
+                            status: ServerStatus::Stopped,
+                            port,
+                            allocated_ram: 1024,
+                            path: dir_entry.path(),
+                            rcon_port: 0,
+                            rcon_password: String::new(),
+                            child: None,
+                            eula_accepted: true,
+                            auto_restart: false,
+                        };
+                        registry.insert(sid, state);
+                    }
+                }
+            }
+        }
+    }
+
+    let count = registry.len();
+    if count > 0 {
+        info!(
+            servers = count,
+            from_state = loaded_entries.len(),
+            "Reconciled direct servers after restart"
+        );
+    }
+}
+
+// ---------------------------------------------------------------------------
+// State persistence helpers
+// ---------------------------------------------------------------------------
+
+/// Build a `ServerEntry` from a `ServerState`.
+fn server_state_to_entry(state: &ServerState) -> ServerEntry {
+    ServerEntry {
+        server_id: state.server_id,
+        name: state.display_name.clone(),
+        game_type: format!("{:?}", state.mc_loader).to_lowercase(),
+        container_id: None,
+        status: match state.status {
+            ServerStatus::Running => "running",
+            ServerStatus::Stopped => "stopped",
+            ServerStatus::Crashed => "crashed",
+        }
+        .to_string(),
+        port: state.port,
+        rcon_port: state.rcon_port,
+        rcon_password: state.rcon_password.clone(),
+        allocated_ram: state.allocated_ram,
+        auto_restart: state.auto_restart,
+        mc_version: Some(state.mc_version.clone()),
+        mc_loader: Some(format!("{:?}", state.mc_loader).to_lowercase()),
+    }
+}
+
+/// Persist `DIRECT_SERVERS` to `state.json`.
+/// Called after every lifecycle transition so state survives a crash/restart.
+pub async fn persist_server_state() {
+    let entries: Vec<ServerEntry> = {
+        let registry = DIRECT_SERVERS.lock().unwrap_or_else(|e| e.into_inner());
+        registry.values().map(server_state_to_entry).collect()
+    };
+    crate::state::save_server_entries(&entries).await;
+}
+
+/// Remove a single server from persisted state (e.g. after delete).
+pub async fn persist_remove_server(server_id: &Uuid) {
+    crate::state::remove_server_entry(server_id).await;
+}
+
+/// Collect all direct-server entries as `ServerEntry` (for shutdown save).
+pub fn collect_direct_server_entries() -> Vec<ServerEntry> {
+    let registry = DIRECT_SERVERS.lock().unwrap_or_else(|e| e.into_inner());
+    registry.values().map(server_state_to_entry).collect()
 }
 
 // ---------------------------------------------------------------------------

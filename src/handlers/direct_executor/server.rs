@@ -196,6 +196,8 @@ pub async fn handle_create(task: Task) -> Result<serde_json::Value> {
         registry.insert(server_id, state);
     }
 
+    super::persist_server_state().await;
+
     info!(server_id = %server_id, loader = %loader_str, version = %version, "Direct server created");
 
     Ok(serde_json::json!({
@@ -333,6 +335,7 @@ pub async fn handle_start(task: Task) -> Result<serde_json::Value> {
             state.child = Some(child);
         }
     }
+    super::persist_server_state().await;
 
     let log_path = path.join("logs").join("latest.log");
     let sid_log = server_id;
@@ -407,6 +410,8 @@ pub async fn handle_start(task: Task) -> Result<serde_json::Value> {
                     state.child = None;
                 }
             }
+            // Persist crashed state immediately
+            super::persist_server_state().await;
 
             // Build + send crash report (T-10-12: truncated to 4KB max)
             let log_excerpt = std::fs::read_to_string(log_path_for_monitor.join("latest.log"))
@@ -440,6 +445,7 @@ pub async fn handle_start(task: Task) -> Result<serde_json::Value> {
                     state.child = None;
                 }
             }
+            super::persist_server_state().await;
             info!(server_id = %sid_crash, "Server stopped normally");
         }
     });
@@ -499,6 +505,7 @@ pub async fn handle_stop(task: Task) -> Result<serde_json::Value> {
             state.child = None;
         }
     }
+    super::persist_server_state().await;
 
     info!(
         server_id = %server_id,
@@ -584,6 +591,9 @@ pub async fn handle_delete(task: Task) -> Result<serde_json::Value> {
             }
         }
     };
+
+    // Persist removal before deleting directory (so state is saved if delete fails)
+    super::persist_remove_server(&server_id).await;
 
     // Remove server directory
     if server_path.exists() {

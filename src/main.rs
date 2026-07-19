@@ -242,6 +242,12 @@ async fn run_agent_core(config: agent_config::AgentConfig) -> Result<()> {
             restart_count = loaded_state.metadata.restart_count,
             "Loaded persisted state for auto-recovery"
         );
+
+        // Reconcile DIRECT_SERVERS so the heartbeat reports correct statuses
+        crate::handlers::direct_executor::reconcile_direct_servers(
+            &loaded_state.servers,
+            &config.data_dir,
+        );
     }
 
     // 6. Create shutdown signal
@@ -359,9 +365,10 @@ async fn run_agent_core(config: agent_config::AgentConfig) -> Result<()> {
     crate::state::relay_manager().stop_all().await;
 
     // D-23: Save final state on shutdown
-    // Capture any error from the agent run
+    // Capture DIRECT_SERVERS entries so state survives restart
+    let live_servers = crate::handlers::direct_executor::collect_direct_server_entries();
     let final_state = AgentState {
-        servers: vec![],  // Would be populated from active agent state
+        servers: live_servers,
         container_map: std::collections::HashMap::new(),
         metadata: AgentMetadata {
             restart_count: 0,

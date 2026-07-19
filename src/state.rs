@@ -30,6 +30,13 @@ pub struct ServerEntry {
     pub game_type: String,
     pub container_id: Option<String>,
     pub status: String,
+    pub port: u16,
+    pub rcon_port: u16,
+    pub rcon_password: String,
+    pub allocated_ram: u64,
+    pub auto_restart: bool,
+    pub mc_version: Option<String>,
+    pub mc_loader: Option<String>,
 }
 
 /// Agent metadata for health tracking (D-20)
@@ -95,6 +102,29 @@ pub async fn save_state(state: &AgentState) -> std::io::Result<()> {
     tracing::debug!("State saved to {:?}", path);
 
     Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Server state persistence helpers
+// ---------------------------------------------------------------------------
+
+/// Persist a list of ServerEntry records to state.json.
+/// Loads the current state, replaces the server list, and saves atomically.
+pub async fn save_server_entries(entries: &[ServerEntry]) {
+    let mut current = load_state().await.unwrap_or_default();
+    current.servers = entries.to_vec();
+    if let Err(e) = save_state(&current).await {
+        tracing::error!(error = %e, "Failed to save server state");
+    }
+}
+
+/// Remove a single server entry from persisted state by server_id.
+pub async fn remove_server_entry(server_id: &Uuid) {
+    let mut current = load_state().await.unwrap_or_default();
+    current.servers.retain(|s| s.server_id != *server_id);
+    if let Err(e) = save_state(&current).await {
+        tracing::error!(error = %e, "Failed to save server state after removal");
+    }
 }
 
 // ---------------------------------------------------------------------------
