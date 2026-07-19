@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v0.5.18] - 2026-07-19
+
+### Fixed
+
+- **Relay tunnel stays alive after server process dies** — `collect_server_statuses()` now calls `relay_manager().stop_server(id)` when a direct-executor process is detected as dead. Previously the tunnel remained open, causing the dashboard to show "Running" while the server was actually stopped.
+
+### Added
+
+- **`RelayDisconnect` protocol message** — New `BackendToAgent::RelayDisconnect` variant lets the backend selectively tear down a server's relay tunnel by `server_id`, instead of relying on the full `RelayConfigSync` cycle.
+
 ## [v0.5.17] - 2026-07-19
 
 ### Fixed
