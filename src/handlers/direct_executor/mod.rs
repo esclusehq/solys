@@ -381,7 +381,7 @@ pub async fn heal_server_properties(
 /// Returns (server_port, rcon_port, rcon_password). Missing or unparsable
 /// values fall back to defaults; an empty RCON password is replaced with a
 /// freshly generated one so the self-heal always has a secret to enforce.
-fn read_properties_values(server_dir: &Path) -> (u16, u16, String) {
+pub(crate) fn read_properties_values(server_dir: &Path) -> (u16, u16, String) {
     let props_path = server_dir.join("server.properties");
     let props = std::fs::read_to_string(&props_path)
         .ok()
@@ -766,5 +766,43 @@ mod tests {
         assert_eq!(pw.len(), 32);
         assert!(pw.chars().all(|c| c.is_ascii_hexdigit()));
         assert_ne!(generate_rcon_password(), generate_rcon_password());
+    }
+
+    #[tokio::test]
+    async fn raw_fallback_heal_yields_valid_rcon_password() {
+        // Simulate the raw-JSON fallback flow: a server dir whose
+        // server.properties was rewritten by Minecraft first boot
+        // (RCON off, empty password).
+        let dir = std::env::temp_dir().join(format!("escluse-heal-test-{}", Uuid::new_v4()));
+        tokio::fs::create_dir_all(&dir).await.unwrap();
+        tokio::fs::write(
+            dir.join("server.properties"),
+            "#Minecraft server properties\nenable-rcon=false\nrcon.password=\nrcon.port=25575\nserver-port=25565\n",
+        )
+        .await
+        .unwrap();
+
+        // The fallback reads values (generating a password when absent) and
+        // heals the file before registering the server.
+        let (_, rcon_port, rcon_password) = read_properties_values(&dir);
+        let healed = heal_server_properties(&dir, 25565, rcon_port, &rcon_password)
+            .await
+            .unwrap();
+        assert!(healed, "server.properties should have been rewritten");
+
+        // After heal, the file carries the managed RCON config — the same
+        // values the console RCON path (`file.read_file` on server.properties)
+        // will observe.
+        let content = tokio::fs::read_to_string(dir.join("server.properties"))
+            .await
+            .unwrap();
+        let props = parse_properties(&content);
+        assert_eq!(props.get("enable-rcon"), Some(&"true".to_string()));
+        assert_eq!(props.get("rcon.port"), Some(&"25575".to_string()));
+        let from_file = props.get("rcon.password").cloned().unwrap_or_default();
+        assert_eq!(from_file, rcon_password);
+        assert!(!from_file.is_empty());
+
+        tokio::fs::remove_dir_all(&dir).await.unwrap();
     }
 }

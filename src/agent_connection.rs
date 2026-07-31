@@ -20,7 +20,10 @@ use tokio_tungstenite::tungstenite::ClientRequestBuilder;
 use tracing::{debug, error, info, trace, warn};
 use uuid::Uuid;
 
-use crate::handlers::direct_executor::{download_jar, DIRECT_SERVERS, ServerState, ServerStatus, McLoader};
+use crate::handlers::direct_executor::{
+    download_jar, heal_server_properties, read_properties_values, DIRECT_SERVERS, ServerState,
+    ServerStatus, McLoader,
+};
 
 use base64::Engine;
 use zeroize::Zeroizing;
@@ -727,6 +730,17 @@ pub async fn run(
                                                                                 };
                                                                               match r {
                                                                                   Ok(_) => {
+                                                                                      // Self-heal RCON config from server.properties
+                                                                                      // before registering the server (Bug A: console
+                                                                                      // RCON reads the password from this file).
+                                                                                      let (_, file_rcon_port, file_rcon_password) =
+                                                                                          read_properties_values(Path::new(&server_dir));
+                                                                                      let _ = heal_server_properties(
+                                                                                          Path::new(&server_dir),
+                                                                                          25565,
+                                                                                          file_rcon_port,
+                                                                                          &file_rcon_password,
+                                                                                      ).await;
                                                                                       let mut registry = DIRECT_SERVERS.lock().unwrap_or_else(|e| e.into_inner());
                                                                                       registry.insert(server_id, ServerState {
                                                                                           server_id,
@@ -737,8 +751,8 @@ pub async fn run(
                                                                                           port: 25565,
                                                                                           allocated_ram: ram_mb,
                                                                                           path: std::path::PathBuf::from(&server_dir),
-                                                                                          rcon_port: 25575,
-                                                                                          rcon_password: String::new(),
+                                                                                          rcon_port: file_rcon_port,
+                                                                                          rcon_password: file_rcon_password,
                                                                                           child: None,
                                                                                           eula_accepted: true,
                                                                                           auto_restart: false,
@@ -785,6 +799,17 @@ pub async fn run(
                                                                                .spawn();
                                                                             match r {
                                                                                Ok(_) => {
+                                                                                   // Self-heal RCON config from server.properties
+                                                                                   // before registering the server (Bug A: console
+                                                                                   // RCON reads the password from this file).
+                                                                                   let (_, file_rcon_port, file_rcon_password) =
+                                                                                       read_properties_values(Path::new(&server_dir));
+                                                                                   let _ = heal_server_properties(
+                                                                                       Path::new(&server_dir),
+                                                                                       25565,
+                                                                                       file_rcon_port,
+                                                                                       &file_rcon_password,
+                                                                                   ).await;
                                                                                    let mut registry = DIRECT_SERVERS.lock().unwrap_or_else(|e| e.into_inner());
                                                                                    registry.insert(server_id, ServerState {
                                                                                        server_id,
@@ -795,8 +820,8 @@ pub async fn run(
                                                                                        port: 25565,
                                                                                        allocated_ram: ram_mb,
                                                                                       path: std::path::PathBuf::from(&server_dir),
-                                                                                      rcon_port: 25575,
-                                                                                      rcon_password: String::new(),
+                                                                                      rcon_port: file_rcon_port,
+                                                                                      rcon_password: file_rcon_password,
                                                                                       child: None,
                                                                                       eula_accepted: true,
                                                                                       auto_restart: false,
