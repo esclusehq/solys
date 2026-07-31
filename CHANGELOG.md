@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v0.5.20] - 2026-07-31
+
+### Added
+
+- **`RelayConnect` protocol message handling** — `BackendToAgent::RelayConnect`
+  is now dispatched through `RelayManager::connect_server()`, which starts a
+  relay tunnel for a single server using the latest config snapshot received
+  via `RelayConfigSync`. Idempotent: no-op when the tunnel is already active.
+  Backend can now open tunnels for newly created servers without a full
+  config resync. (agent-core rev `38727e0`)
+
+### Fixed
+
+- **RCON self-heal in the raw JSON fallback path** — `start`/`restart` via
+  the raw `execute_command` fallback now heal `server.properties`
+  (`enable-rcon=true` + managed password) before registering the server, so
+  the console RCON (which reads `server.properties` through `file.read_file`)
+  always sees valid credentials. Previously the fallback registered an empty
+  RCON password, leaving the console with "Failed to get RCON config".
+
 ## [v0.5.19] - 2026-07-31
 
 ### Added
