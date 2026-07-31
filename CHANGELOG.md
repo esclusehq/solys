@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v0.5.22] - 2026-08-01
+
+### Fixed
+
+- **Configured server port honored on start/restart** — the raw JSON fallback
+  no longer hardcodes `25565`. The game port and RCON port are now read from
+  the backend's `deploy` config (with `params` and `25565`/`25575` fallbacks)
+  and self-healed into `server.properties` BEFORE Java spawns, on both the
+  start and restart arms. The registered `ServerState` uses the same ports,
+  so the relay tunnel (forwarding the configured port) now matches the port
+  Java actually binds — previously Java bound `25565` while the gateway
+  forwarded the dashboard-chosen port, making joins fail with connection
+  refused.
+- **Restart preserves the deploy config** — the restart arm now receives the
+  full `deploy_config` (memory, ports, version, loader) from the backend
+  instead of falling back to defaults (`-Xmx1024M`).
+
 ## [v0.5.21] - 2026-07-31
 
 ### Fixed
