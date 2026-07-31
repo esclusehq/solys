@@ -199,6 +199,9 @@ pub struct RelayClientHandle {
 pub struct RelayManager {
     cancel: CancellationToken,
     pub(crate) servers: RwLock<HashMap<Uuid, RelayClientHandle>>,
+    /// Last known desired config per server (from RelayConfigSync),
+    /// used by connect_server() to start single tunnels on demand.
+    configs: RwLock<HashMap<Uuid, RelayServerConfig>>,
 }
 
 impl RelayManager {
@@ -206,6 +209,7 @@ impl RelayManager {
         Self {
             cancel: CancellationToken::new(),
             servers: RwLock::new(HashMap::new()),
+            configs: RwLock::new(HashMap::new()),
         }
     }
 
@@ -214,6 +218,16 @@ impl RelayManager {
     /// restarts tunnels with changed config.
     pub async fn set_servers(&self, configs: Vec<RelayServerConfig>) {
         use std::collections::HashSet;
+
+        // Keep a snapshot of the desired config so connect_server() can
+        // start single tunnels later without a full RelayConfigSync.
+        {
+            let mut snapshot = self.configs.write().await;
+            snapshot.clear();
+            for cfg in &configs {
+                snapshot.insert(cfg.server_id, cfg.clone());
+            }
+        }
 
         let new_ids: HashSet<Uuid> = configs.iter().map(|s| s.server_id).collect();
         let mut to_start: Vec<RelayServerConfig> = Vec::new();
@@ -261,32 +275,72 @@ impl RelayManager {
 
         // Phase 2: start new / restarted tunnels
         for cfg in to_start {
-            if cfg.token.is_empty() || cfg.gateway_url.is_empty() {
-                tracing::warn!(
-                    server_id = %cfg.server_id,
-                    "RelayManager: skipping tunnel — missing token or gateway_url"
-                );
-                continue;
+            self.start_tunnel(cfg).await;
+        }
+    }
+
+    /// Spawn a relay tunnel for a single server config. Idempotent: no-op
+    /// (and keeps the existing handle) if a tunnel for `server_id` is
+    /// already running with the same config.
+    pub async fn start_tunnel(&self, cfg: RelayServerConfig) {
+        if cfg.token.is_empty() || cfg.gateway_url.is_empty() {
+            tracing::warn!(
+                server_id = %cfg.server_id,
+                "RelayManager: skipping tunnel — missing token or gateway_url"
+            );
+            return;
+        }
+        {
+            let servers = self.servers.read().await;
+            if let Some(existing) = servers.get(&cfg.server_id) {
+                let same = existing.subdomain == cfg.subdomain
+                    && existing.public_port == cfg.public_port
+                    && existing.local_mc_addr == cfg.local_mc_addr
+                    && existing.token == cfg.token;
+                if same {
+                    tracing::info!(
+                        "RelayManager: tunnel already active for server_id={}, no-op",
+                        cfg.server_id
+                    );
+                    return;
+                }
             }
-            let child_cancel = self.cancel.child_token();
-            let cancel_for_task = child_cancel.clone();
-            let config_for_task = cfg.clone();
-            let join = tokio::spawn(async move {
-                crate::handlers::relay_client::run_relay_client(config_for_task, cancel_for_task).await;
-            });
-            let handle = RelayClientHandle {
-                cancel: child_cancel,
-                join,
-                control_tx: tokio::sync::mpsc::unbounded_channel::<serde_json::Value>().0,
-                bytes_transferred: Arc::new(AtomicU64::new(0)),
-                tunnel_start: Instant::now(),
-                subdomain: cfg.subdomain.clone(),
-                public_port: cfg.public_port,
-                local_mc_addr: cfg.local_mc_addr.clone(),
-                token: cfg.token.clone(),
-            };
-            self.servers.write().await.insert(cfg.server_id, handle);
-            tracing::info!("RelayManager: started tunnel for server_id={}", cfg.server_id);
+        }
+        let child_cancel = self.cancel.child_token();
+        let cancel_for_task = child_cancel.clone();
+        let config_for_task = cfg.clone();
+        let join = tokio::spawn(async move {
+            crate::handlers::relay_client::run_relay_client(config_for_task, cancel_for_task).await;
+        });
+        let handle = RelayClientHandle {
+            cancel: child_cancel,
+            join,
+            control_tx: tokio::sync::mpsc::unbounded_channel::<serde_json::Value>().0,
+            bytes_transferred: Arc::new(AtomicU64::new(0)),
+            tunnel_start: Instant::now(),
+            subdomain: cfg.subdomain.clone(),
+            public_port: cfg.public_port,
+            local_mc_addr: cfg.local_mc_addr.clone(),
+            token: cfg.token.clone(),
+        };
+        self.servers.write().await.insert(cfg.server_id, handle);
+        tracing::info!("RelayManager: started tunnel for server_id={}", cfg.server_id);
+    }
+
+    /// Open a relay tunnel for a single server, using the most recent
+    /// config snapshot received via RelayConfigSync. Idempotent: no-op if
+    /// the tunnel is already running. No-op (with a warning) if no config
+    /// is known for the server yet.
+    pub async fn connect_server(&self, server_id: &Uuid) {
+        let cfg = self.configs.read().await.get(server_id).cloned();
+        match cfg {
+            Some(cfg) => self.start_tunnel(cfg).await,
+            None => {
+                tracing::warn!(
+                    "RelayManager: connect_server — no known config for server_id={}",
+                    server_id
+                );
+            }
         }
     }
 
@@ -305,6 +359,7 @@ impl RelayManager {
         self.cancel.cancel();
         tokio::time::sleep(std::time::Duration::from_millis(100)).await;
         self.servers.write().await.clear();
+        self.configs.write().await.clear();
         tracing::info!("RelayManager: all tunnels stopped");
     }
 
@@ -369,5 +424,72 @@ mod tests {
         assert!(path.is_some());
         let path = path.unwrap();
         assert!(path.to_string_lossy().ends_with("escluse-agent/state.json"));
+    }
+
+    fn test_cfg(server_id: Uuid, subdomain: &str) -> RelayServerConfig {
+        RelayServerConfig {
+            server_id,
+            subdomain: subdomain.to_string(),
+            public_port: 25565,
+            local_mc_addr: "127.0.0.1:25565".to_string(),
+            gateway_url: "http://127.0.0.1:1".to_string(),
+            token: "test-token".to_string(),
+            region: "test".to_string(),
+            agent_public_ip: "127.0.0.1".to_string(),
+            loader: None,
+        }
+    }
+
+    #[tokio::test]
+    async fn test_set_servers_diff_behavior() {
+        let mgr = RelayManager::new();
+        let a = Uuid::new_v4();
+        let b = Uuid::new_v4();
+
+        // Initial config: server A → tunnel starts
+        mgr.set_servers(vec![test_cfg(a, "aaa")]).await;
+        assert_eq!(mgr.servers.read().await.len(), 1);
+        assert!(mgr.servers.read().await.contains_key(&a));
+
+        // Grow: add server B → B auto-connects, A untouched
+        mgr.set_servers(vec![test_cfg(a, "aaa"), test_cfg(b, "bbb")]).await;
+        assert_eq!(mgr.servers.read().await.len(), 2);
+        assert!(mgr.servers.read().await.contains_key(&a));
+        assert!(mgr.servers.read().await.contains_key(&b));
+
+        // Shrink: remove A → A tunnel torn down, B stays (no mass teardown)
+        mgr.set_servers(vec![test_cfg(b, "bbb")]).await;
+        assert_eq!(mgr.servers.read().await.len(), 1);
+        assert!(!mgr.servers.read().await.contains_key(&a));
+        assert!(mgr.servers.read().await.contains_key(&b));
+
+        // Same config again → no churn
+        mgr.set_servers(vec![test_cfg(b, "bbb")]).await;
+        assert_eq!(mgr.servers.read().await.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn test_connect_server_uses_snapshot_and_is_idempotent() {
+        let mgr = RelayManager::new();
+        let a = Uuid::new_v4();
+
+        // No config known yet → no-op, no crash
+        mgr.connect_server(&a).await;
+        assert_eq!(mgr.servers.read().await.len(), 0);
+
+        // Config sync establishes snapshot
+        mgr.set_servers(vec![test_cfg(a, "aaa")]).await;
+        assert_eq!(mgr.servers.read().await.len(), 1);
+
+        // connect_server starts from snapshot → no-op (already active)
+        mgr.connect_server(&a).await;
+        assert_eq!(mgr.servers.read().await.len(), 1);
+
+        // Tunnel is torn down; connect_server can restart it from snapshot
+        mgr.stop_server(&a).await;
+        assert_eq!(mgr.servers.read().await.len(), 0);
+        mgr.connect_server(&a).await;
+        assert_eq!(mgr.servers.read().await.len(), 1);
+        assert!(mgr.servers.read().await.contains_key(&a));
     }
 }

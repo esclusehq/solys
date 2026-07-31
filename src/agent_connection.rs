@@ -510,6 +510,15 @@ pub async fn run(
                                                 tokio::time::sleep(std::time::Duration::from_millis(500)).await;
                                                 crate::state::relay_manager().set_servers(configs).await;
                                             }
+                                            BackendToAgent::RelayConnect(payload) => {
+                                                info!(
+                                                    "RelayConnect received: opening tunnel for server_id={}, subdomain={}, port={}",
+                                                    payload.server_id, payload.subdomain, payload.public_port
+                                                );
+                                                crate::state::relay_manager()
+                                                    .connect_server(&payload.server_id)
+                                                    .await;
+                                            }
                                             BackendToAgent::RelayDisconnect(payload) => {
                                                 info!(
                                                     "RelayDisconnect received: stopping tunnel for server_id={}",
