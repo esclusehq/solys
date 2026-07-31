@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v0.5.21] - 2026-07-31
+
+### Fixed
+
+- **Console RCON commands via raw JSON protocol** — `server.command` messages
+  from the deployed backend (raw `execute_command` JSON, not protobuf tasks)
+  are now routed to the canonical `rcon::handle_command` instead of falling
+  through to the generic shell fallback. Previously every console keystroke
+  executed `sh -c "server.command"` → `sh: 1: server.command: not found`.
+  RCON credentials prefer the `DIRECT_SERVERS` registry (healed at
+  start/restart), falling back to payload params.
+
 ## [v0.5.20] - 2026-07-31
 
 ### Added
