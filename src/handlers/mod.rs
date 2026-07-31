@@ -200,6 +200,18 @@ async fn execute_single(
             "direct.server.logs" => direct_executor::server::handle_logs(task.clone()).await,
             "direct.server.status" => direct_executor::server::handle_status(task.clone()).await,
 
+            // Bare task types — protocol used by the deployed backend
+            // (agent_server_executor sends "create"/"start"/"stop"/...).
+            // Mapped to the direct executor (Termux/agent nodes run servers
+            // directly via java, never Docker).
+            "create" => direct_executor::server::handle_create(task.clone()).await,
+            "start" => direct_executor::server::handle_start(task.clone()).await,
+            "stop" => direct_executor::server::handle_stop(task.clone()).await,
+            "restart" => direct_executor::server::handle_restart(task.clone()).await,
+            "delete" => direct_executor::server::handle_delete(task.clone()).await,
+            "logs" => direct_executor::server::handle_logs(task.clone()).await,
+            "status" => direct_executor::server::handle_status(task.clone()).await,
+
             // Unknown
             _ => Err(anyhow::anyhow!("Unknown task type: {}", task_type)),
         }
@@ -383,6 +395,35 @@ fn get_task_config(task_type: &str) -> TaskConfig {
             max_retries: 0, retry_delay_ms: 0, max_retry_delay_ms: 0, backoff_multiplier: 1.0,
         },
         "direct.server.status" => TaskConfig {
+            timeout: Duration::from_secs(10),
+            max_retries: 0, retry_delay_ms: 0, max_retry_delay_ms: 0, backoff_multiplier: 1.0,
+        },
+        // Bare task types — same config as their direct.* counterparts
+        "create" => TaskConfig {
+            timeout: Duration::from_secs(120),
+            max_retries: 0, retry_delay_ms: 0, max_retry_delay_ms: 0, backoff_multiplier: 1.0,
+        },
+        "start" => TaskConfig {
+            timeout: Duration::from_secs(60),
+            max_retries: 3, retry_delay_ms: 2000, max_retry_delay_ms: 30000, backoff_multiplier: 2.0,
+        },
+        "stop" => TaskConfig {
+            timeout: Duration::from_secs(60),
+            max_retries: 0, retry_delay_ms: 0, max_retry_delay_ms: 0, backoff_multiplier: 1.0,
+        },
+        "restart" => TaskConfig {
+            timeout: Duration::from_secs(90),
+            max_retries: 3, retry_delay_ms: 2000, max_retry_delay_ms: 30000, backoff_multiplier: 2.0,
+        },
+        "delete" => TaskConfig {
+            timeout: Duration::from_secs(30),
+            max_retries: 0, retry_delay_ms: 0, max_retry_delay_ms: 0, backoff_multiplier: 1.0,
+        },
+        "logs" => TaskConfig {
+            timeout: Duration::from_secs(30),
+            max_retries: 0, retry_delay_ms: 0, max_retry_delay_ms: 0, backoff_multiplier: 1.0,
+        },
+        "status" => TaskConfig {
             timeout: Duration::from_secs(10),
             max_retries: 0, retry_delay_ms: 0, max_retry_delay_ms: 0, backoff_multiplier: 1.0,
         },

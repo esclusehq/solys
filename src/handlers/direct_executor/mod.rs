@@ -254,6 +254,162 @@ pub fn generate_server_properties(
 }
 
 // ---------------------------------------------------------------------------
+// server.properties parsing + RCON self-heal
+// ---------------------------------------------------------------------------
+
+/// Parse `server.properties` content into a key → value map.
+/// Ignores blank lines and comment lines (`#`). Values are trimmed.
+pub fn parse_properties(content: &str) -> HashMap<String, String> {
+    let mut map = HashMap::new();
+    for line in content.lines() {
+        let line = line.trim();
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+        if let Some((key, value)) = line.split_once('=') {
+            map.insert(key.trim().to_string(), value.trim().to_string());
+        }
+    }
+    map
+}
+
+const RCON_KEYS: [&str; 4] = [
+    "enable-rcon",
+    "rcon.port",
+    "rcon.password",
+    "broadcast-rcon-to-ops",
+];
+
+/// Decide whether `server.properties` content needs the RCON/port block healed.
+///
+/// Minecraft rewrites server.properties with defaults on first boot, which
+/// resets `enable-rcon=false` and clears `rcon.password`. The heal rewrites
+/// the file (preserving every other key) with the agent-managed values so the
+/// console and graceful RCON shutdown keep working.
+pub fn props_needs_heal(content: &str, server_port: u16, rcon_port: u16, rcon_password: &str) -> bool {
+    let props = parse_properties(content);
+    let enabled = props.get("enable-rcon").map(|v| v == "true").unwrap_or(false);
+    let pw_matches = props
+        .get("rcon.password")
+        .map(|v| v == rcon_password)
+        .unwrap_or(false);
+    let port_ok = props
+        .get("rcon.port")
+        .and_then(|v| v.parse::<u16>().ok())
+        .map(|p| p == rcon_port)
+        .unwrap_or(false);
+    let server_port_ok = props
+        .get("server-port")
+        .and_then(|v| v.parse::<u16>().ok())
+        .map(|p| p == server_port)
+        .unwrap_or(false);
+    !(enabled && pw_matches && port_ok && server_port_ok)
+}
+
+/// Produce healed `server.properties` content: drops any existing RCON and
+/// server-port keys, then appends the agent-managed values (Minecraft uses
+/// the LAST occurrence of a key, so appending wins over any stale duplicates).
+pub fn heal_properties_content(
+    content: &str,
+    server_port: u16,
+    rcon_port: u16,
+    rcon_password: &str,
+) -> String {
+    let mut out = String::new();
+    for line in content.lines() {
+        if line.starts_with('#') || line.trim().is_empty() {
+            out.push_str(line);
+            out.push('\n');
+            continue;
+        }
+        if let Some((key, _)) = line.split_once('=') {
+            let key = key.trim();
+            if key == "server-port" || RCON_KEYS.contains(&key) {
+                continue;
+            }
+        }
+        out.push_str(line);
+        out.push('\n');
+    }
+    out.push_str("server-port=");
+    out.push_str(&server_port.to_string());
+    out.push('\n');
+    out.push_str("enable-rcon=true\n");
+    out.push_str("broadcast-rcon-to-ops=false\n");
+    out.push_str("rcon.port=");
+    out.push_str(&rcon_port.to_string());
+    out.push('\n');
+    out.push_str("rcon.password=");
+    out.push_str(rcon_password);
+    out.push('\n');
+    out
+}
+
+/// Ensure `{server_dir}/server.properties` carries the agent-managed RCON and
+/// port settings. Returns `Ok(true)` when the file was rewritten, `Ok(false)`
+/// when it was already correct (or missing). Missing files are left untouched —
+/// the create flow writes the template.
+pub async fn heal_server_properties(
+    server_dir: &Path,
+    server_port: u16,
+    rcon_port: u16,
+    rcon_password: &str,
+) -> Result<bool> {
+    let props_path = server_dir.join("server.properties");
+    let content = match tokio::fs::read_to_string(&props_path).await {
+        Ok(c) => c,
+        Err(_) => return Ok(false),
+    };
+
+    if !props_needs_heal(&content, server_port, rcon_port, rcon_password) {
+        return Ok(false);
+    }
+
+    let healed = heal_properties_content(&content, server_port, rcon_port, rcon_password);
+    tokio::fs::write(&props_path, &healed)
+        .await
+        .with_context(|| format!("Failed to heal server.properties at {}", props_path.display()))?;
+    info!(
+        path = %props_path.display(),
+        server_port, rcon_port,
+        "Healed server.properties (RCON + port enforced)"
+    );
+    Ok(true)
+}
+
+/// Read the port/RCON values persisted in `{server_dir}/server.properties`.
+/// Returns (server_port, rcon_port, rcon_password). Missing or unparsable
+/// values fall back to defaults; an empty RCON password is replaced with a
+/// freshly generated one so the self-heal always has a secret to enforce.
+fn read_properties_values(server_dir: &Path) -> (u16, u16, String) {
+    let props_path = server_dir.join("server.properties");
+    let props = std::fs::read_to_string(&props_path)
+        .ok()
+        .map(|c| parse_properties(&c))
+        .unwrap_or_default();
+
+    let server_port = props
+        .get("server-port")
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(25565u16);
+    let rcon_port = props
+        .get("rcon.port")
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(25575u16);
+    let rcon_password = props
+        .get("rcon.password")
+        .filter(|p| !p.is_empty())
+        .cloned()
+        .unwrap_or_else(generate_rcon_password);
+    (server_port, rcon_port, rcon_password)
+}
+
+/// Generate a random RCON password (32 hex chars).
+pub fn generate_rcon_password() -> String {
+    Uuid::new_v4().to_string().replace('-', "")
+}
+
+// ---------------------------------------------------------------------------
 // EULA
 // ---------------------------------------------------------------------------
 
@@ -324,17 +480,29 @@ pub fn reconcile_direct_servers(
 
     for entry in loaded_entries {
         let server_dir = data_dir.join("servers").join(entry.server_id.to_string());
+        // If the persisted entry has no RCON password (e.g. created by an old
+        // binary before the RCON template), fall back to the file's values —
+        // generating a fresh password when the file has none. The start-time
+        // self-heal then enforces it.
+        let (file_port, file_rcon_port, file_rcon_password) = read_properties_values(&server_dir);
+        let port = if entry.port == 0 { file_port } else { entry.port };
+        let rcon_port = if entry.rcon_port == 0 { file_rcon_port } else { entry.rcon_port };
+        let rcon_password = if entry.rcon_password.is_empty() {
+            file_rcon_password
+        } else {
+            entry.rcon_password.clone()
+        };
         let state = ServerState {
             server_id: entry.server_id,
             display_name: entry.name.clone(),
             mc_loader: parse_mc_loader(&entry.mc_loader),
             mc_version: entry.mc_version.clone().unwrap_or_default(),
             status: ServerStatus::Stopped,
-            port: entry.port,
+            port,
             allocated_ram: entry.allocated_ram,
             path: server_dir,
-            rcon_port: entry.rcon_port,
-            rcon_password: entry.rcon_password.clone(),
+            rcon_port,
+            rcon_password,
             child: None,
             eula_accepted: true,
             auto_restart: entry.auto_restart,
@@ -351,17 +519,10 @@ pub fn reconcile_direct_servers(
                 let name_str = name_os.to_string_lossy();
                 if let Ok(sid) = Uuid::parse_str(&name_str) {
                     if !registry.contains_key(&sid) {
-                        // Read port from server.properties if available
-                        let props_path = dir_entry.path().join("server.properties");
-                        let port = std::fs::read_to_string(&props_path)
-                            .ok()
-                            .and_then(|s| {
-                                s.lines()
-                                    .find(|l| l.starts_with("server-port="))
-                                    .and_then(|l| l.split('=').nth(1))
-                                    .and_then(|p| p.trim().parse().ok())
-                            })
-                            .unwrap_or(25565u16);
+                        // Read port + RCON values from server.properties if
+                        // available (healed back into the file at next start).
+                        let (port, rcon_port, rcon_password) =
+                            read_properties_values(&dir_entry.path());
 
                         let state = ServerState {
                             server_id: sid,
@@ -372,8 +533,8 @@ pub fn reconcile_direct_servers(
                             port,
                             allocated_ram: 1024,
                             path: dir_entry.path(),
-                            rcon_port: 0,
-                            rcon_password: String::new(),
+                            rcon_port,
+                            rcon_password,
                             child: None,
                             eula_accepted: true,
                             auto_restart: false,
@@ -503,4 +664,107 @@ pub fn collect_server_statuses() -> Vec<(Uuid, String, String)> {
             (*id, state.display_name.clone(), status.to_string())
         })
         .collect()
+}
+
+// ---------------------------------------------------------------------------
+// Tests
+// ---------------------------------------------------------------------------
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn sample_minecraft_props() -> &'static str {
+        "#Minecraft server properties\n\
+         #Fri Jul 31 12:18:59 GMT 2026\n\
+         enable-rcon=false\n\
+         rcon.password=\n\
+         rcon.port=25575\n\
+         server-port=25565\n\
+         motd=A Minecraft Server\n\
+         gamemode=survival\n"
+    }
+
+    #[test]
+    fn generate_properties_always_enables_rcon() {
+        let props = generate_server_properties(25565, 25575, "secret123", &HashMap::new());
+        assert!(props.contains("enable-rcon=true\n"));
+        assert!(props.contains("rcon.password=secret123\n"));
+        assert!(props.contains("rcon.port=25575\n"));
+        assert!(props.contains("broadcast-rcon-to-ops=false\n"));
+        assert!(props.contains("server-port=25565\n"));
+        assert!(props.starts_with("#Minecraft server properties (generated by escluse-agent)"));
+    }
+
+    #[test]
+    fn generate_properties_protects_rcon_from_overrides() {
+        let mut overrides = HashMap::new();
+        overrides.insert("enable-rcon".to_string(), "false".to_string());
+        overrides.insert("rcon.password".to_string(), "user-superset".to_string());
+        overrides.insert("difficulty".to_string(), "hard".to_string());
+
+        let props = generate_server_properties(25566, 25599, "managed", &overrides);
+
+        // Protected keys keep the agent-managed value...
+        assert!(props.contains("enable-rcon=true\n"));
+        assert!(props.contains("rcon.password=managed\n"));
+        // ...while non-protected overrides are applied (last occurrence wins).
+        assert!(props.contains("difficulty=hard\n"));
+    }
+
+    #[test]
+    fn parse_properties_skips_comments_and_blank_lines() {
+        let map = parse_properties(sample_minecraft_props());
+        assert_eq!(map.get("enable-rcon"), Some(&"false".to_string()));
+        assert_eq!(map.get("server-port"), Some(&"25565".to_string()));
+        assert_eq!(map.get("rcon.password"), Some(&"".to_string()));
+        assert_eq!(map.get("motd"), Some(&"A Minecraft Server".to_string()));
+        assert_eq!(map.len(), 6);
+    }
+
+    #[test]
+    fn parse_properties_keeps_equals_in_value() {
+        let map = parse_properties("motd=Welcome = home\n");
+        assert_eq!(map.get("motd"), Some(&"Welcome = home".to_string()));
+    }
+
+    #[test]
+    fn props_needs_heal_detects_minecraft_rewrite() {
+        // Minecraft first-boot rewrite (RCON off, empty password) needs heal.
+        assert!(props_needs_heal(sample_minecraft_props(), 25565, 25575, "abc123"));
+        // Fully correct file does not.
+        let good = "enable-rcon=true\nrcon.password=abc123\nrcon.port=25575\nserver-port=25565\n";
+        assert!(!props_needs_heal(good, 25565, 25575, "abc123"));
+        // Wrong password or port still triggers heal.
+        assert!(props_needs_heal(good, 25565, 25575, "other"));
+        assert!(props_needs_heal(good, 25565, 25599, "abc123"));
+        assert!(props_needs_heal(good, 25566, 25575, "abc123"));
+        // Empty content needs heal.
+        assert!(props_needs_heal("", 25565, 25575, "abc123"));
+    }
+
+    #[test]
+    fn heal_properties_content_preserves_user_keys() {
+        let healed = heal_properties_content(sample_minecraft_props(), 25566, 25599, "newpw");
+        let map = parse_properties(&healed);
+
+        assert_eq!(map.get("enable-rcon"), Some(&"true".to_string()));
+        assert_eq!(map.get("rcon.password"), Some(&"newpw".to_string()));
+        assert_eq!(map.get("rcon.port"), Some(&"25599".to_string()));
+        assert_eq!(map.get("server-port"), Some(&"25566".to_string()));
+        // Non-RCON user keys survive.
+        assert_eq!(map.get("motd"), Some(&"A Minecraft Server".to_string()));
+        assert_eq!(map.get("gamemode"), Some(&"survival".to_string()));
+        // No duplicate RCON keys (last occurrence would win anyway).
+        let rcon_count = healed.lines().filter(|l| l.starts_with("enable-rcon=")).count();
+        assert_eq!(rcon_count, 1);
+    }
+
+    #[test]
+    fn generate_rcon_password_is_32_hex_chars() {
+        let pw = generate_rcon_password();
+        assert_eq!(pw.len(), 32);
+        assert!(pw.chars().all(|c| c.is_ascii_hexdigit()));
+        assert_ne!(generate_rcon_password(), generate_rcon_password());
+    }
 }
