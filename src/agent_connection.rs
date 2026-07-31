@@ -1033,7 +1033,64 @@ pub async fn run(
                                                              (Err(e), _) | (_, Err(e)) => (false, e),
                                                          }
                                                      }
-                                                     _ => {
+                                                      "server.command" | "command" => {
+                                                          // Route RCON commands from the deployed backend's raw JSON
+                                                          // protocol into the canonical rcon handler (previously fell
+                                                          // through to the generic shell arm, executing
+                                                          // `sh -c "server.command"` → "not found").
+                                                          let sub_command = params
+                                                              .get("command")
+                                                              .and_then(|v| v.as_str())
+                                                              .unwrap_or("")
+                                                              .to_string();
+                                                          if sub_command.is_empty() {
+                                                              (false, "Empty RCON command".to_string())
+                                                          } else {
+                                                              let (rcon_port, rcon_password) = {
+                                                                  let registry = DIRECT_SERVERS.lock().unwrap_or_else(|e| e.into_inner());
+                                                                  match registry.get(&server_id) {
+                                                                      Some(state) => (state.rcon_port, state.rcon_password.clone()),
+                                                                      None => {
+                                                                          let port = params.get("rcon_port")
+                                                                              .and_then(|v| v.as_u64())
+                                                                              .map(|p| p as u16)
+                                                                              .unwrap_or(25575);
+                                                                          let pw = params.get("rcon_password")
+                                                                              .and_then(|v| v.as_str())
+                                                                              .unwrap_or("")
+                                                                              .to_string();
+                                                                          (port, pw)
+                                                                      }
+                                                                  }
+                                                              };
+                                                              let task = agent_proto::Task::new(
+                                                                  "server.command".to_string(),
+                                                                  serde_json::json!({
+                                                                      "server_id": server_id,
+                                                                      "container_id": server_id,
+                                                                      "container_name": container_name,
+                                                                      "host": "",
+                                                                      "rcon_port": rcon_port,
+                                                                      "rcon_password": rcon_password,
+                                                                      "command": sub_command,
+                                                                  }),
+                                                              );
+                                                              match crate::handlers::rcon::handle_command(
+                                                                  task,
+                                                                  &RuntimeDetector::detect(),
+                                                              ).await {
+                                                                  Ok(v) => {
+                                                                      let response = v.get("response")
+                                                                          .and_then(|r| r.as_str())
+                                                                          .unwrap_or("")
+                                                                          .to_string();
+                                                                      (true, response)
+                                                                  }
+                                                                  Err(e) => (false, format!("{}", e)),
+                                                              }
+                                                          }
+                                                      }
+                                                      _ => {
                                                         // Generic shell fallback for unknown commands
                                                         let r = tokio::process::Command::new("sh").arg("-c").arg(&cmd).output().await;
                                                         match r {
