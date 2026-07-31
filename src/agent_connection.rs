@@ -554,6 +554,12 @@ pub async fn run(
                                                 let mc_loader_str = deploy.get("loader").and_then(|v| v.as_str()).unwrap_or("paper").to_string();
                                                 let mc_loader = McLoader::from_str(&mc_loader_str).unwrap_or(McLoader::Paper);
                                                 let ram_mb: u64 = deploy.get("ram_mb").and_then(|v| v.as_u64()).or_else(|| params.get("ram_mb").and_then(|v| v.as_u64())).unwrap_or(1024);
+                                                let game_port: u16 = deploy.get("game_port").and_then(|v| v.as_u64()).map(|v| v as u16)
+                                                    .or_else(|| params.get("game_port").and_then(|v| v.as_u64()).map(|v| v as u16))
+                                                    .unwrap_or(25565);
+                                                let rcon_port: u16 = deploy.get("rcon_port").and_then(|v| v.as_u64()).map(|v| v as u16)
+                                                    .or_else(|| params.get("rcon_port").and_then(|v| v.as_u64()).map(|v| v as u16))
+                                                    .unwrap_or(25575);
 
                                                 // Helper to send progress updates to backend
                                                 let send_status = |status: &str, message: &str| {
@@ -705,6 +711,18 @@ pub async fn run(
                                                                                    format!("{}/eula.txt", server_dir),
                                                                                    "eula=true\n",
                                                                                );
+                                                                               // Self-heal RCON + server port in server.properties BEFORE
+                                                                               // spawning Java (Bug A: console RCON reads the password from
+                                                                               // this file; honoring the game/rcon ports requested by the
+                                                                               // backend so the relay tunnel matches the bound port).
+                                                                               let (_, _, file_rcon_password) =
+                                                                                   read_properties_values(Path::new(&server_dir));
+                                                                               let _ = heal_server_properties(
+                                                                                   Path::new(&server_dir),
+                                                                                   game_port,
+                                                                                   rcon_port,
+                                                                                   &file_rcon_password,
+                                                                               ).await;
                                                                                let is_neoforge = matches!(mc_loader, McLoader::NeoForge);
                                                                                let is_forge = matches!(mc_loader, McLoader::Forge);
                                                                                let run_sh = format!("{}/run.sh", server_dir);
@@ -730,17 +748,6 @@ pub async fn run(
                                                                                 };
                                                                               match r {
                                                                                   Ok(_) => {
-                                                                                      // Self-heal RCON config from server.properties
-                                                                                      // before registering the server (Bug A: console
-                                                                                      // RCON reads the password from this file).
-                                                                                      let (_, file_rcon_port, file_rcon_password) =
-                                                                                          read_properties_values(Path::new(&server_dir));
-                                                                                      let _ = heal_server_properties(
-                                                                                          Path::new(&server_dir),
-                                                                                          25565,
-                                                                                          file_rcon_port,
-                                                                                          &file_rcon_password,
-                                                                                      ).await;
                                                                                       let mut registry = DIRECT_SERVERS.lock().unwrap_or_else(|e| e.into_inner());
                                                                                       registry.insert(server_id, ServerState {
                                                                                           server_id,
@@ -748,10 +755,10 @@ pub async fn run(
                                                                                           mc_loader,
                                                                                           mc_version: mc_version.clone(),
                                                                                           status: ServerStatus::Running,
-                                                                                          port: 25565,
+                                                                                          port: game_port,
                                                                                           allocated_ram: ram_mb,
                                                                                           path: std::path::PathBuf::from(&server_dir),
-                                                                                          rcon_port: file_rcon_port,
+                                                                                          rcon_port,
                                                                                           rcon_password: file_rcon_password,
                                                                                           child: None,
                                                                                           eula_accepted: true,
@@ -786,49 +793,48 @@ pub async fn run(
                                                                           send_status("downloading", &format!("Downloading {} {}...", mc_loader_str, mc_version)).await;
                                                                           let _ = download_jar(&mc_loader, &mc_version, jar, Path::new(&server_dir)).await;
                                                                       }
-                                                                       if jar.exists() {
-                                                                          let _ = std::fs::write(
-                                                                             format!("{}/eula.txt", server_dir),
-                                                                             "eula=true\n",
-                                                                         );
-                                                                           let r = tokio::process::Command::new(&java_path)
-                                                                               .arg(format!("-Xmx{}M", ram_mb)).arg(format!("-Xms{}M", ram_mb))
-                                                                               .arg("-jar").arg(jar_path)
-                                                                               .arg("--nogui")
-                                                                               .current_dir(&server_dir)
-                                                                               .spawn();
-                                                                            match r {
-                                                                               Ok(_) => {
-                                                                                   // Self-heal RCON config from server.properties
-                                                                                   // before registering the server (Bug A: console
-                                                                                   // RCON reads the password from this file).
-                                                                                   let (_, file_rcon_port, file_rcon_password) =
-                                                                                       read_properties_values(Path::new(&server_dir));
-                                                                                   let _ = heal_server_properties(
-                                                                                       Path::new(&server_dir),
-                                                                                       25565,
-                                                                                       file_rcon_port,
-                                                                                       &file_rcon_password,
-                                                                                   ).await;
-                                                                                   let mut registry = DIRECT_SERVERS.lock().unwrap_or_else(|e| e.into_inner());
-                                                                                   registry.insert(server_id, ServerState {
-                                                                                       server_id,
-                                                                                       display_name: format!("mc-{}", server_id),
-                                                                                       mc_loader,
-                                                                                       mc_version: mc_version.clone(),
-                                                                                       status: ServerStatus::Running,
-                                                                                       port: 25565,
-                                                                                       allocated_ram: ram_mb,
-                                                                                      path: std::path::PathBuf::from(&server_dir),
-                                                                                      rcon_port: file_rcon_port,
-                                                                                      rcon_password: file_rcon_password,
-                                                                                      child: None,
-                                                                                      eula_accepted: true,
-                                                                                      auto_restart: false,
-                                                                                  });
-                                                                                  drop(registry);
-                                                                                  (true, format!("Java server started in {}", server_dir))
-                                                                              }
+                                                                        if jar.exists() {
+                                                                           let _ = std::fs::write(
+                                                                              format!("{}/eula.txt", server_dir),
+                                                                              "eula=true\n",
+                                                                          );
+                                                                            // Self-heal RCON + server port BEFORE spawning Java so the
+                                                                            // JVM binds the port the backend's relay tunnel forwards to.
+                                                                            let (_, _, file_rcon_password) =
+                                                                                read_properties_values(Path::new(&server_dir));
+                                                                            let _ = heal_server_properties(
+                                                                                Path::new(&server_dir),
+                                                                                game_port,
+                                                                                rcon_port,
+                                                                                &file_rcon_password,
+                                                                            ).await;
+                                                                            let r = tokio::process::Command::new(&java_path)
+                                                                                .arg(format!("-Xmx{}M", ram_mb)).arg(format!("-Xms{}M", ram_mb))
+                                                                                .arg("-jar").arg(jar_path)
+                                                                                .arg("--nogui")
+                                                                                .current_dir(&server_dir)
+                                                                                .spawn();
+                                                                             match r {
+                                                                                Ok(_) => {
+                                                                                    let mut registry = DIRECT_SERVERS.lock().unwrap_or_else(|e| e.into_inner());
+                                                                                    registry.insert(server_id, ServerState {
+                                                                                        server_id,
+                                                                                        display_name: format!("mc-{}", server_id),
+                                                                                        mc_loader,
+                                                                                        mc_version: mc_version.clone(),
+                                                                                        status: ServerStatus::Running,
+                                                                                        port: game_port,
+                                                                                        allocated_ram: ram_mb,
+                                                                                       path: std::path::PathBuf::from(&server_dir),
+                                                                                       rcon_port,
+                                                                                       rcon_password: file_rcon_password,
+                                                                                       child: None,
+                                                                                       eula_accepted: true,
+                                                                                       auto_restart: false,
+                                                                                   });
+                                                                                   drop(registry);
+                                                                                   (true, format!("Java server started in {}", server_dir))
+                                                                               }
                                                                               Err(e) => (false, format!("java failed: {}", e)),
                                                                           }
                                                                      } else {
