@@ -156,7 +156,7 @@ pub async fn handle_create(task: Task) -> Result<serde_json::Value> {
     download_jar(&loader, &version, &jar_path, &server_dir).await?;
 
     // Generate RCON password (random 32-char hex)
-    let rcon_password = Uuid::new_v4().to_string().replace("-", "");
+    let rcon_password = super::generate_rcon_password();
     // RCON port: 25575 + deterministic offset from server_id
     let rcon_port: u16 = 25575u16.wrapping_add((server_id.as_u128() % 1024) as u16);
 
@@ -205,6 +205,8 @@ pub async fn handle_create(task: Task) -> Result<serde_json::Value> {
         "server_id": server_id,
         "name": name,
         "port": actual_port,
+        "rcon_port": rcon_port,
+        "rcon_enabled": true,
     }))
 }
 
@@ -301,6 +303,16 @@ pub async fn handle_start(task: Task) -> Result<serde_json::Value> {
                 state.port = actual_port;
             }
         }
+    }
+
+    // RCON self-heal: Minecraft rewrites server.properties with defaults on
+    // first boot, resetting enable-rcon=false and clearing the password. Re-
+    // enforce the agent-managed RCON + port settings so the console and
+    // graceful RCON shutdown keep working (e.g. servers created by older
+    // agent binaries). Safe for every boot — no-ops when already correct.
+    let healed = super::heal_server_properties(&path, actual_port, rcon_port, &rcon_password).await?;
+    if healed {
+        info!(server_id = %server_id, "server.properties healed before start");
     }
 
     send_progress(task_id, "running", 10.0, "Starting server process").await;
@@ -453,7 +465,13 @@ pub async fn handle_start(task: Task) -> Result<serde_json::Value> {
     info!(server_id = %server_id, "Server started");
     send_progress(task_id, "running", 100.0, "Server started").await;
 
-    Ok(serde_json::json!({ "status": "started", "server_id": server_id }))
+    Ok(serde_json::json!({
+        "status": "started",
+        "server_id": server_id,
+        "port": actual_port,
+        "rcon_port": rcon_port,
+        "rcon_enabled": true,
+    }))
 }
 
 // ---------------------------------------------------------------------------

@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v0.5.19] - 2026-07-31
+
+### Added
+
+- **RCON self-heal at server start** — `handle_start` now rewrites
+  `server.properties` (preserving all other keys) whenever RCON is disabled,
+  the password is empty, or the port/server-port no longer match the
+  agent-managed state. Minecraft overwrites the file with defaults on first
+  boot, which previously left RCON off (console unusable, graceful shutdown
+  degraded) for any server created by older agent binaries.
+- **Bare task-type aliases** — `create`/`start`/`stop`/`restart`/`delete`/
+  `logs`/`status` dispatch to the direct executor, matching the task protocol
+  sent by the deployed backend (`agent_server_executor`). Previously these
+  fell through to `Unknown task type`, making the repo binary incompatible
+  with the live API.
+- **Start/create responses now include `port` + `rcon_port`** so the backend
+  can sync the actual assigned port (fixes DB port drift, e.g. 25566 vs
+  actual 25565).
+
+### Fixed
+
+- **`reconcile_direct_servers` reads `server-port`/`rcon.port`/`rcon.password`
+  from existing `server.properties`** instead of defaulting to zeros, and
+  generates a fresh RCON password when the file has none — so servers created
+  before the RCON template (or written by Minecraft itself) are picked up
+  with working console credentials at the next start.
+
 ## [v0.5.18] - 2026-07-19
 
 ### Fixed
