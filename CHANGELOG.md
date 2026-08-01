@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Backup commands now route through the agent's real backup handlers** —
+  `backup.start`, `backup.create`, and `backup.restore` sent over the raw
+  JSON WebSocket protocol are handled by the canonical backup handlers
+  (previously they fell through to the generic shell fallback and failed).
+
 ## [v0.5.23] - 2026-08-01
 
 ### Fixed
