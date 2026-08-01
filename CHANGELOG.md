@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v0.5.23] - 2026-08-01
+
+### Fixed
+
+- **Container-style `/data/...` paths resolve for direct-executor servers** —
+  the raw JSON fallback previously joined `/data/server.properties` (and any
+  other `/data/...` path from the dashboard) onto the server directory,
+  producing `servers/<id>/data/server.properties`, which failed with
+  `Parent path canonicalization failed` because no `data/` directory exists in
+  the direct-executor layout. `resolve_server_path` now retries without the
+  `data/` prefix when that directory is absent, so the dashboard's Server
+  Properties read/write and File Manager operations work again. Real `data/`
+  directories (when present) still take priority, and path traversal checks
+  are unchanged.
+
 ## [v0.5.22] - 2026-08-01
 
 ### Fixed
