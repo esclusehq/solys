@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v0.5.25] - 2026-08-02
+
+### Fixed
+
+- **Agent now reports its real binary version** — previously every agent
+  reported `0.1.0` (the shared protocol crate's version) instead of the
+  installed agent version, so the dashboard always showed `0.1.0` for
+  every node. The version is now taken from the binary itself.
+
 ## [v0.5.24] - 2026-08-02
 
 ### Added
