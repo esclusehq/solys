@@ -1195,8 +1195,24 @@ fn resolve_server_path(base: &std::path::Path, requested: &str) -> Result<std::p
             .map_err(|e| format!("Failed to create base directory: {}", e))?;
     }
 
+    match resolve_canonical_checked(base, &target) {
+        Ok(path) => Ok(path),
+        Err(_) if clean.starts_with("data/") => {
+            // Direct-executor servers store files at the server root, but the
+            // dashboard/API addresses them with the container-style "/data/..."
+            // prefix. When no "data/" directory exists, retry without the
+            // prefix so reads/writes resolve to the server directory.
+            let stripped = base.join(&clean[5..]);
+            resolve_canonical_checked(base, &stripped)
+        }
+        Err(e) => Err(e),
+    }
+}
+
+/// Canonicalize a target path under `base` and reject traversal escapes.
+fn resolve_canonical_checked(base: &std::path::Path, target: &std::path::Path) -> Result<std::path::PathBuf, String> {
     let canonical = if target.exists() {
-        std::fs::canonicalize(&target)
+        std::fs::canonicalize(target)
             .map_err(|e| format!("Path canonicalization failed: {}", e))?
     } else {
         // Target doesn't exist yet — canonicalize parent for security check
@@ -1213,3 +1229,71 @@ fn resolve_server_path(base: &std::path::Path, requested: &str) -> Result<std::p
     Ok(canonical)
 }
 
+
+#[cfg(test)]
+mod resolve_server_path_tests {
+    use super::*;
+    use std::fs;
+    use std::path::PathBuf;
+
+    fn temp_base(tag: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("escluse-resolve-{}-{}", tag, std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    #[test]
+    fn resolves_plain_relative_path() {
+        let base = temp_base("plain");
+        fs::write(base.join("server.properties"), "enable-rcon=true\n").unwrap();
+
+        let resolved = resolve_server_path(&base, "server.properties").unwrap();
+        assert_eq!(resolved, fs::canonicalize(base.join("server.properties")).unwrap());
+    }
+
+    #[test]
+    fn strips_container_data_prefix_when_data_dir_missing() {
+        let base = temp_base("strip");
+        fs::write(base.join("server.properties"), "enable-rcon=true\n").unwrap();
+        assert!(!base.join("data").exists());
+
+        let resolved = resolve_server_path(&base, "/data/server.properties").unwrap();
+        assert_eq!(resolved, fs::canonicalize(base.join("server.properties")).unwrap());
+    }
+
+    #[test]
+    fn keeps_data_prefix_when_data_dir_exists() {
+        let base = temp_base("realdata");
+        fs::create_dir_all(base.join("data")).unwrap();
+        fs::write(base.join("data").join("server.properties"), "inside\n").unwrap();
+        fs::write(base.join("server.properties"), "root\n").unwrap();
+
+        let resolved = resolve_server_path(&base, "/data/server.properties").unwrap();
+        assert_eq!(resolved, fs::canonicalize(base.join("data").join("server.properties")).unwrap());
+    }
+
+    #[test]
+    fn resolves_missing_target_via_parent() {
+        let base = temp_base("missing");
+
+        let resolved = resolve_server_path(&base, "newfile.txt").unwrap();
+        assert_eq!(resolved, fs::canonicalize(&base).unwrap().join("newfile.txt"));
+    }
+
+    #[test]
+    fn blocks_path_traversal() {
+        let base = temp_base("traversal");
+
+        let err = resolve_server_path(&base, "../../etc/passwd").unwrap_err();
+        assert!(err.contains("blocked") || err.contains("canonicalization failed"));
+    }
+
+    #[test]
+    fn blocks_traversal_via_data_prefix() {
+        let base = temp_base("traversal2");
+
+        let err = resolve_server_path(&base, "/data/../../etc/passwd").unwrap_err();
+        assert!(err.contains("blocked") || err.contains("canonicalization failed"));
+    }
+}
