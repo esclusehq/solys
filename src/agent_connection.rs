@@ -220,7 +220,8 @@ pub async fn run(
                         ip.clone(),
                         std::env::consts::OS.to_string(),
                         runtime.version.clone(),
-                    );
+                    )
+                    .with_agent_version(env!("CARGO_PKG_VERSION"));
                 // Set container_runtime via the runtime field
                 register_payload.runtime = Some(runtime.runtime_name().to_string());
                 let register = OutboundMessage::Proto(
