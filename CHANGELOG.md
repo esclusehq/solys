@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v0.5.24] - 2026-08-02
+
 ### Added
 
 - **Backup commands now route through the agent's real backup handlers** —
