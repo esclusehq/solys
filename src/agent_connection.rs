@@ -1092,11 +1092,124 @@ pub async fn run(
                                                                           .to_string();
                                                                       (true, response)
                                                                   }
-                                                                  Err(e) => (false, format!("{}", e)),
-                                                              }
-                                                          }
-                                                      }
-                                                      _ => {
+                                                                   Err(e) => (false, format!("{}", e)),
+                                                               }
+                                                           }
+                                                       }
+                                                       "backup.start" => {
+                                                           // Route agent-side backups (D-10/D-11) from the deployed
+                                                           // backend's raw JSON protocol into the canonical backup
+                                                           // handler (previously fell through to the generic shell arm).
+                                                           let backup_id = params
+                                                               .get("backup_id")
+                                                               .and_then(|v| v.as_str())
+                                                               .and_then(|s| uuid::Uuid::parse_str(s).ok());
+                                                           let file_name = params
+                                                               .get("file_name")
+                                                               .and_then(|v| v.as_str())
+                                                               .unwrap_or("")
+                                                               .to_string();
+                                                           let provider = params
+                                                               .get("provider")
+                                                               .and_then(|v| v.as_str())
+                                                               .unwrap_or("local")
+                                                               .to_string();
+                                                           let container_id = params
+                                                               .get("container_id")
+                                                               .and_then(|v| v.as_str())
+                                                               .map(|s| s.to_string());
+                                                           match backup_id {
+                                                               Some(backup_id) => {
+                                                                   let task = agent_proto::Task::new(
+                                                                       "backup.start".to_string(),
+                                                                       serde_json::json!({
+                                                                           "server_id": server_id,
+                                                                           "container_name": container_name,
+                                                                           "container_id": container_id,
+                                                                           "backup_id": backup_id,
+                                                                           "file_name": file_name,
+                                                                           "provider": provider,
+                                                                       }),
+                                                                   );
+                                                                   match crate::handlers::backup::handle_start(task).await {
+                                                                       Ok(v) => (true, v.to_string()),
+                                                                       Err(e) => (false, format!("{}", e)),
+                                                                   }
+                                                               }
+                                                               None => (false, "backup_id is required".to_string()),
+                                                           }
+                                                       }
+                                                       "backup.create" => {
+                                                           let volumes = params
+                                                               .get("volumes")
+                                                               .and_then(|v| v.as_array())
+                                                               .map(|arr| {
+                                                                   arr.iter()
+                                                                       .filter_map(|x| x.as_str().map(|s| s.to_string()))
+                                                                       .collect::<Vec<String>>()
+                                                               });
+                                                           let backup_name = params
+                                                               .get("backup_name")
+                                                               .and_then(|v| v.as_str())
+                                                               .map(|s| s.to_string());
+                                                           let container_id = params
+                                                               .get("container_id")
+                                                               .and_then(|v| v.as_str())
+                                                               .unwrap_or("")
+                                                               .to_string();
+                                                           let task = agent_proto::Task::new(
+                                                               "backup.create".to_string(),
+                                                               serde_json::json!({
+                                                                   "server_id": server_id,
+                                                                   "container_id": container_id,
+                                                                   "volumes": volumes,
+                                                                   "backup_name": backup_name,
+                                                               }),
+                                                           );
+                                                           match crate::handlers::backup::handle_create(task).await {
+                                                               Ok(v) => (true, v.to_string()),
+                                                               Err(e) => (false, format!("{}", e)),
+                                                           }
+                                                       }
+                                                       "backup.restore" => {
+                                                           let backup_id = params
+                                                               .get("backup_id")
+                                                               .and_then(|v| v.as_str())
+                                                               .and_then(|s| uuid::Uuid::parse_str(s).ok());
+                                                           let target_paths = params
+                                                               .get("target_paths")
+                                                               .and_then(|v| v.as_array())
+                                                               .map(|arr| {
+                                                                   arr.iter()
+                                                                       .filter_map(|x| x.as_str().map(|s| s.to_string()))
+                                                                       .collect::<Vec<String>>()
+                                                               })
+                                                               .unwrap_or_default();
+                                                           let container_id = params
+                                                               .get("container_id")
+                                                               .and_then(|v| v.as_str())
+                                                               .unwrap_or("")
+                                                               .to_string();
+                                                           match backup_id {
+                                                               Some(backup_id) => {
+                                                                   let task = agent_proto::Task::new(
+                                                                       "backup.restore".to_string(),
+                                                                       serde_json::json!({
+                                                                           "server_id": server_id,
+                                                                           "container_id": container_id,
+                                                                           "backup_id": backup_id,
+                                                                           "target_paths": target_paths,
+                                                                       }),
+                                                                   );
+                                                                   match crate::handlers::backup::handle_restore(task).await {
+                                                                       Ok(v) => (true, v.to_string()),
+                                                                       Err(e) => (false, format!("{}", e)),
+                                                                   }
+                                                               }
+                                                               None => (false, "backup_id is required".to_string()),
+                                                           }
+                                                       }
+                                                       _ => {
                                                         // Generic shell fallback for unknown commands
                                                         let r = tokio::process::Command::new("sh").arg("-c").arg(&cmd).output().await;
                                                         match r {
