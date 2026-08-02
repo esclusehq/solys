@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## v0.5.29
+
+### Fixed
+- Restore is only rejected while the server is actually running — a stopped server in the registry can be restored again.
+
 ## v0.5.28
 
 ### Fixed
