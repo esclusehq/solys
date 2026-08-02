@@ -96,9 +96,11 @@ jobs:
               echo "$var=$new_val" >> "$GITHUB_ENV"
             fi
           done
-      - uses: Swatinem/rust-cache@v2
-        with:
-          cache-on-failure: true
+      # NOTE: rust-cache deliberately NOT used here. A stale cache hit
+      # shipped v0.5.31 with a binary built from the previous release's
+      # source (backup.delete handler missing). Releases are infrequent —
+      # a fresh build is worth the extra minutes to guarantee the artifact
+      # matches the tagged source.
       - name: Install cargo-auditable
         run: cargo install cargo-auditable --locked
       - name: Install Windows cross-compile libraries (Npcap SDK)
