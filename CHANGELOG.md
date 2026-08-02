@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## v0.5.28
+
+### Fixed
+- Restore is now rejected with a clear message while the server is running.
+- Backup extract is non-blocking (spawn_blocking + 15-minute timeout) so it never hangs without a response.
+
 ## v0.5.27
 
 ### Fixed
