@@ -538,6 +538,82 @@ async fn run_backup_start(
     Ok(serde_json::to_value(output)?)
 }
 
+#[derive(Debug, Deserialize)]
+pub struct BackupDeletePayload {
+    pub server_id: uuid::Uuid,
+    pub file_name: String,
+    #[serde(default)]
+    pub container_id: Option<String>,
+    #[serde(default)]
+    pub container_name: Option<String>,
+}
+
+/// Delete a backup archive from a node's local backup directory.
+/// Idempotent: a missing archive is treated as already deleted (Ok).
+/// The `file_name` is validated to be a plain archive name so it can never
+/// escape the server's backup directory (path traversal guard).
+pub async fn handle_delete(task: Task) -> Result<serde_json::Value> {
+    let payload: BackupDeletePayload = serde_json::from_value(task.payload)?;
+    tracing::info!(
+        server_id = %payload.server_id,
+        file_name = %payload.file_name,
+        "Deleting agent-side backup"
+    );
+    let data_dir = DATA_DIR.get().expect("DATA_DIR not initialized");
+    delete_backup_file(data_dir, payload.server_id, &payload.file_name).await
+}
+
+/// Body of `handle_delete`, taking the data dir explicitly so unit tests can
+/// run against throwaway directories without touching the global `DATA_DIR`.
+async fn delete_backup_file(
+    data_dir: &Path,
+    server_id: uuid::Uuid,
+    file_name: &str,
+) -> Result<serde_json::Value> {
+    if file_name.is_empty()
+        || !file_name
+            .chars()
+            .all(|c| c.is_alphanumeric() || c == '-' || c == '_' || c == '.')
+        || !file_name.ends_with(".tar.gz")
+    {
+        anyhow::bail!("Invalid file_name: {:?}", file_name);
+    }
+
+    let backup_dir = data_dir.join("backups").join(server_id.to_string());
+    let backup_file = backup_dir.join(file_name);
+
+    // Traversal guard: resolve the real path and confirm it stays inside the
+    // server's backup directory.
+    let canonical_dir = backup_dir.canonicalize()
+        .with_context(|| format!("Backup directory does not exist: {}", backup_dir.display()))?;
+
+    // Idempotent delete: a missing file is already gone — report success so
+    // the backend can remove the DB row.
+    if !backup_file.exists() {
+        warn!(file = %backup_file.display(), "Backup file already missing — treating as deleted");
+        return Ok(serde_json::json!({
+            "deleted": false,
+            "already_missing": true,
+            "file_name": file_name,
+        }));
+    }
+
+    let canonical_file = backup_file.canonicalize()
+        .with_context(|| format!("Backup file does not exist: {}", backup_file.display()))?;
+    if !canonical_file.starts_with(&canonical_dir) {
+        anyhow::bail!("Path traversal detected: {:?} escapes backup dir", file_name);
+    }
+
+    tokio::fs::remove_file(&canonical_file).await
+        .with_context(|| format!("Failed to delete backup file: {}", canonical_file.display()))?;
+
+    tracing::info!(file = %canonical_file.display(), "Backup deleted");
+    Ok(serde_json::json!({
+        "deleted": true,
+        "file_name": file_name,
+    }))
+}
+
 pub async fn handle_restore(task: Task) -> Result<serde_json::Value> {
     let payload: BackupRestorePayload = serde_json::from_value(task.payload)?;
 
@@ -955,6 +1031,45 @@ mod tests {
         assert_eq!(picked, newer, "must pick the newest archive when no name is given");
 
         let _ = tokio::fs::remove_dir_all(&backup_dir).await;
+    }
+
+    #[tokio::test]
+    async fn test_handle_delete_removes_file() {
+        let server_id = uuid::Uuid::new_v4();
+        let base = std::env::temp_dir().join(format!("escluse-test-del-{}", uuid::Uuid::new_v4()));
+        let backup_dir = base.join("backups").join(server_id.to_string());
+        tokio::fs::create_dir_all(&backup_dir).await.unwrap();
+        let target = backup_dir.join("backup-old.tar.gz");
+        tokio::fs::write(&target, b"data").await.unwrap();
+
+        let out = delete_backup_file(&base, server_id, "backup-old.tar.gz").await.unwrap();
+        assert_eq!(out["deleted"], true);
+        assert!(!target.exists(), "archive must be removed from disk");
+    }
+
+    #[tokio::test]
+    async fn test_handle_delete_missing_file_is_idempotent() {
+        let server_id = uuid::Uuid::new_v4();
+        let base = std::env::temp_dir().join(format!("escluse-test-del-{}", uuid::Uuid::new_v4()));
+        tokio::fs::create_dir_all(base.join("backups").join(server_id.to_string()))
+            .await
+            .unwrap();
+        let out = delete_backup_file(&base, server_id, "backup-none.tar.gz").await.unwrap();
+        assert_eq!(out["deleted"], false);
+        assert_eq!(out["already_missing"], true);
+    }
+
+    #[tokio::test]
+    async fn test_handle_delete_rejects_traversal() {
+        let server_id = uuid::Uuid::new_v4();
+        let base = std::env::temp_dir().join(format!("escluse-test-del-{}", uuid::Uuid::new_v4()));
+        tokio::fs::create_dir_all(base.join("backups").join(server_id.to_string()))
+            .await
+            .unwrap();
+        let err = delete_backup_file(&base, server_id, "../escape.tar.gz").await.unwrap_err();
+        assert!(err.to_string().contains("Invalid file_name"), "got: {}", err);
+        let err = delete_backup_file(&base, server_id, "notes.txt").await.unwrap_err();
+        assert!(err.to_string().contains("Invalid file_name"), "got: {}", err);
     }
 }
 
