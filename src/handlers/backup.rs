@@ -19,7 +19,9 @@ use reqwest::Client as HttpClient;
 
 use crate::task_state::TASK_STATE_TRACKER;
 
-use agent_backup::{create_container_backup, calculate_checksum, CompressionFormat};
+use crate::handlers::direct_executor::server_dir_path;
+
+use agent_backup::calculate_checksum;
 use agent_backup::upload::{upload_to_s3_with_config, upload_to_local};
 
 static DATA_DIR: OnceLock<PathBuf> = OnceLock::new();
@@ -327,6 +329,44 @@ async fn upload_via_existing(payload: &BackupStartPayload, archive_path: &Path) 
     }
 }
 
+/// Create a gzip tar archive of a server's data directory using the local
+/// `tar` binary. Works without Docker/Podman (e.g. Termux on Android).
+/// Returns (size_bytes, sha256_hex).
+async fn create_local_server_archive(server_dir: &Path, dest_path: &Path) -> Result<(u64, String)> {
+    if !server_dir.exists() {
+        anyhow::bail!(
+            "Server has no data on this node yet — start the server first to create its data directory ({})",
+            server_dir.display()
+        );
+    }
+
+    if let Some(parent) = dest_path.parent() {
+        tokio::fs::create_dir_all(parent).await?;
+    }
+
+    let output = Command::new("tar")
+        .args([
+            "-czf",
+            dest_path.to_string_lossy().as_ref(),
+            "-C",
+            server_dir.to_string_lossy().as_ref(),
+            ".",
+        ])
+        .output()
+        .await
+        .context("Failed to spawn tar — is tar installed on this device?")?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        anyhow::bail!("Tar archive creation failed: {}", stderr.trim());
+    }
+
+    let size = tokio::fs::metadata(dest_path).await?.len();
+    let checksum = calculate_checksum(dest_path).await?;
+    info!(size_bytes = size, "Local server archive created");
+    Ok((size, checksum))
+}
+
 /// Handle backup.start command — archive container data and upload directly to storage.
 ///
 /// Architecture per D-10/D-11:
@@ -348,8 +388,8 @@ pub async fn handle_start(task: Task) -> anyhow::Result<serde_json::Value> {
     }).await;
     crate::task_state::send_progress(task.id, "running", 5.0, "Starting backup...").await;
 
-    // Resolve container identifier
-    let container_id = payload.container_id.as_deref()
+    // Resolve container identifier (kept for contract validation; archiving no longer uses it)
+    let _container_id = payload.container_id.as_deref()
         .or(payload.container_name.as_deref())
         .ok_or_else(|| anyhow::anyhow!("Either container_id or container_name must be provided"))?;
 
@@ -373,12 +413,11 @@ pub async fn handle_start(task: Task) -> anyhow::Result<serde_json::Value> {
     }).await;
     crate::task_state::send_progress(task.id, "running", 20.0, "Creating archive...").await;
 
-    let (archive_size, archive_checksum) = create_container_backup(
-        container_id,
-        "/data",
-        &archive_path,
-        CompressionFormat::Zstd(3),
-    ).await?;
+    let server_dir = server_dir_path(
+        DATA_DIR.get().expect("DATA_DIR not initialized"),
+        &payload.server_id,
+    );
+    let (archive_size, archive_checksum) = create_local_server_archive(&server_dir, &archive_path).await?;
 
     // 2. Calculate checksum
     let checksum = if archive_checksum.is_empty() {
@@ -503,6 +542,39 @@ pub async fn handle_restore(task: Task) -> Result<serde_json::Value> {
         "backup_id": payload.backup_id,
         "container_id": payload.container_id
     }))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_create_local_server_archive_ok() {
+        let tmp = std::env::temp_dir().join(format!("escluse-test-archive-{}", uuid::Uuid::new_v4()));
+        tokio::fs::create_dir_all(tmp.join("world")).await.unwrap();
+        tokio::fs::write(tmp.join("world").join("level.dat"), b"fake-level-data").await.unwrap();
+
+        let dest = std::env::temp_dir().join(format!("escluse-test-out-{}.tar.gz", uuid::Uuid::new_v4()));
+        let (size, checksum) = create_local_server_archive(&tmp, &dest).await.unwrap();
+
+        assert!(size > 0, "archive should not be empty");
+        assert_eq!(checksum.len(), 64, "checksum should be a sha256 hex string");
+        assert!(tokio::fs::metadata(&dest).await.is_ok(), "archive file should exist");
+
+        let _ = tokio::fs::remove_dir_all(&tmp).await;
+        let _ = tokio::fs::remove_file(&dest).await;
+    }
+
+    #[tokio::test]
+    async fn test_create_local_server_archive_missing_dir() {
+        let missing = std::path::PathBuf::from(format!("/nonexistent/escluse-{}", uuid::Uuid::new_v4()));
+        let dest = std::env::temp_dir().join(format!("escluse-test-miss-{}.tar.gz", uuid::Uuid::new_v4()));
+
+        let err = create_local_server_archive(&missing, &dest).await.unwrap_err();
+        assert!(err.to_string().contains("no data on this node"), "got: {}", err);
+
+        let _ = tokio::fs::remove_file(&dest).await;
+    }
 }
 
 
