@@ -85,7 +85,8 @@ pub struct BackupCreateOutput {
 
 /// Fields `container_id` and `target_paths` are part of the wire contract with the
 /// backend but are no longer read locally (restore now extracts into the local
-/// server data dir).
+/// server data dir). `file_name` selects the specific archive to restore; when
+/// absent, the newest `*.tar.gz` archive is used.
 #[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 pub struct BackupRestorePayload {
@@ -93,6 +94,50 @@ pub struct BackupRestorePayload {
     pub container_id: String,
     pub backup_id: uuid::Uuid,
     pub target_paths: Vec<String>,
+    #[serde(default)]
+    pub file_name: Option<String>,
+}
+
+/// Resolve the backup archive to restore.
+///
+/// With a `file_name`, validate it (reject path components so the path cannot
+/// escape the backup dir) and use it; otherwise pick the newest `*.tar.gz`
+/// archive in `backup_dir` as a fallback.
+fn resolve_backup_path(backup_dir: &Path, file_name: Option<&str>) -> Result<PathBuf> {
+    match file_name {
+        Some(name) => {
+            if Path::new(name).file_name() != Some(name.as_ref()) {
+                anyhow::bail!("Invalid backup file name");
+            }
+            let path = backup_dir.join(name);
+            if !path.is_file() {
+                anyhow::bail!("Backup file not found: {name}");
+            }
+            Ok(path)
+        }
+        None => {
+            let Ok(entries) = std::fs::read_dir(backup_dir) else {
+                anyhow::bail!("Backup file not found");
+            };
+            let mut newest: Option<(PathBuf, std::time::SystemTime)> = None;
+            for entry in entries {
+                let entry = entry?;
+                if !entry.file_name().to_string_lossy().ends_with(".tar.gz") {
+                    continue;
+                }
+                if !entry.file_type()?.is_file() {
+                    continue;
+                }
+                let modified = entry.metadata()?.modified()?;
+                if newest.as_ref().map(|(_, t)| modified > *t).unwrap_or(true) {
+                    newest = Some((entry.path(), modified));
+                }
+            }
+            newest
+                .map(|(path, _)| path)
+                .ok_or_else(|| anyhow::anyhow!("Backup file not found"))
+        }
+    }
 }
 
 pub async fn handle_create(task: Task) -> Result<serde_json::Value> {
@@ -494,26 +539,11 @@ pub async fn handle_restore(task: Task) -> Result<serde_json::Value> {
         "Restoring backup"
     );
 
-    // Find backup file
+    // Resolve the requested archive (or the newest one when no name is given)
     let backup_dir = DATA_DIR.get().expect("DATA_DIR not initialized").join("backups")
         .join(payload.server_id.to_string());
 
-    // Look for the backup file
-    let mut backup_file: Option<PathBuf> = None;
-    
-    if let Ok(entries) = tokio::fs::read_dir(&backup_dir).await {
-        let mut entries = entries;
-        while let Ok(Some(entry)) = entries.next_entry().await {
-            let path = entry.path();
-            if path.extension().map(|e| e == "tar.gz").unwrap_or(false) {
-                backup_file = Some(path);
-                break;
-            }
-        }
-    }
-
-    let backup_path = backup_file
-        .context("Backup file not found")?;
+    let backup_path = resolve_backup_path(&backup_dir, payload.file_name.as_deref())?;
 
     // Step 1: Resolve server data directory
     let server_dir = server_dir_path(
@@ -562,9 +592,11 @@ mod tests {
         tokio::fs::create_dir_all(tmp.join("world")).await.unwrap();
         tokio::fs::write(tmp.join("world").join("level.dat"), b"fake-level-data").await.unwrap();
 
-        // Archive is staged in temp, OUTSIDE the backup base — mirrors the fixed
-        // handle_start. If the archive path is ever placed inside the backup dir
-        // again, upload_to_local self-copies and truncates it (dest len mismatch).
+        // The archive is staged at a temp path guaranteed to be OUTSIDE backup_base,
+        // so upload_to_local's source and dest differ here. NOTE: this test does NOT
+        // guard against handle_start staging the archive inside the backup dir — the
+        // staged path is hardcoded, independent of handle_start. That failure mode is
+        // documented by the ignored test_local_upload_self_copy_does_not_truncate.
         let backup_base = std::env::temp_dir().join(format!("escluse-test-base-{}", uuid::Uuid::new_v4()));
         let sid = uuid::Uuid::new_v4().to_string();
         let fname = format!("backup-{}.tar.gz", uuid::Uuid::new_v4());
@@ -601,6 +633,83 @@ mod tests {
         assert!(err.to_string().contains("no data on this node"), "got: {}", err);
 
         let _ = tokio::fs::remove_file(&dest).await;
+    }
+
+    // Self-copy regression: staging the archive at exactly {backup_base}/{sid}/{fname}
+    // (the old buggy handle_start behavior) makes upload_to_local's fs::copy run with
+    // source == dest, truncating the archive to 0 bytes. This test documents that
+    // failure mode; un-ignore once upload_to_local learns to skip same-path copies.
+    #[tokio::test]
+    #[ignore = "documents the self-copy truncation failure mode; un-ignore when upload_to_local skips same-path copies"]
+    async fn test_local_upload_self_copy_does_not_truncate() {
+        let tmp = std::env::temp_dir().join(format!("escluse-test-sc-{}", uuid::Uuid::new_v4()));
+        tokio::fs::create_dir_all(tmp.join("world")).await.unwrap();
+        tokio::fs::write(tmp.join("world").join("level.dat"), b"fake-level-data").await.unwrap();
+
+        let backup_base = std::env::temp_dir().join(format!("escluse-test-sc-base-{}", uuid::Uuid::new_v4()));
+        let sid = uuid::Uuid::new_v4().to_string();
+        let fname = format!("backup-{}.tar.gz", uuid::Uuid::new_v4());
+
+        // Simulate the old handle_start: the archive lives inside the backup dir at
+        // its final storage path, so source == dest when upload_to_local runs.
+        let same_path = backup_base.join(&sid).join(&fname);
+        tokio::fs::create_dir_all(same_path.parent().unwrap()).await.unwrap();
+        let (size, _checksum) = create_local_server_archive(&tmp, &same_path).await.unwrap();
+        assert!(size > 0, "archive should not be empty");
+
+        upload_to_local(&same_path, &backup_base, &sid, &fname).await.unwrap();
+
+        let after = tokio::fs::metadata(&same_path).await.unwrap().len();
+        assert!(after > 0, "self-copy must not truncate the archive to 0 bytes");
+
+        let _ = tokio::fs::remove_dir_all(&tmp).await;
+        let _ = tokio::fs::remove_dir_all(&backup_base).await;
+    }
+
+    #[tokio::test]
+    async fn test_resolve_backup_path_by_name() {
+        let backup_dir = std::env::temp_dir().join(format!("escluse-test-resolve-{}", uuid::Uuid::new_v4()));
+        tokio::fs::create_dir_all(&backup_dir).await.unwrap();
+        let old = backup_dir.join("backup-old.tar.gz");
+        let new = backup_dir.join("backup-new.tar.gz");
+        tokio::fs::write(&old, b"old").await.unwrap();
+        tokio::fs::write(&new, b"new").await.unwrap();
+
+        let picked = resolve_backup_path(&backup_dir, Some("backup-old.tar.gz")).unwrap();
+        assert_eq!(picked, old, "must pick the named archive, not another one");
+
+        let err = resolve_backup_path(&backup_dir, Some("../backup-old.tar.gz")).unwrap_err();
+        assert!(err.to_string().contains("Invalid backup file name"), "got: {}", err);
+
+        let err = resolve_backup_path(&backup_dir, Some("nope.tar.gz")).unwrap_err();
+        assert!(err.to_string().contains("Backup file not found: nope.tar.gz"), "got: {}", err);
+
+        let _ = tokio::fs::remove_dir_all(&backup_dir).await;
+    }
+
+    #[tokio::test]
+    async fn test_resolve_backup_path_latest_fallback() {
+        let backup_dir = std::env::temp_dir().join(format!("escluse-test-fallback-{}", uuid::Uuid::new_v4()));
+        tokio::fs::create_dir_all(&backup_dir).await.unwrap();
+        let older = backup_dir.join("backup-older.tar.gz");
+        let newer = backup_dir.join("backup-newer.tar.gz");
+        tokio::fs::write(&older, b"older").await.unwrap();
+        tokio::fs::write(&newer, b"newer").await.unwrap();
+        tokio::fs::write(backup_dir.join("notes.txt"), b"not an archive").await.unwrap();
+
+        // Explicit mtimes so "newest" is deterministic and independent of write order.
+        let epoch = std::time::UNIX_EPOCH + std::time::Duration::from_secs(1_700_000_000);
+        let f = std::fs::OpenOptions::new().write(true).open(&older).unwrap();
+        f.set_modified(epoch).unwrap();
+        drop(f);
+        let f = std::fs::OpenOptions::new().write(true).open(&newer).unwrap();
+        f.set_modified(epoch + std::time::Duration::from_secs(60)).unwrap();
+        drop(f);
+
+        let picked = resolve_backup_path(&backup_dir, None).unwrap();
+        assert_eq!(picked, newer, "must pick the newest archive when no name is given");
+
+        let _ = tokio::fs::remove_dir_all(&backup_dir).await;
     }
 }
 
