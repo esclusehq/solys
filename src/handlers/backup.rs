@@ -16,6 +16,7 @@ use tokio::process::Command;
 use tracing::{info, warn};
 use zeroize::Zeroizing;
 
+use flate2::read::GzDecoder;
 use reqwest::Client as HttpClient;
 
 use crate::task_state::TASK_STATE_TRACKER;
@@ -36,7 +37,8 @@ pub fn init_data_dir(dir: PathBuf) {
 fn safe_extract_tar(archive_path: &Path, dest: &Path) -> Result<()> {
     let file = File::open(archive_path)
         .with_context(|| format!("Failed to open archive: {}", archive_path.display()))?;
-    let mut archive = Archive::new(file);
+    // Backups are `.tar.gz` — decompress gzip before reading tar entries.
+    let mut archive = Archive::new(GzDecoder::new(file));
 
     let mut count: u64 = 0;
     for entry in archive.entries()? {
@@ -632,7 +634,12 @@ mod tests {
         let mut out = header.to_vec();
         out.extend_from_slice(data);
         out.resize(((out.len() + 511) / 512) * 512, 0);
-        out
+        // Backups are `.tar.gz` — gzip-compress so the extractor exercises
+        // its real GzDecoder path (a raw tar must NOT be extractable).
+        let mut encoder = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::default());
+        use std::io::Write;
+        encoder.write_all(&out).unwrap();
+        encoder.finish().unwrap()
     }
 
     #[test]

@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## v0.5.30
+
+### Fixed
+- Restore now actually works: backups are `.tar.gz`, but the extractor was reading them as raw tar (gzip never decompressed), failing instantly with "Failed to extract backup archive". Extract now decompresses gzip before reading entries.
+
 ## v0.5.29
 
 ### Fixed
