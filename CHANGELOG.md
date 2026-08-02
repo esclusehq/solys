@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## v0.5.32
+
+### Fixed
+- Release pipeline: removed the rust-cache step from the release build job. A stale cache hit caused v0.5.31 to ship a binary built from the previous release's source, so the `backup.delete` handler never made it into any published artifact (agent fell back to the shell with `backup.delete: not found`, breaking retention pruning). Release builds are now always fresh from the tagged source.
+
 ## v0.5.31
 
 ### Added
