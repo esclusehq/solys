@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## v0.5.31
+
+### Added
+- New `backup.delete` task arm: deletes an archive from the node's local backup directory. Validates the archive name (rejects path traversal), canonical-path guard keeps deletions inside the server's backup dir, and a missing archive is treated as already deleted (idempotent) so the backend can safely remove its DB row.
+
 ## v0.5.30
 
 ### Fixed
