@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## v0.5.26
+
+### Fixed
+- Agent backups on devices without Docker: `backup.start` archives the server's data directory directly with the local `tar` binary instead of `docker exec`, and `backup.restore` extracts into the server folder without `docker stop`/`docker cp`.
+
 ## [v0.5.25] - 2026-08-02
 
 ### Fixed
