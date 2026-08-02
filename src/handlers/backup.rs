@@ -20,7 +20,7 @@ use reqwest::Client as HttpClient;
 
 use crate::task_state::TASK_STATE_TRACKER;
 
-use crate::handlers::direct_executor::{server_dir_path, DIRECT_SERVERS};
+use crate::handlers::direct_executor::{server_dir_path, ServerStatus, DIRECT_SERVERS};
 
 use agent_backup::calculate_checksum;
 use agent_backup::upload::{upload_to_s3_with_config, upload_to_local};
@@ -539,14 +539,17 @@ async fn run_backup_start(
 pub async fn handle_restore(task: Task) -> Result<serde_json::Value> {
     let payload: BackupRestorePayload = serde_json::from_value(task.payload)?;
 
-    // Guard: reject restore while the server is running. A live server process
+    // Guard: reject restore while the server is RUNNING. A live server process
     // holds flock/fds on `session.lock` and region/entities/poi `.mca` files,
     // which makes the extraction block indefinitely (and can corrupt the world).
-    if DIRECT_SERVERS
+    // Stopped/Crashed servers in the registry are fine to restore over.
+    let is_running = DIRECT_SERVERS
         .lock()
         .unwrap_or_else(|e| e.into_inner())
-        .contains_key(&payload.server_id)
-    {
+        .get(&payload.server_id)
+        .map(|state| state.status == ServerStatus::Running)
+        .unwrap_or(false);
+    if is_running {
         anyhow::bail!(
             "Cannot restore backup while server '{}' is running. Stop the server first.",
             payload.server_id
@@ -743,6 +746,63 @@ mod tests {
         assert!(
             err.to_string().contains("running"),
             "guard error must mention the server is running, got: {}",
+            err
+        );
+    }
+
+    #[tokio::test]
+    async fn test_handle_restore_allows_stopped_server() {
+        struct RemoveServerEntry(uuid::Uuid);
+        impl Drop for RemoveServerEntry {
+            fn drop(&mut self) {
+                DIRECT_SERVERS
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .remove(&self.0);
+            }
+        }
+
+        let server_id = uuid::Uuid::new_v4();
+        let _cleanup = RemoveServerEntry(server_id);
+
+        let data_dir = std::env::temp_dir().join(format!("escluse-test-data-{}", uuid::Uuid::new_v4()));
+        init_data_dir(data_dir);
+
+        let state = ServerState {
+            server_id,
+            display_name: "test-server".to_string(),
+            mc_loader: McLoader::Vanilla,
+            mc_version: "1.20.4".to_string(),
+            status: ServerStatus::Stopped,
+            port: 25565,
+            allocated_ram: 1024,
+            path: std::env::temp_dir().join("escluse-test-restore-guard-stopped"),
+            rcon_port: 25575,
+            rcon_password: String::new(),
+            child: None,
+            eula_accepted: true,
+            auto_restart: false,
+        };
+        DIRECT_SERVERS
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .insert(server_id, state);
+
+        let task = Task::new(
+            "backup.restore".to_string(),
+            serde_json::json!({
+                "server_id": server_id.to_string(),
+                "container_id": "test-container",
+                "backup_id": uuid::Uuid::new_v4().to_string(),
+                "target_paths": [],
+                "file_name": "backup-test.tar.gz",
+            }),
+        );
+
+        let err = handle_restore(task).await.unwrap_err();
+        assert!(
+            !err.to_string().contains("running"),
+            "a stopped server must NOT be blocked by the running-guard, got: {}",
             err
         );
     }
