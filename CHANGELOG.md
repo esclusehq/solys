@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## v0.5.27
+
+### Fixed
+- Backup archives are now stored correctly instead of being emptied during upload; restore now restores exactly the backup you selected.
+
 ## v0.5.26
 
 ### Fixed
