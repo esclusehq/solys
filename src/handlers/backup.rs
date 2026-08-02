@@ -378,6 +378,7 @@ async fn create_local_server_archive(server_dir: &Path, dest_path: &Path) -> Res
 ///   2. Agent uploads directly to S3 or local storage (no proxy through Worker/API)
 ///   3. Agent reports result (backup_id, size_bytes, checksum, storage_path) via TaskResult
 pub async fn handle_start(task: Task) -> anyhow::Result<serde_json::Value> {
+    let task_id = task.id;
     let payload: BackupStartPayload = serde_json::from_value(task.payload)?;
     let started_at = std::time::Instant::now();
 
@@ -405,54 +406,67 @@ pub async fn handle_start(task: Task) -> anyhow::Result<serde_json::Value> {
         }
     }
 
-    // 1. Create archive from container data directory
-    let backup_dir = DATA_DIR.get().expect("DATA_DIR not initialized").join("backups")
-        .join(payload.server_id.to_string());
-    tokio::fs::create_dir_all(&backup_dir).await?;
+    // 1. Archive to a temp path — never inside the backup dir, so upload_to_local
+    //    can copy it to its final storage path without self-copying (fs::copy to
+    //    the same path truncates the archive to 0 bytes).
+    let archive_path = std::env::temp_dir()
+        .join(format!("escluse-archive-{}.tar.gz", uuid::Uuid::new_v4()));
 
-    let archive_path = backup_dir.join(&payload.file_name);
+    // Run the body, then remove the temp archive on success AND error paths.
+    let result = run_backup_start(&payload, task_id, &archive_path, started_at).await;
+    let _ = tokio::fs::remove_file(&archive_path).await;
+    result
+}
 
-    TASK_STATE_TRACKER.update(task.id, |s: &mut crate::task_state::TaskState| {
+/// Archive + upload body of `handle_start` — kept separate so the temp archive
+/// is always cleaned up by the caller, regardless of the outcome.
+async fn run_backup_start(
+    payload: &BackupStartPayload,
+    task_id: uuid::Uuid,
+    archive_path: &Path,
+    started_at: std::time::Instant,
+) -> anyhow::Result<serde_json::Value> {
+    TASK_STATE_TRACKER.update(task_id, |s: &mut crate::task_state::TaskState| {
         s.update_progress(20.0, "Creating archive...")
     }).await;
-    crate::task_state::send_progress(task.id, "running", 20.0, "Creating archive...").await;
+    crate::task_state::send_progress(task_id, "running", 20.0, "Creating archive...").await;
 
     let server_dir = server_dir_path(
         DATA_DIR.get().expect("DATA_DIR not initialized"),
         &payload.server_id,
     );
-    let (archive_size, archive_checksum) = create_local_server_archive(&server_dir, &archive_path).await?;
+    let (archive_size, archive_checksum) = create_local_server_archive(&server_dir, archive_path).await?;
 
     // 2. Calculate checksum
     let checksum = if archive_checksum.is_empty() {
-        calculate_checksum(&archive_path).await?
+        calculate_checksum(archive_path).await?
     } else {
         archive_checksum
     };
 
     // 3. Upload directly to storage (D-11 — no proxy)
-    TASK_STATE_TRACKER.update(task.id, |s: &mut crate::task_state::TaskState| {
+    TASK_STATE_TRACKER.update(task_id, |s: &mut crate::task_state::TaskState| {
         s.update_progress(60.0, "Uploading backup...")
     }).await;
-    crate::task_state::send_progress(task.id, "running", 60.0, "Uploading backup...").await;
+    crate::task_state::send_progress(task_id, "running", 60.0, "Uploading backup...").await;
 
     // C-04: Check for pre-signed URL / proxy-via-backend path first
     let storage_path = if let Some(ref upload_url) = payload.upload_url {
         if !upload_url.is_empty() {
             info!("Uploading via pre-signed/proxy URL (C-04)");
-            upload_via_http(&archive_path, upload_url, payload.upload_headers.as_ref()).await?
+            upload_via_http(archive_path, upload_url, payload.upload_headers.as_ref()).await?
         } else {
             // empty upload_url — fall through to existing provider-based upload
-            upload_via_existing(&payload, &archive_path).await?
+            upload_via_existing(payload, archive_path).await?
         }
     } else {
-        upload_via_existing(&payload, &archive_path).await?
+        upload_via_existing(payload, archive_path).await?
     };
 
-    TASK_STATE_TRACKER.update(task.id, |s: &mut crate::task_state::TaskState| {
+    TASK_STATE_TRACKER.update(task_id, |s: &mut crate::task_state::TaskState| {
         s.update_progress(100.0, "Backup complete")
     }).await;
-    crate::task_state::send_progress(task.id, "completed", 100.0, "Backup complete").await;
+    crate::task_state::send_progress(task_id, "completed", 100.0, "Backup complete").await;
 
     let output = BackupStartOutput {
         backup_id: payload.backup_id,
@@ -540,6 +554,42 @@ mod tests {
 
         let _ = tokio::fs::remove_dir_all(&tmp).await;
         let _ = tokio::fs::remove_file(&dest).await;
+    }
+
+    #[tokio::test]
+    async fn test_backup_archive_survives_local_upload() {
+        let tmp = std::env::temp_dir().join(format!("escluse-test-server-{}", uuid::Uuid::new_v4()));
+        tokio::fs::create_dir_all(tmp.join("world")).await.unwrap();
+        tokio::fs::write(tmp.join("world").join("level.dat"), b"fake-level-data").await.unwrap();
+
+        // Archive is staged in temp, OUTSIDE the backup base — mirrors the fixed
+        // handle_start. If the archive path is ever placed inside the backup dir
+        // again, upload_to_local self-copies and truncates it (dest len mismatch).
+        let backup_base = std::env::temp_dir().join(format!("escluse-test-base-{}", uuid::Uuid::new_v4()));
+        let sid = uuid::Uuid::new_v4().to_string();
+        let fname = format!("backup-{}.tar.gz", uuid::Uuid::new_v4());
+        let archive_path = std::env::temp_dir().join(format!("escluse-test-upload-{}.tar.gz", uuid::Uuid::new_v4()));
+
+        let (size, _checksum) = create_local_server_archive(&tmp, &archive_path).await.unwrap();
+        assert!(size > 0, "archive should not be empty");
+
+        upload_to_local(&archive_path, &backup_base, &sid, &fname).await.unwrap();
+
+        let dest = backup_base.join(&sid).join(&fname);
+        assert!(tokio::fs::metadata(&dest).await.is_ok(), "dest file should exist");
+        assert_eq!(
+            tokio::fs::metadata(&dest).await.unwrap().len(),
+            size,
+            "dest must keep the full archive size (no self-copy truncation)"
+        );
+
+        let src_bytes = tokio::fs::read(&archive_path).await.unwrap();
+        let dest_bytes = tokio::fs::read(&dest).await.unwrap();
+        assert_eq!(src_bytes, dest_bytes, "dest bytes must equal the staged archive bytes");
+
+        let _ = tokio::fs::remove_dir_all(&tmp).await;
+        let _ = tokio::fs::remove_dir_all(&backup_base).await;
+        let _ = tokio::fs::remove_file(&archive_path).await;
     }
 
     #[tokio::test]
