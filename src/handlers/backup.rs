@@ -5,6 +5,7 @@
 use std::fs::File;
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
+use std::time::Duration;
 
 use agent_proto::Task;
 use anyhow::{Context, Result};
@@ -19,7 +20,7 @@ use reqwest::Client as HttpClient;
 
 use crate::task_state::TASK_STATE_TRACKER;
 
-use crate::handlers::direct_executor::server_dir_path;
+use crate::handlers::direct_executor::{server_dir_path, DIRECT_SERVERS};
 
 use agent_backup::calculate_checksum;
 use agent_backup::upload::{upload_to_s3_with_config, upload_to_local};
@@ -37,8 +38,13 @@ fn safe_extract_tar(archive_path: &Path, dest: &Path) -> Result<()> {
         .with_context(|| format!("Failed to open archive: {}", archive_path.display()))?;
     let mut archive = Archive::new(file);
 
+    let mut count: u64 = 0;
     for entry in archive.entries()? {
         let mut entry = entry?;
+        count += 1;
+        if count % 100 == 0 {
+            info!(count, archive = %archive_path.display(), "Backup restore extract progress");
+        }
         let entry_path = entry.path()?;
 
         // Resolve target path and verify it stays under dest
@@ -533,6 +539,20 @@ async fn run_backup_start(
 pub async fn handle_restore(task: Task) -> Result<serde_json::Value> {
     let payload: BackupRestorePayload = serde_json::from_value(task.payload)?;
 
+    // Guard: reject restore while the server is running. A live server process
+    // holds flock/fds on `session.lock` and region/entities/poi `.mca` files,
+    // which makes the extraction block indefinitely (and can corrupt the world).
+    if DIRECT_SERVERS
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .contains_key(&payload.server_id)
+    {
+        anyhow::bail!(
+            "Cannot restore backup while server '{}' is running. Stop the server first.",
+            payload.server_id
+        );
+    }
+
     info!(
         server_id = %payload.server_id,
         backup_id = %payload.backup_id,
@@ -552,9 +572,22 @@ pub async fn handle_restore(task: Task) -> Result<serde_json::Value> {
     );
     tokio::fs::create_dir_all(&server_dir).await?;
 
-    // Step 2: Extract archive into server directory (path-traversal protected)
-    safe_extract_tar(&backup_path, &server_dir)
-        .context("Failed to extract backup archive")?;
+    // Step 2: Extract archive into server directory (path-traversal protected).
+    // Run on a blocking thread with a hard timeout so a stuck extraction can
+    // never hang the task without a response.
+    let extract = tokio::task::spawn_blocking(move || safe_extract_tar(&backup_path, &server_dir));
+    match tokio::time::timeout(Duration::from_secs(900), extract).await {
+        Err(_) => {
+            anyhow::bail!("Restore timed out after 15 minutes")
+        }
+        Ok(Err(join_err)) => {
+            return Err(anyhow::anyhow!("Extract task failed: {join_err}"));
+        }
+        Ok(Ok(Ok(()))) => {}
+        Ok(Ok(Err(extract_err))) => {
+            return Err(extract_err.context("Failed to extract backup archive"));
+        }
+    }
 
     info!(backup_id = %payload.backup_id, "Backup restored successfully");
 
@@ -568,6 +601,151 @@ pub async fn handle_restore(task: Task) -> Result<serde_json::Value> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    use crate::handlers::direct_executor::{McLoader, ServerStatus, ServerState};
+
+    /// Build a minimal raw tar (ustar) with a single regular-file entry at
+    /// `name` containing `data`. Hand-rolled because `tar::Builder` refuses
+    /// absolute paths and `..` components at build time, while the extractor
+    /// must still defend against them.
+    fn raw_tar_entry(name: &str, data: &[u8]) -> Vec<u8> {
+        let mut header = [0u8; 512];
+        let name_bytes = name.as_bytes();
+        let n = name_bytes.len().min(100);
+        header[..n].copy_from_slice(&name_bytes[..n]);
+        header[100..108].copy_from_slice(b"0000644\0");
+        header[108..116].copy_from_slice(b"0000000\0");
+        header[116..124].copy_from_slice(b"0000000\0");
+        let size = format!("{:011o}\0", data.len());
+        header[124..136].copy_from_slice(size.as_bytes());
+        header[136..148].copy_from_slice(b"00000000000\0");
+        header[148..156].fill(b' ');
+        header[156] = b'0';
+        header[257..263].copy_from_slice(b"ustar\0");
+        header[263..265].copy_from_slice(b"00");
+        let checksum: u32 = header.iter().map(|b| *b as u32).sum();
+        header[148..156].copy_from_slice(format!("{:06o}\0 ", checksum).as_bytes());
+
+        let mut out = header.to_vec();
+        out.extend_from_slice(data);
+        out.resize(((out.len() + 511) / 512) * 512, 0);
+        out
+    }
+
+    #[test]
+    fn test_safe_extract_tar_extracts_clean_archive() {
+        let archive_bytes = raw_tar_entry("world/level.dat", b"fake-level!");
+
+        let tmp = std::env::temp_dir().join(format!("escluse-test-extract-{}", uuid::Uuid::new_v4()));
+        let archive_path = tmp.join("backup.tar.gz");
+        let dest = tmp.join("dest");
+        std::fs::create_dir_all(&dest).unwrap();
+        std::fs::write(&archive_path, &archive_bytes).unwrap();
+
+        safe_extract_tar(&archive_path, &dest).unwrap();
+        assert_eq!(
+            std::fs::read(dest.join("world").join("level.dat")).unwrap(),
+            b"fake-level!",
+            "extracted file must match the archived bytes"
+        );
+
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn test_safe_extract_tar_skips_parent_dir_entries() {
+        let archive_bytes = raw_tar_entry("../escape.txt", b"evil");
+
+        let tmp = std::env::temp_dir().join(format!("escluse-test-parent-{}", uuid::Uuid::new_v4()));
+        let archive_path = tmp.join("backup.tar.gz");
+        let dest = tmp.join("dest");
+        std::fs::create_dir_all(&dest).unwrap();
+        std::fs::write(&archive_path, &archive_bytes).unwrap();
+
+        safe_extract_tar(&archive_path, &dest).unwrap();
+        assert!(
+            !tmp.join("escape.txt").exists(),
+            "a `..` entry must never escape the destination directory"
+        );
+
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn test_safe_extract_tar_rejects_absolute_path() {
+        let archive_bytes = raw_tar_entry("/etc/escape.txt", b"evil");
+
+        let tmp = std::env::temp_dir().join(format!("escluse-test-abs-{}", uuid::Uuid::new_v4()));
+        let archive_path = tmp.join("backup.tar.gz");
+        let dest = tmp.join("dest");
+        std::fs::create_dir_all(&dest).unwrap();
+        std::fs::write(&archive_path, &archive_bytes).unwrap();
+
+        let err = safe_extract_tar(&archive_path, &dest).unwrap_err();
+        assert!(err.to_string().contains("Path traversal"), "got: {}", err);
+        assert!(
+            !dest.join("escape.txt").exists(),
+            "nothing may be written when traversal is detected"
+        );
+
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[tokio::test]
+    async fn test_handle_restore_rejects_running_server() {
+        // Drop-guard: remove the dummy registry entry even if the test panics,
+        // so it can never leak into other tests running in this process.
+        struct RemoveServerEntry(uuid::Uuid);
+        impl Drop for RemoveServerEntry {
+            fn drop(&mut self) {
+                DIRECT_SERVERS
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .remove(&self.0);
+            }
+        }
+
+        let server_id = uuid::Uuid::new_v4();
+        let _cleanup = RemoveServerEntry(server_id);
+
+        let state = ServerState {
+            server_id,
+            display_name: "test-server".to_string(),
+            mc_loader: McLoader::Vanilla,
+            mc_version: "1.20.4".to_string(),
+            status: ServerStatus::Running,
+            port: 25565,
+            allocated_ram: 1024,
+            path: std::env::temp_dir().join("escluse-test-restore-guard"),
+            rcon_port: 25575,
+            rcon_password: String::new(),
+            child: None,
+            eula_accepted: true,
+            auto_restart: false,
+        };
+        DIRECT_SERVERS
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .insert(server_id, state);
+
+        let task = Task::new(
+            "backup.restore".to_string(),
+            serde_json::json!({
+                "server_id": server_id.to_string(),
+                "container_id": "test-container",
+                "backup_id": uuid::Uuid::new_v4().to_string(),
+                "target_paths": [],
+                "file_name": "backup-test.tar.gz",
+            }),
+        );
+
+        let err = handle_restore(task).await.unwrap_err();
+        assert!(
+            err.to_string().contains("running"),
+            "guard error must mention the server is running, got: {}",
+            err
+        );
+    }
 
     #[tokio::test]
     async fn test_create_local_server_archive_ok() {
