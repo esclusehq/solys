@@ -83,6 +83,10 @@ pub struct BackupCreateOutput {
     pub location: String,
 }
 
+/// Fields `container_id` and `target_paths` are part of the wire contract with the
+/// backend but are no longer read locally (restore now extracts into the local
+/// server data dir).
+#[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 pub struct BackupRestorePayload {
     pub server_id: uuid::Uuid,
@@ -497,50 +501,23 @@ pub async fn handle_restore(task: Task) -> Result<serde_json::Value> {
     let backup_path = backup_file
         .context("Backup file not found")?;
 
-    // Step 1: Stop container
-    info!(container_id = %payload.container_id, "Stopping container for restore");
-    let _ = Command::new("docker")
-        .args(["stop", "-t", "30", &payload.container_id])
-        .output()
-        .await;
+    // Step 1: Resolve server data directory
+    let server_dir = server_dir_path(
+        DATA_DIR.get().expect("DATA_DIR not initialized"),
+        &payload.server_id,
+    );
+    tokio::fs::create_dir_all(&server_dir).await?;
 
-    // Step 2: Restore volumes
-    for target_path in &payload.target_paths {
-        // Create temp directory
-        let temp_dir = PathBuf::from(format!("/tmp/escluse-restore-{}", uuid::Uuid::new_v4()));
-        tokio::fs::create_dir_all(&temp_dir).await?;
-
-        // Extract with path traversal protection using Rust tar crate
-        safe_extract_tar(&backup_path, &temp_dir)
-            .context("Failed to extract backup archive")?;
-
-        // Copy back to container
-        let copy_source = temp_dir.join(target_path.trim_start_matches('/'));
-        if copy_source.exists() {
-            let dest = format!("{}:{}", payload.container_id, target_path);
-            let _ = Command::new("docker")
-                .args(["cp", copy_source.to_string_lossy().as_ref(), &dest])
-                .output()
-                .await;
-        }
-
-        // Cleanup
-        let _ = tokio::fs::remove_dir_all(&temp_dir).await;
-    }
-
-    // Step 3: Start container
-    info!(container_id = %payload.container_id, "Starting container after restore");
-    let _ = Command::new("docker")
-        .args(["start", &payload.container_id])
-        .output()
-        .await;
+    // Step 2: Extract archive into server directory (path-traversal protected)
+    safe_extract_tar(&backup_path, &server_dir)
+        .context("Failed to extract backup archive")?;
 
     info!(backup_id = %payload.backup_id, "Backup restored successfully");
 
     Ok(serde_json::json!({
         "status": "restored",
         "backup_id": payload.backup_id,
-        "container_id": payload.container_id
+        "server_id": payload.server_id
     }))
 }
 
