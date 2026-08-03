@@ -1207,12 +1207,42 @@ pub async fn run(
                                                                        Err(e) => (false, format!("{}", e)),
                                                                    }
                                                                }
-                                                               None => (false, "backup_id is required".to_string()),
-                                                           }
-                                                       }
-                                                       _ => {
-                                                        // Generic shell fallback for unknown commands
-                                                        let r = tokio::process::Command::new("sh").arg("-c").arg(&cmd).output().await;
+None => (false, "backup_id is required".to_string()),
+                                                            }
+                                                        }
+                                                        "backup.delete" => {
+                                                            // Route agent-side backup deletion (D-12) from the deployed
+                                                            // backend's raw JSON protocol into the canonical backup
+                                                            // handler (previously fell through to the generic shell arm,
+                                                            // running `sh -c "backup.delete"` → "backup.delete: not found").
+                                                            let file_name = params
+                                                                .get("file_name")
+                                                                .and_then(|v| v.as_str())
+                                                                .unwrap_or("")
+                                                                .to_string();
+                                                            if file_name.is_empty() {
+                                                                (false, "file_name is required".to_string())
+                                                            } else {
+                                                                let task = agent_proto::Task::new(
+                                                                    "backup.delete".to_string(),
+                                                                    serde_json::json!({
+                                                                        "server_id": server_id,
+                                                                        "container_name": container_name,
+                                                                        "container_id": params
+                                                                            .get("container_id")
+                                                                            .and_then(|v| v.as_str()),
+                                                                        "file_name": file_name,
+                                                                    }),
+                                                                );
+                                                                match crate::handlers::backup::handle_delete(task).await {
+                                                                    Ok(v) => (true, v.to_string()),
+                                                                    Err(e) => (false, format!("{}", e)),
+                                                                }
+                                                            }
+                                                        }
+                                                        _ => {
+                                                         // Generic shell fallback for unknown commands
+                                                         let r = tokio::process::Command::new("sh").arg("-c").arg(&cmd).output().await;
                                                         match r {
                                                             Ok(out) => {
                                                                 let s = String::from_utf8_lossy(&out.stdout).to_string();
