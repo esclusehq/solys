@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## v0.5.33
+
+### Fixed
+- `backup.delete` from the deployed backend's raw JSON protocol now routes into the canonical backup handler instead of falling through to the generic shell arm (`sh -c "backup.delete"` → `backup.delete: not found`), so retention pruning actually deletes archives on the node.
+
 ## v0.5.32
 
 ### Fixed
