@@ -826,7 +826,7 @@ pub async fn run(
                                                                                    &file_rcon_password,
                                                                                ).await;
                                                                                let is_neoforge = matches!(mc_loader, McLoader::NeoForge);
-let is_forge = matches!(mc_loader, McLoader::Forge);
+                                                                               let is_forge = matches!(mc_loader, McLoader::Forge);
                                                                                 let run_sh = format!("{}/run.sh", server_dir);
                                                                                 // Clear any stale latest.log from a previous boot BEFORE spawning
                                                                                 // so the ready watcher only ever sees this boot's lines.
@@ -920,7 +920,7 @@ auto_restart: false,
                                                                                 rcon_port,
                                                                                 &file_rcon_password,
                                                                             ).await;
-let _ = truncate_server_log(&config.data_dir, &server_id);
+                                                                            let _ = truncate_server_log(&config.data_dir, &server_id);
                                                                             let r = tokio::process::Command::new(&java_path)
                                                                                 .arg(format!("-Xmx{}M", ram_mb)).arg(format!("-Xms{}M", ram_mb))
                                                                                 .arg("-jar").arg(jar_path)
