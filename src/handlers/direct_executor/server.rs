@@ -28,6 +28,27 @@ use crate::handlers::rcon::RconPacket;
 use crate::task_state::{send_log_output, send_progress};
 use super::*;
 
+/// How long to wait for the MC "Done" line before reporting ready anyway
+/// (backend grace timeout is 600s; 480s keeps us comfortably under it).
+const READY_TIMEOUT: Duration = Duration::from_secs(480);
+
+/// Send a `command_status` "ready" message to the backend over the same
+/// progress channel used for log output, so a started server is promoted
+/// from `container_running` to `running` once Minecraft is fully up.
+async fn send_ready_status(server_id: Uuid, request_id: Uuid, command: &str) {
+    if let Some(sender) = crate::task_state::get_progress_sender() {
+        let msg = serde_json::json!({
+            "type": "command_status",
+            "request_id": request_id,
+            "command": command,
+            "server_id": server_id,
+            "status": "ready",
+            "message": "Minecraft server ready",
+        });
+        let _ = sender.try_send(OutboundMessage::Raw(msg.to_string()));
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Private helpers
 // ---------------------------------------------------------------------------
@@ -354,8 +375,20 @@ pub async fn handle_start(task: Task) -> Result<serde_json::Value> {
     let sid_stderr = server_id;
     let sid_crash = server_id;
     let log_path_for_monitor = log_path.clone();
+    // Task 3: the backend promotes to `running` on command_status ready with
+    // command "start" or "restart" — derive which one this boot corresponds to.
+    let ready_request_id = task_id;
+    let ready_command = if task.task_type.contains("restart") {
+        "restart"
+    } else {
+        "start"
+    };
 
-    // Spawn stdout log piping
+    // Spawn stdout log piping.
+    // Task 3: watch the "Done" line and report the server ready to the
+    // backend; a 480s grace timeout reports ready anyway so the server never
+    // sits in `container_running`. EOF (process exit) stops the loop without
+    // reporting — crash/stop handling owns that path.
     tokio::spawn(async move {
         let _ = tokio::fs::create_dir_all(log_path.parent().unwrap()).await;
         let mut log_file = match tokio::fs::OpenOptions::new()
@@ -373,11 +406,39 @@ pub async fn handle_start(task: Task) -> Result<serde_json::Value> {
 
         let reader = TokioBufReader::new(stdout);
         let mut lines = reader.lines();
-        while let Ok(Some(line)) = lines.next_line().await {
-            let _ = log_file.write_all(line.as_bytes()).await;
-            let _ = log_file.write_all(b"\n").await;
-            let _ = log_file.flush().await;
-            send_log_output(sid_log, line, "stdout".to_string()).await;
+        let mut ready_sent = false;
+        let ready_deadline = tokio::time::sleep(READY_TIMEOUT);
+        tokio::pin!(ready_deadline);
+        loop {
+            tokio::select! {
+                line = lines.next_line() => {
+                    match line {
+                        Ok(Some(line)) => {
+                            let _ = log_file.write_all(line.as_bytes()).await;
+                            let _ = log_file.write_all(b"\n").await;
+                            let _ = log_file.flush().await;
+                            if !ready_sent && is_mc_done_line(&line) {
+                                ready_sent = true;
+                                info!(server_id = %sid_log, "Minecraft server ready (Done line detected)");
+                                send_ready_status(sid_log, ready_request_id, &ready_command).await;
+                            }
+                            send_log_output(sid_log, line, "stdout".to_string()).await;
+                        }
+                        // EOF (process exited) or read error: stop without
+                        // reporting ready — crash/stop monitoring owns the state.
+                        _ => break,
+                    }
+                }
+                _ = &mut ready_deadline => {
+                    if !ready_sent {
+                        ready_sent = true;
+                        warn!(server_id = %sid_log, "ready timeout — reporting ready anyway");
+                        send_ready_status(sid_log, ready_request_id, &ready_command).await;
+                    }
+                    // Keep piping logs; the deadline only gates the ready signal.
+                    ready_deadline.as_mut().reset(tokio::time::Instant::now() + READY_TIMEOUT);
+                }
+            }
         }
     });
 
@@ -708,4 +769,52 @@ pub async fn handle_status(task: Task) -> Result<serde_json::Value> {
         "rcon_port": state.rcon_port,
         "auto_restart": state.auto_restart,
     }))
+}
+
+// ---------------------------------------------------------------------------
+// Readiness detection (Task 3 — MC "Done" line)
+// ---------------------------------------------------------------------------
+
+/// Detect the "server is ready" line from a vanilla Minecraft server boot.
+///
+/// Vanilla prints `[Server thread/INFO]: Done (4.732s)! For help, type "help"`
+/// once the world finished loading and the server accepts connections. The
+/// match is exact (case-sensitive) per the format the vanilla server prints.
+pub fn is_mc_done_line(line: &str) -> bool {
+    line.contains("Done (") && line.contains(")!")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn is_mc_done_line_matches_vanilla_done_line() {
+        assert!(is_mc_done_line(
+            r#"[Server thread/INFO]: Done (4.732s)! For help, type "help""#
+        ));
+    }
+
+    #[test]
+    fn is_mc_done_line_matches_bare_done_line() {
+        assert!(is_mc_done_line("[Server thread/INFO]: Done (1.234s)!"));
+    }
+
+    #[test]
+    fn is_mc_done_line_rejects_preparing_spawn_area() {
+        assert!(!is_mc_done_line("... Preparing spawn area: 100%"));
+    }
+
+    #[test]
+    fn is_mc_done_line_rejects_starting_server_line() {
+        assert!(!is_mc_done_line("Starting Minecraft server on *:25565"));
+    }
+
+    #[test]
+    fn is_mc_done_line_rejects_done_without_exclamation() {
+        // Contains "Done (" but no "!)" — must not match.
+        assert!(!is_mc_done_line(
+            "[Server thread/ERROR] ... Done (1.2s) was not exclaiming"
+        ));
+    }
 }
