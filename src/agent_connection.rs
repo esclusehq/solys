@@ -21,8 +21,8 @@ use tracing::{debug, error, info, trace, warn};
 use uuid::Uuid;
 
 use crate::handlers::direct_executor::{
-    download_jar, heal_server_properties, read_properties_values, DIRECT_SERVERS, ServerState,
-    ServerStatus, McLoader,
+    download_jar, heal_server_properties, is_mc_done_line, read_properties_values, server_log_path,
+    DIRECT_SERVERS, ServerState, ServerStatus, McLoader,
 };
 
 use base64::Engine;
@@ -63,6 +63,79 @@ pub fn redact_json(s: &str) -> String {
     } else {
         s.to_string()
     }
+}
+
+/// Wait for the MC "Done" line in `{server_dir}/logs/latest.log` (the file the
+/// server itself writes), then report `command_status` `ready` to the backend
+/// so the server is promoted from `container_running` to `running`.
+///
+/// Polls every 400 ms with a 480 s grace timeout; on timeout the ready message
+/// is still sent (log warning) so the backend never falls into its grace path.
+fn spawn_ready_watcher(
+    ws_tx: mpsc::Sender<OutboundMessage>,
+    request_id: Uuid,
+    command: String,
+    server_id: Uuid,
+    log_path: std::path::PathBuf,
+) {
+    tokio::spawn(async move {
+        let poll_ready = async {
+            loop {
+                tokio::time::sleep(std::time::Duration::from_millis(400)).await;
+                if let Ok(content) = tokio::fs::read_to_string(&log_path).await {
+                    if content.lines().any(is_mc_done_line) {
+                        return;
+                    }
+                }
+            }
+        };
+        match tokio::time::timeout(std::time::Duration::from_secs(480), poll_ready).await {
+            Ok(()) => {
+                info!(server_id = %server_id, "Minecraft server ready (Done line detected)");
+            }
+            Err(_) => {
+                warn!(server_id = %server_id, "ready timeout after 480s — reporting ready anyway");
+            }
+        }
+        let msg = serde_json::json!({
+            "type": "command_status",
+            "request_id": request_id,
+            "command": command,
+            "server_id": server_id,
+            "status": "ready",
+            "message": "Minecraft server ready",
+        });
+        let _ = ws_tx.send(OutboundMessage::Raw(msg.to_string())).await;
+    });
+}
+
+/// Container-path fallback: the agent cannot watch the container's console
+/// log, so report ready after a fixed 30 s delay (no new features beyond this).
+fn spawn_delayed_ready(
+    ws_tx: mpsc::Sender<OutboundMessage>,
+    request_id: Uuid,
+    command: String,
+    server_id: Uuid,
+    delay: std::time::Duration,
+) {
+    tokio::spawn(async move {
+        warn!(
+            server_id = %server_id,
+            command = %command,
+            "Container path: cannot watch host logs, reporting ready after {:?}",
+            delay
+        );
+        tokio::time::sleep(delay).await;
+        let msg = serde_json::json!({
+            "type": "command_status",
+            "request_id": request_id,
+            "command": command,
+            "server_id": server_id,
+            "status": "ready",
+            "message": "Minecraft server ready",
+        });
+        let _ = ws_tx.send(OutboundMessage::Raw(msg.to_string())).await;
+    });
 }
 
 fn prepare_ws_url(backend_url: &str) -> String {
@@ -665,6 +738,15 @@ pub async fn run(
                                                                     let s = String::from_utf8_lossy(&out.stdout).to_string();
                                                                     let e = String::from_utf8_lossy(&out.stderr).to_string();
                                                                     let combined = if e.is_empty() { s } else { format!("{}\n{}", s, e) };
+                                                                    if out.status.success() {
+                                                                        spawn_delayed_ready(
+                                                                            ws_tx.clone(),
+                                                                            request_id,
+                                                                            cmd.clone(),
+                                                                            server_id,
+                                                                            std::time::Duration::from_secs(30),
+                                                                        );
+                                                                    }
                                                                     (out.status.success(), combined)
                                                                 }
                                                                 Err(e) => (false, format!("podman failed: {}", e)),
@@ -678,6 +760,15 @@ pub async fn run(
                                                                     let s = String::from_utf8_lossy(&out.stdout).to_string();
                                                                     let e = String::from_utf8_lossy(&out.stderr).to_string();
                                                                     let combined = if e.is_empty() { s } else { format!("{}\n{}", s, e) };
+                                                                    if out.status.success() {
+                                                                        spawn_delayed_ready(
+                                                                            ws_tx.clone(),
+                                                                            request_id,
+                                                                            cmd.clone(),
+                                                                            server_id,
+                                                                            std::time::Duration::from_secs(30),
+                                                                        );
+                                                                    }
                                                                     (out.status.success(), combined)
                                                                 }
                                                                 Err(e) => (false, format!("docker failed: {}", e)),
@@ -763,10 +854,17 @@ pub async fn run(
                                                                                           rcon_password: file_rcon_password,
                                                                                           child: None,
                                                                                           eula_accepted: true,
-                                                                                          auto_restart: false,
-                                                                                      });
-                                                                                      drop(registry);
-                                                                                      (true, format!("Java server started in {}", server_dir))
+auto_restart: false,
+                                                                                       });
+                                                                                       drop(registry);
+                                                                                       spawn_ready_watcher(
+                                                                                           ws_tx.clone(),
+                                                                                           request_id,
+                                                                                           cmd.clone(),
+                                                                                           server_id,
+                                                                                           server_log_path(&config.data_dir, &server_id),
+                                                                                       );
+                                                                                       (true, format!("Java server started in {}", server_dir))
                                                                                   }
                                                                                   Err(e) => (false, format!("java failed: {}", e)),
                                                                               }
@@ -834,7 +932,14 @@ pub async fn run(
                                                                                        auto_restart: false,
                                                                                    });
                                                                                    drop(registry);
-                                                                                   (true, format!("Java server started in {}", server_dir))
+                                                                                    spawn_ready_watcher(
+                                                                                        ws_tx.clone(),
+                                                                                        request_id,
+                                                                                        cmd.clone(),
+                                                                                        server_id,
+                                                                                        server_log_path(&config.data_dir, &server_id),
+                                                                                    );
+                                                                                    (true, format!("Java server started in {}", server_dir))
                                                                                }
                                                                               Err(e) => (false, format!("java failed: {}", e)),
                                                                           }

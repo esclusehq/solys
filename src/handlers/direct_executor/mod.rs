@@ -12,6 +12,8 @@ pub mod forge;
 pub mod neoforge;
 pub mod server;
 
+pub use server::is_mc_done_line;
+
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::{LazyLock, Mutex};
