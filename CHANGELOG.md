@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## v0.5.34
+
+### Added
+- Agent now signals the backend when the server is truly ready (MC "Done" in server log) — the dashboard shows "running" only once the world finished loading.
+- Start flow: starting -> container_running -> running (ready).
+
 ## v0.5.33
 
 ### Fixed
