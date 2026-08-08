@@ -21,8 +21,8 @@ use tracing::{debug, error, info, trace, warn};
 use uuid::Uuid;
 
 use crate::handlers::direct_executor::{
-    download_jar, heal_server_properties, is_mc_done_line, read_properties_values, server_log_path,
-    DIRECT_SERVERS, ServerState, ServerStatus, McLoader,
+    download_jar, heal_server_properties, is_mc_done_line, read_properties_values, server_log_dir,
+    server_log_path, DIRECT_SERVERS, ServerState, ServerStatus, McLoader,
 };
 
 use base64::Engine;
@@ -63,6 +63,16 @@ pub fn redact_json(s: &str) -> String {
     } else {
         s.to_string()
     }
+}
+
+/// Truncate `{server_dir}/logs/latest.log` to an empty file before spawning the
+/// JVM so a stale `Done (...)!` line from a previous boot can never be matched
+/// by the ready watcher during the JVM startup window. Creates the `logs` dir
+/// and file if they don't exist (the server itself writes `latest.log`).
+fn truncate_server_log(data_dir: &Path, server_id: &Uuid) -> std::io::Result<()> {
+    std::fs::create_dir_all(server_log_dir(data_dir, server_id))?;
+    std::fs::File::create(server_log_path(data_dir, server_id))?;
+    Ok(())
 }
 
 /// Wait for the MC "Done" line in `{server_dir}/logs/latest.log` (the file the
@@ -816,9 +826,12 @@ pub async fn run(
                                                                                    &file_rcon_password,
                                                                                ).await;
                                                                                let is_neoforge = matches!(mc_loader, McLoader::NeoForge);
-                                                                               let is_forge = matches!(mc_loader, McLoader::Forge);
-                                                                               let run_sh = format!("{}/run.sh", server_dir);
-                                                                               let r = if (is_neoforge || is_forge)
+let is_forge = matches!(mc_loader, McLoader::Forge);
+                                                                                let run_sh = format!("{}/run.sh", server_dir);
+                                                                                // Clear any stale latest.log from a previous boot BEFORE spawning
+                                                                                // so the ready watcher only ever sees this boot's lines.
+                                                                                let _ = truncate_server_log(&config.data_dir, &server_id);
+                                                                                let r = if (is_neoforge || is_forge)
                                                                                    && Path::new(&run_sh).exists()
                                                                                {
                                                                                    let _ = std::fs::write(
@@ -907,6 +920,7 @@ auto_restart: false,
                                                                                 rcon_port,
                                                                                 &file_rcon_password,
                                                                             ).await;
+let _ = truncate_server_log(&config.data_dir, &server_id);
                                                                             let r = tokio::process::Command::new(&java_path)
                                                                                 .arg(format!("-Xmx{}M", ram_mb)).arg(format!("-Xms{}M", ram_mb))
                                                                                 .arg("-jar").arg(jar_path)
@@ -1544,5 +1558,53 @@ mod resolve_server_path_tests {
 
         let err = resolve_server_path(&base, "/data/../../etc/passwd").unwrap_err();
         assert!(err.contains("blocked") || err.contains("canonicalization failed"));
+    }
+}
+
+#[cfg(test)]
+mod truncate_server_log_tests {
+    use super::*;
+    use std::fs;
+    use std::path::PathBuf;
+
+    fn temp_base(tag: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("escluse-truncate-{}-{}", tag, std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    #[test]
+    fn truncates_stale_done_line_from_previous_boot() {
+        let base = temp_base("staledone");
+        let server_id = Uuid::new_v4();
+        let log_dir = server_log_dir(&base, &server_id);
+        fs::create_dir_all(&log_dir).unwrap();
+        fs::write(
+            log_dir.join("latest.log"),
+            "[Server thread/INFO]: Done (53.176s)! For help, type \"help\"\n",
+        )
+        .unwrap();
+
+        truncate_server_log(&base, &server_id).unwrap();
+
+        assert_eq!(
+            fs::read_to_string(server_log_path(&base, &server_id)).unwrap(),
+            ""
+        );
+    }
+
+    #[test]
+    fn creates_empty_log_file_when_missing() {
+        let base = temp_base("fresh");
+        let server_id = Uuid::new_v4();
+
+        truncate_server_log(&base, &server_id).unwrap();
+
+        assert!(server_log_path(&base, &server_id).exists());
+        assert_eq!(
+            fs::read_to_string(server_log_path(&base, &server_id)).unwrap(),
+            ""
+        );
     }
 }
