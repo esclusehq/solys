@@ -779,9 +779,69 @@ pub async fn handle_status(task: Task) -> Result<serde_json::Value> {
 ///
 /// Vanilla prints `[Server thread/INFO]: Done (4.732s)! For help, type "help"`
 /// once the world finished loading and the server accepts connections. The
-/// match is exact (case-sensitive) per the format the vanilla server prints.
+/// match is exact (case-sensitive) per the format the vanilla server prints:
+///
+/// - an optional `[...]:` log prefix (e.g. `[Server thread/INFO]: `) may lead
+///   the line, stripped up to and including the first `]` + `:` + optional space
+/// - the remainder must start with `Done (`, followed by `\d+(\.\d+)?s)!`
+/// - after the `!` only the vanilla help suffix ` For help, type "help"`
+///   or whitespace is allowed — nothing else.
 pub fn is_mc_done_line(line: &str) -> bool {
-    line.contains("Done (") && line.contains(")!")
+    let rest = strip_log_prefix(line);
+    let rest = match rest.strip_prefix("Done (") {
+        Some(rest) => rest,
+        None => return false,
+    };
+    // Seconds: \d+(\.\d+)?
+    let int_end = rest
+        .char_indices()
+        .find(|(_, c)| !c.is_ascii_digit())
+        .map(|(i, _)| i)
+        .unwrap_or(rest.len());
+    if int_end == 0 {
+        return false;
+    }
+    let rest = &rest[int_end..];
+    let rest = if let Some(after_dot) = rest.strip_prefix('.') {
+        let frac_end = after_dot
+            .char_indices()
+            .find(|(_, c)| !c.is_ascii_digit())
+            .map(|(i, _)| i)
+            .unwrap_or(after_dot.len());
+        if frac_end == 0 {
+            return false;
+        }
+        &after_dot[frac_end..]
+    } else {
+        rest
+    };
+    let rest = match rest.strip_prefix("s)") {
+        Some(rest) => rest,
+        None => return false,
+    };
+    let rest = match rest.strip_prefix('!') {
+        Some(rest) => rest,
+        None => return false,
+    };
+    // Allow the vanilla help suffix or only whitespace after the "!".
+    rest == r#" For help, type "help""# || rest.trim().is_empty()
+}
+
+/// Strip an optional `[...]:` log prefix (e.g. `[Server thread/INFO]: `),
+/// leaving the remainder to match. Any line without `]` + `:` is returned
+/// unchanged.
+fn strip_log_prefix(line: &str) -> &str {
+    let mut search = line;
+    loop {
+        let Some(close) = search.find(']') else {
+            return line;
+        };
+        let after = &search[close + 1..];
+        if let Some(after_colon) = after.strip_prefix(':') {
+            return after_colon.strip_prefix(' ').unwrap_or(after_colon);
+        }
+        search = after;
+    }
 }
 
 #[cfg(test)]
@@ -797,12 +857,22 @@ mod tests {
 
     #[test]
     fn is_mc_done_line_matches_bare_done_line() {
-        assert!(is_mc_done_line("[Server thread/INFO]: Done (1.234s)!"));
+        assert!(is_mc_done_line("Done (1.234s)!"));
+    }
+
+    #[test]
+    fn is_mc_done_line_matches_help_suffix() {
+        assert!(is_mc_done_line(r#"Done (43.269s)! For help, type "help""#));
+    }
+
+    #[test]
+    fn is_mc_done_line_matches_prefixed_done_line() {
+        assert!(is_mc_done_line("[Server thread/INFO]: Done (0.001s)!"));
     }
 
     #[test]
     fn is_mc_done_line_rejects_preparing_spawn_area() {
-        assert!(!is_mc_done_line("... Preparing spawn area: 100%"));
+        assert!(!is_mc_done_line("Preparing spawn area: 100%"));
     }
 
     #[test]
@@ -812,9 +882,12 @@ mod tests {
 
     #[test]
     fn is_mc_done_line_rejects_done_without_exclamation() {
-        // Contains "Done (" but no "!)" — must not match.
-        assert!(!is_mc_done_line(
-            "[Server thread/ERROR] ... Done (1.2s) was not exclaiming"
-        ));
+        // Contains "Done (" but no terminating "!" — must not match.
+        assert!(!is_mc_done_line("Done (1.2s) was not exclaiming"));
+    }
+
+    #[test]
+    fn is_mc_done_line_rejects_trailing_junk() {
+        assert!(!is_mc_done_line("Done (1.2s)! trailing-junk"));
     }
 }
