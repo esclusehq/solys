@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## v0.5.36
+
+### Fixed
+- Done-line matcher now requires the exact `Done (<seconds>s)!` format (no hardcoded durations) with optional log prefix and optional `For help, type "help"` suffix — stale or partial boot lines can no longer prematurely flip the server to ready.
+
 ## v0.5.35
 
 ### Fixed
