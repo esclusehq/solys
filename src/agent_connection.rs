@@ -805,6 +805,42 @@ pub async fn run(
                                                                           let is_running = existing.map(|o| o.status.success()).unwrap_or(false);
                                                                            if is_running {
                                                                                info!("Java already running for server {}, skipping duplicate start", server_id);
+                                                                               // Re-attach: register the live process so heartbeats report
+                                                                               // it as running, and re-arms the ready watcher. The server
+                                                                               // log still holds the previous boot's "Done" line, so the
+                                                                               // watcher reports ready immediately and the backend
+                                                                               // promotes the server to running instead of leaving it
+                                                                               // stranded in container_running (or truncated by a stale
+                                                                               // "stopped" heartbeat entry).
+                                                                               let (_, file_rcon_port, file_rcon_password) =
+                                                                                   read_properties_values(Path::new(&server_dir));
+                                                                               let effective_rcon_port = if rcon_port == 0 { file_rcon_port } else { rcon_port };
+                                                                               {
+                                                                                   let mut registry = DIRECT_SERVERS.lock().unwrap_or_else(|e| e.into_inner());
+                                                                                   registry.insert(server_id, ServerState {
+                                                                                       server_id,
+                                                                                       display_name: format!("mc-{}", server_id),
+                                                                                       mc_loader,
+                                                                                       mc_version: mc_version.clone(),
+                                                                                       status: ServerStatus::Running,
+                                                                                       port: game_port,
+                                                                                       allocated_ram: ram_mb,
+                                                                                       path: std::path::PathBuf::from(&server_dir),
+                                                                                       rcon_port: effective_rcon_port,
+                                                                                       rcon_password: file_rcon_password,
+                                                                                       child: None,
+                                                                                       eula_accepted: true,
+                                                                                       auto_restart: false,
+                                                                                   });
+                                                                               }
+                                                                               crate::handlers::direct_executor::persist_server_state().await;
+                                                                               spawn_ready_watcher(
+                                                                                   ws_tx.clone(),
+                                                                                   request_id,
+                                                                                   cmd.clone(),
+                                                                                   server_id,
+                                                                                   server_log_path(&config.data_dir, &server_id),
+                                                                               );
                                                                                (true, format!("Java already running for server {}", server_id))
                                                                            } else {
                                                                                send_status("starting", "Starting Java server...").await;

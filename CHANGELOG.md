@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## v0.5.37
+
+### Fixed
+- **Server stuck after start when Java was already running** — the "Java already running" dedup path now re-attaches state: the server is registered as `running` (so heartbeats report it) and the ready watcher is re-armed, letting the backend promote it to `running` instead of leaving it stranded in `container_running` or flipping it back to `stopped`
+
 ## v0.5.36
 
 ### Fixed
