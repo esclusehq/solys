@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## v0.5.38
+
+### Fixed
+- **Stop waits for the process to actually die** — `pkill` is fire-and-forget, so the stop command reported success before the Java process was gone; the agent now polls `pgrep` until the process exits (up to 30s) and only then reports `CommandStatus stopped`, which is the backend's signal to finalize the server as `stopped`
+
 ## v0.5.37
 
 ### Fixed

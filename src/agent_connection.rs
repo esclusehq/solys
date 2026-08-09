@@ -738,6 +738,23 @@ pub async fn run(
                                                             let mut registry = DIRECT_SERVERS.lock().unwrap_or_else(|e| e.into_inner());
                                                             registry.remove(&server_id);
                                                             drop(registry);
+                                                            // pkill is fire-and-forget — wait until the Java process is
+                                                            // actually gone (timeout 30s) so the backend only marks the
+                                                            // server "stopped" once it truly is. The CommandStatus
+                                                            // "stopped" below is the backend's confirmation signal.
+                                                            let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
+                                                            loop {
+                                                                let alive = tokio::process::Command::new("sh")
+                                                                    .args(["-c", &format!("pgrep -f 'java.*{}'", server_id)])
+                                                                    .output().await
+                                                                    .map(|o| o.status.success())
+                                                                    .unwrap_or(false);
+                                                                if !alive || std::time::Instant::now() >= deadline {
+                                                                    break;
+                                                                }
+                                                                tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+                                                            }
+                                                            send_status("stopped", "Server stopped").await;
                                                             (true, format!("Server stop requested ({})", server_id))
                                                         } else if has_podman {
                                                             send_status("executing", &format!("{} container {} via podman", action, container)).await;
