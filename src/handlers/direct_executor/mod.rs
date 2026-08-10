@@ -15,8 +15,10 @@ pub mod server;
 pub use server::is_mc_done_line;
 
 use std::collections::HashMap;
+use std::net::{TcpStream, ToSocketAddrs};
 use std::path::{Path, PathBuf};
 use std::sync::{LazyLock, Mutex};
+use std::time::Duration;
 
 use anyhow::{bail, Context, Result};
 use serde::{Deserialize, Serialize};
@@ -474,6 +476,24 @@ fn parse_mc_loader(s: &Option<String>) -> McLoader {
 /// given `status: Stopped` — any process that was running before the restart
 /// died with the agent. The next heartbeat cycle will report correct statuses
 /// to the backend.
+/// Quick TCP probe to check whether a server is actually listening on
+/// its port. Used by reconcile so servers that survived an agent restart
+/// (e.g. Termux Java processes) are restored as Running instead of
+/// hardcoded Stopped — otherwise heartbeat reports stopped, the backend
+/// monitoring knocks the DB status down, and relay tunnels die 90s later.
+fn is_server_port_open(port: u16) -> bool {
+    if port == 0 {
+        return false;
+    }
+    match format!("127.0.0.1:{}", port).to_socket_addrs() {
+        Ok(mut addrs) => match addrs.next() {
+            Some(addr) => TcpStream::connect_timeout(&addr, Duration::from_millis(300)).is_ok(),
+            None => false,
+        },
+        Err(_) => false,
+    }
+}
+
 pub fn reconcile_direct_servers(
     loaded_entries: &[crate::state::ServerEntry],
     data_dir: &Path,
@@ -494,12 +514,17 @@ pub fn reconcile_direct_servers(
         } else {
             entry.rcon_password.clone()
         };
+        let running = is_server_port_open(port);
         let state = ServerState {
             server_id: entry.server_id,
             display_name: entry.name.clone(),
             mc_loader: parse_mc_loader(&entry.mc_loader),
             mc_version: entry.mc_version.clone().unwrap_or_default(),
-            status: ServerStatus::Stopped,
+            status: if running {
+                ServerStatus::Running
+            } else {
+                ServerStatus::Stopped
+            },
             port,
             allocated_ram: entry.allocated_ram,
             path: server_dir,
@@ -525,13 +550,18 @@ pub fn reconcile_direct_servers(
                         // available (healed back into the file at next start).
                         let (port, rcon_port, rcon_password) =
                             read_properties_values(&dir_entry.path());
+                        let running = is_server_port_open(port);
 
                         let state = ServerState {
                             server_id: sid,
                             display_name: sid.to_string(),
                             mc_loader: McLoader::Vanilla,
                             mc_version: String::new(),
-                            status: ServerStatus::Stopped,
+                            status: if running {
+                                ServerStatus::Running
+                            } else {
+                                ServerStatus::Stopped
+                            },
                             port,
                             allocated_ram: 1024,
                             path: dir_entry.path(),
