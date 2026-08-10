@@ -949,9 +949,10 @@ auto_restart: false,
                                                                           let mut registry = DIRECT_SERVERS.lock().unwrap_or_else(|e| e.into_inner());
                                                                           registry.remove(&server_id);
                                                                       }
-                                                                      tokio::time::sleep(std::time::Duration::from_secs(2)).await;
-                                                                      let _ = tokio::process::Command::new("mkdir")
-                                                                          .args(["-p", &server_dir]).output().await;
+                                                                       tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+                                                                       send_status("starting", "Starting Java server...").await;
+                                                                       let _ = tokio::process::Command::new("mkdir")
+                                                                           .args(["-p", &server_dir]).output().await;
                                                                       let jar_path = format!("{}/server.jar", server_dir);
                                                                       let jar = Path::new(&jar_path);
                                                                       if !jar.exists() {
