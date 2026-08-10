@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## v0.5.39
+
+### Fixed
+- **Restart now reports `starting`** — after the process is killed and during the 2s wait before the Java server is spawned again, the agent now sends status `starting`, so the dashboard badge transitions `stopping -> starting -> running` instead of jumping back to `running`
+
 ## v0.5.38
 
 ### Fixed
