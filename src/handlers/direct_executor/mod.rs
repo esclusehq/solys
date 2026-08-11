@@ -693,9 +693,163 @@ pub fn collect_server_statuses() -> Vec<(Uuid, String, String)> {
                 ServerStatus::Stopped => "stopped",
                 ServerStatus::Crashed => "crashed",
             };
-            (*id, state.display_name.clone(), status.to_string())
+            (*id, format!("mc-{}", id), status.to_string())
         })
         .collect()
+}
+
+// ---------------------------------------------------------------------------
+// Server-id resolution + adoption (backend id drift recovery)
+// ---------------------------------------------------------------------------
+
+/// Outcome of resolving a backend-provided server id against local state.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Resolved {
+    /// The id is already known locally (registry entry or server dir exists).
+    Direct(Uuid),
+    /// The id is unknown, but exactly one local server matches the payload's
+    /// human name: the local server `from` must be adopted as `to`.
+    Adopted { from: Uuid, to: Uuid },
+    /// The id is unknown and no unambiguous name match exists. `candidates`
+    /// lists every registry entry (id, display_name) matching the name.
+    Unknown { candidates: Vec<(Uuid, String)> },
+}
+
+/// Pure candidate matching for server-id adoption.
+///
+/// Returns the single adoptable server id when exactly one registry entry
+/// matches `target_name` case-insensitively; returns empty when there is no
+/// match (0) or the match is ambiguous (2+). Empty target names never match.
+pub fn find_adoption_candidate(entries: &[(Uuid, String)], target_name: &str) -> Vec<Uuid> {
+    if target_name.trim().is_empty() {
+        return Vec::new();
+    }
+    let matches: Vec<Uuid> = entries
+        .iter()
+        .filter(|(_, name)| name.eq_ignore_ascii_case(target_name))
+        .map(|(id, _)| *id)
+        .collect();
+    if matches.len() == 1 {
+        matches
+    } else {
+        Vec::new()
+    }
+}
+
+/// Resolve a backend-provided server id against local state.
+///
+/// * Known id (DIRECT_SERVERS entry or `{data_dir}/servers/{id}/` dir) →
+///   `Resolved::Direct`, unchanged behavior.
+/// * Unknown id + non-empty `server_name` → exactly one local registry entry
+///   whose display_name matches (case-insensitive) is `Resolved::Adopted`;
+///   anything else is `Resolved::Unknown` carrying the matching candidates.
+/// * Unknown id + empty name → `Resolved::Unknown` with no candidates, which
+///   keeps the legacy fresh-provision path working.
+pub async fn resolve_server_id(server_id: Uuid, server_name: &str, data_dir: &Path) -> Resolved {
+    let known = {
+        let registry = DIRECT_SERVERS.lock().unwrap_or_else(|e| e.into_inner());
+        registry.contains_key(&server_id)
+    };
+    if known || server_dir_path(data_dir, &server_id).exists() {
+        return Resolved::Direct(server_id);
+    }
+
+    if server_name.trim().is_empty() {
+        return Resolved::Unknown { candidates: Vec::new() };
+    }
+
+    let entries: Vec<(Uuid, String)> = {
+        let registry = DIRECT_SERVERS.lock().unwrap_or_else(|e| e.into_inner());
+        registry
+            .iter()
+            .map(|(id, s)| (*id, s.display_name.clone()))
+            .collect()
+    };
+
+    let candidates: Vec<(Uuid, String)> = entries
+        .iter()
+        .filter(|(_, name)| name.eq_ignore_ascii_case(server_name))
+        .map(|(id, name)| (*id, name.clone()))
+        .collect();
+
+    let adoptable = find_adoption_candidate(&entries, server_name);
+    if adoptable.len() == 1 {
+        Resolved::Adopted {
+            from: adoptable[0],
+            to: server_id,
+        }
+    } else {
+        Resolved::Unknown { candidates }
+    }
+}
+
+/// Adopt a backend server id: stop any Java process for `from`, rename the
+/// server directory, migrate the registry entry, persist state, and stop any
+/// relay tunnel keyed by `from` (the next RelayConfigSync re-establishes it
+/// under the adopted id).
+pub async fn adopt_server_id(from: Uuid, to: Uuid, data_dir: &Path) -> Result<()> {
+    // 1. Stop a running Java process for the old id (pkill + wait up to 30s),
+    //    mirroring the stop branch — the process must die before the rename
+    //    so it cannot rewrite files under the new path.
+    let _ = tokio::process::Command::new("sh")
+        .args(["-c", &format!("pkill -f 'java.*{}' 2>/dev/null", from)])
+        .output()
+        .await;
+    let deadline = std::time::Instant::now() + Duration::from_secs(30);
+    loop {
+        let alive = tokio::process::Command::new("sh")
+            .args(["-c", &format!("pgrep -f 'java.*{}'", from)])
+            .output()
+            .await
+            .map(|o| o.status.success())
+            .unwrap_or(false);
+        if !alive || std::time::Instant::now() >= deadline {
+            break;
+        }
+        tokio::time::sleep(Duration::from_secs(1)).await;
+    }
+
+    // 2. Rename the server directory. A fresh target is required — fail
+    //    loudly instead of merging so no data is ever clobbered.
+    let from_dir = server_dir_path(data_dir, &from);
+    let to_dir = server_dir_path(data_dir, &to);
+    if to_dir.exists() {
+        bail!("target server directory already exists: {}", to_dir.display());
+    }
+    if from_dir.exists() {
+        std::fs::rename(&from_dir, &to_dir).with_context(|| {
+            format!(
+                "rename {} -> {} failed",
+                from_dir.display(),
+                to_dir.display()
+            )
+        })?;
+    } else {
+        warn!(
+            from_dir = %from_dir.display(),
+            "Adoption: source server directory missing, migrating registry only"
+        );
+    }
+
+    // 3. Migrate the registry entry: keep the ServerState, update id, path
+    //    and display_name so heartbeats report the adopted id.
+    let mut registry = DIRECT_SERVERS.lock().unwrap_or_else(|e| e.into_inner());
+    if let Some(mut state) = registry.remove(&from) {
+        state.server_id = to;
+        state.path = to_dir.clone();
+        state.display_name = format!("mc-{}", to);
+        registry.insert(to, state);
+    }
+    drop(registry);
+
+    // 4. Persist the migrated registry so state.json matches the new id.
+    persist_server_state().await;
+
+    // 5. Stop any relay tunnel keyed by the old id. The backend's next
+    //    RelayConfigSync carries the adopted id and re-establishes it.
+    crate::state::relay_manager().stop_server(&from).await;
+
+    Ok(())
 }
 
 // ---------------------------------------------------------------------------
@@ -836,5 +990,126 @@ mod tests {
         assert!(!from_file.is_empty());
 
         tokio::fs::remove_dir_all(&dir).await.unwrap();
+    }
+
+    #[test]
+    fn find_adoption_candidate_single_match_adopts() {
+        let from = Uuid::new_v4();
+        let entries = vec![
+            (from, "test-pc".to_string()),
+            (Uuid::new_v4(), "other-box".to_string()),
+        ];
+        let candidates = find_adoption_candidate(&entries, "test-pc");
+        assert_eq!(candidates, vec![from]);
+    }
+
+    #[test]
+    fn find_adoption_candidate_matches_case_insensitive() {
+        let from = Uuid::new_v4();
+        let entries = vec![(from, "Test-PC".to_string())];
+        let candidates = find_adoption_candidate(&entries, "test-pc");
+        assert_eq!(candidates, vec![from]);
+    }
+
+    #[test]
+    fn find_adoption_candidate_no_match_is_empty() {
+        let entries = vec![
+            (Uuid::new_v4(), "test-pc".to_string()),
+            (Uuid::new_v4(), "other-box".to_string()),
+        ];
+        assert!(find_adoption_candidate(&entries, "nobody").is_empty());
+        assert!(find_adoption_candidate(&entries, "").is_empty());
+    }
+
+    #[test]
+    fn find_adoption_candidate_rejects_ambiguous_matches() {
+        let entries = vec![
+            (Uuid::new_v4(), "test-pc".to_string()),
+            (Uuid::new_v4(), "TEST-PC".to_string()),
+        ];
+        assert!(find_adoption_candidate(&entries, "test-pc").is_empty());
+    }
+
+    #[tokio::test]
+    async fn resolve_server_id_adopts_single_candidate() {
+        let tmp = std::env::temp_dir().join(format!("escluse-adopt-test-{}", Uuid::new_v4()));
+        let from = Uuid::new_v4();
+        let to = Uuid::new_v4();
+        let from_dir = tmp.join("servers").join(from.to_string());
+        std::fs::create_dir_all(&from_dir).unwrap();
+        {
+            let mut registry = DIRECT_SERVERS.lock().unwrap_or_else(|e| e.into_inner());
+            registry.insert(
+                from,
+                ServerState {
+                    server_id: from,
+                    display_name: "test-pc".to_string(),
+                    mc_loader: McLoader::Vanilla,
+                    mc_version: String::new(),
+                    status: ServerStatus::Stopped,
+                    port: 0,
+                    allocated_ram: 1024,
+                    path: from_dir.clone(),
+                    rcon_port: 0,
+                    rcon_password: String::new(),
+                    child: None,
+                    eula_accepted: true,
+                    auto_restart: false,
+                },
+            );
+        }
+
+        let resolved = resolve_server_id(to, "test-pc", &tmp).await;
+        assert_eq!(resolved, Resolved::Adopted { from, to });
+
+        // Unknown ids without a name stay unknown so the legacy
+        // fresh-provision path keeps working.
+        let unknown = resolve_server_id(Uuid::new_v4(), "", &tmp).await;
+        assert!(matches!(unknown, Resolved::Unknown { ref candidates } if candidates.is_empty()));
+
+        {
+            let mut registry = DIRECT_SERVERS.lock().unwrap_or_else(|e| e.into_inner());
+            registry.remove(&from);
+        }
+        std::fs::remove_dir_all(&tmp).ok();
+    }
+
+    #[test]
+    fn heartbeat_name_always_mc_prefixed() {
+        let id = Uuid::new_v4();
+        {
+            let mut registry = DIRECT_SERVERS.lock().unwrap_or_else(|e| e.into_inner());
+            registry.insert(
+                id,
+                ServerState {
+                    server_id: id,
+                    display_name: "human-name".to_string(),
+                    mc_loader: McLoader::Paper,
+                    mc_version: "1.21.4".to_string(),
+                    status: ServerStatus::Stopped,
+                    port: 25565,
+                    allocated_ram: 1024,
+                    path: PathBuf::new(),
+                    rcon_port: 25575,
+                    rcon_password: String::new(),
+                    child: None,
+                    eula_accepted: true,
+                    auto_restart: false,
+                },
+            );
+        }
+
+        let statuses = collect_server_statuses();
+        let (sid, name, _) = statuses
+            .iter()
+            .find(|(sid, _, _)| *sid == id)
+            .expect("seeded server must be reported");
+        assert_eq!(name, &format!("mc-{}", id));
+        assert!(name.starts_with("mc-"));
+
+        {
+            let mut registry = DIRECT_SERVERS.lock().unwrap_or_else(|e| e.into_inner());
+            registry.remove(&id);
+        }
     }
 }

@@ -21,8 +21,9 @@ use tracing::{debug, error, info, trace, warn};
 use uuid::Uuid;
 
 use crate::handlers::direct_executor::{
-    download_jar, heal_server_properties, is_mc_done_line, read_properties_values, server_log_dir,
-    server_log_path, DIRECT_SERVERS, ServerState, ServerStatus, McLoader,
+    adopt_server_id, download_jar, heal_server_properties, is_mc_done_line, read_properties_values,
+    resolve_server_id, server_log_dir, server_log_path, DIRECT_SERVERS, Resolved, ServerState,
+    ServerStatus, McLoader,
 };
 
 use base64::Engine;
@@ -629,6 +630,7 @@ pub async fn run(
                                                 let cmd = val["command"].as_str().unwrap_or("").to_string();
                                                 let request_id = val["request_id"].as_str().and_then(|s| uuid::Uuid::parse_str(s).ok()).unwrap_or_else(uuid::Uuid::nil);
                                                 let server_id = val["server_id"].as_str().and_then(|s| uuid::Uuid::parse_str(s).ok()).unwrap_or_else(uuid::Uuid::nil);
+                                                let server_name = val["name"].as_str().unwrap_or("").to_string();
                                                 let container_name = val["params"]["container_name"].as_str().unwrap_or("").to_string();
 
                                                 // Extract version, loader, RAM from deploy_config or params
@@ -676,6 +678,52 @@ pub async fn run(
                                                         }
                                                     }
                                                     "start" | "stop" | "restart" => {
+                                                        // Server-id resolution with adoption: the backend may hold a DB row
+                                                        // with a different id (X) than the local server (Y) for the same
+                                                        // human name. When the payload carries `name` and X is unknown
+                                                        // locally, adopt the local match as X instead of failing with an
+                                                        // empty error or recreating from scratch.
+                                                        'resolved: {
+                                                        let server_id = match resolve_server_id(server_id, &server_name, &config.data_dir).await {
+                                                            Resolved::Direct(id) => id,
+                                                            Resolved::Adopted { from, to } => {
+                                                                send_status("adopting", &format!("Adopting server id {} -> {} (name {})", from, to, server_name)).await;
+                                                                match adopt_server_id(from, to, &config.data_dir).await {
+                                                                    Ok(_) => {
+                                                                        info!("Adopted server id {} -> {} (name {})", from, to, server_name);
+                                                                        to
+                                                                    }
+                                                                    Err(e) => {
+                                                                        let msg = format!("Adoption of server id {} -> {} failed: {}", from, to, e);
+                                                                        send_status("error", &msg).await;
+                                                                        break 'resolved (false, msg);
+                                                                    }
+                                                                }
+                                                            }
+                                                            Resolved::Unknown { candidates } => {
+                                                                if candidates.is_empty() && server_name.is_empty() {
+                                                                    // Legacy path: unknown id without a name still reaches the
+                                                                    // fresh-provision flow below.
+                                                                    server_id
+                                                                } else {
+                                                                    let local_list = {
+                                                                        let registry = DIRECT_SERVERS.lock().unwrap_or_else(|e| e.into_inner());
+                                                                        let mut pairs: Vec<String> = registry
+                                                                            .iter()
+                                                                            .map(|(id, s)| format!("{}:{}", id, s.display_name))
+                                                                            .collect();
+                                                                        pairs.sort();
+                                                                        pairs.join(", ")
+                                                                    };
+                                                                    let msg = format!(
+                                                                        "server {} not found locally; name '{}' matched {} candidate(s); local servers: {}",
+                                                                        server_id, server_name, candidates.len(), local_list
+                                                                    );
+                                                                    send_status("error", &msg).await;
+                                                                    break 'resolved (false, msg);
+                                                                }
+                                                            }
+                                                        };
                                                         // Try container runtime via CLI (podman/docker)
                                                         let container = if container_name.is_empty() {
                                                             format!("mc-{}", server_id)
@@ -1026,6 +1074,7 @@ auto_restart: false,
                                                                 hints.push("No Java runtime");
                                                             }
                                                             (false, format!("Cannot {} server: {}", action, hints.join("; ")))
+                                                        }
                                                         }
                                                     }
                                                     _ if cmd == "logs" => {
