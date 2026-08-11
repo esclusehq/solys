@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## v0.5.40 (2026-08-11)
+
+### Fixed
+- **No more "server not found" when ids get out of sync** — if the dashboard's server id ever differs from the id registered on your device, the agent now matches the server by its name and adopts the correct id, so Start/Stop/Restart keep working instead of erroring out
+- **Adoption only happens when it's safe** — when the agent adopts a mismatched id it waits for the old process to fully exit and merges the world files first, so nothing is lost or left half-running
+
 ## v0.5.39
 
 ### Fixed
